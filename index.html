@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BikerConnect - Dein Social Network für Biker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="logo">🏍️</span>
+                <span class="brand-name">BikerConnect</span>
+            </div>
+            <div class="nav-menu">
+                <a href="#home" class="nav-link active">Home</a>
+                <a href="#profile" class="nav-link">Profil</a>
+                <a href="#" class="nav-link">Touren</a>
+                <a href="#" class="nav-link">Community</a>
+            </div>
+            <div class="nav-user">
+                <span class="user-name">Max Rider</span>
+                <div class="user-avatar">MR</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Home Page -->
+        <div id="home-page" class="page active">
+            <div class="content-grid">
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <div class="card profile-summary">
+                        <div class="profile-header">
+                            <div class="profile-avatar-large">MR</div>
+                            <h3>Max Rider</h3>
+                            <p class="profile-subtitle">Yamaha MT-07 Fahrer</p>
+                        </div>
+                        <div class="profile-stats">
+                            <div class="stat">
+                                <span class="stat-value">127</span>
+                                <span class="stat-label">Touren</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">342</span>
+                                <span class="stat-label">Freunde</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">18.5k</span>
+                                <span class="stat-label">km</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card quick-links">
+                        <h4>Quick Links</h4>
+                        <ul>
+                            <li>🗓️ Anstehende Events</li>
+                            <li>🔧 Werkstatt-Tipps</li>
+                            <li>📸 Galerie</li>
+                            <li>⚙️ Einstellungen</li>
+                        </ul>
+                    </div>
+                </aside>
+
+                <!-- Feed -->
+                <section class="feed">
+                    <!-- Create Post -->
+                    <div class="card create-post">
+                        <div class="post-input-area">
+                            <div class="user-avatar">MR</div>
+                            <input type="text" placeholder="Was gibt's Neues auf der Straße?" class="post-input" id="postInput">
+                        </div>
+                        <div class="post-actions">
+                            <button class="post-action-btn">📸 Foto</button>
+                            <button class="post-action-btn">📍 Ort</button>
+                            <button class="post-action-btn">🏍️ Bike</button>
+                            <button class="post-btn" id="postBtn">Posten</button>
+                        </div>
+                    </div>
+
+                    <!-- Feed Posts -->
+                    <div id="feed-posts">
+                        <!-- Posts will be dynamically added here -->
+                    </div>
+                </section>
+
+                <!-- Right Sidebar -->
+                <aside class="sidebar-right">
+                    <div class="card">
+                        <h4>Aktive Biker in der Nähe</h4>
+                        <div class="active-users">
+                            <div class="active-user">
+                                <div class="user-avatar small">LM</div>
+                                <div class="user-info">
+                                    <span class="user-name-small">Lisa Motorrad</span>
+                                    <span class="user-status">🟢 Online</span>
+                                </div>
+                            </div>
+                            <div class="active-user">
+                                <div class="user-avatar small">TK</div>
+                                <div class="user-info">
+                                    <span class="user-name-small">Tom Kurven</span>
+                                    <span class="user-status">🟢 Online</span>
+                                </div>
+                            </div>
+                            <div class="active-user">
+                                <div class="user-avatar small">SK</div>
+                                <div class="user-info">
+                                    <span class="user-name-small">Sarah Kawasaki</span>
+                                    <span class="user-status">🟡 Unterwegs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h4>Beliebte Touren</h4>
+                        <div class="popular-tours">
+                            <div class="tour-item">
+                                <span>🏔️ Alpenpass-Tour</span>
+                                <span class="tour-distance">285 km</span>
+                            </div>
+                            <div class="tour-item">
+                                <span>🌲 Schwarzwald-Route</span>
+                                <span class="tour-distance">156 km</span>
+                            </div>
+                            <div class="tour-item">
+                                <span>🏖️ Küstenstraße</span>
+                                <span class="tour-distance">321 km</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div id="profile-page" class="page">
+            <div class="profile-container">
+                <div class="profile-banner">
+                    <div class="banner-image"></div>
+                    <div class="profile-main">
+                        <div class="profile-avatar-xl">MR</div>
+                        <div class="profile-info">
+                            <h1>Max Rider</h1>
+                            <p class="profile-bio">Leidenschaftlicher Motorradfahrer seit 2015 | Yamaha MT-07 | Immer auf der Suche nach neuen Routen</p>
+                            <div class="profile-meta">
+                                <span>📍 Hamburg, Deutschland</span>
+                                <span>🏍️ Yamaha MT-07</span>
+                                <span>📅 Dabei seit März 2020</span>
+                            </div>
+                        </div>
+                        <button class="edit-profile-btn">Profil bearbeiten</button>
+                    </div>
+                </div>
+
+                <div class="profile-content">
+                    <div class="profile-tabs">
+                        <button class="tab-btn active" data-tab="about">Über mich</button>
+                        <button class="tab-btn" data-tab="posts">Beiträge</button>
+                        <button class="tab-btn" data-tab="tours">Touren</button>
+                        <button class="tab-btn" data-tab="bikes">Meine Bikes</button>
+                        <button class="tab-btn" data-tab="friends">Freunde</button>
+                    </div>
+
+                    <div class="tab-content">
+                        <div class="tab-pane active" id="about-tab">
+                            <div class="card">
+                                <h3>Über mich</h3>
+                                <div class="about-section">
+                                    <h4>Fahrer-Info</h4>
+                                    <p>Fahre seit 8 Jahren Motorrad und liebe Touren durch die Alpen. Am Wochenende bin ich meistens unterwegs und erkunde neue Strecken.</p>
+                                </div>
+                                <div class="about-section">
+                                    <h4>Lieblingsstrecken</h4>
+                                    <ul>
+                                        <li>Großglockner Hochalpenstraße</li>
+                                        <li>Stilfser Joch</li>
+                                        <li>Schwarzwald-Hochstraße</li>
+                                    </ul>
+                                </div>
+                                <div class="about-section">
+                                    <h4>Interessen</h4>
+                                    <div class="interests">
+                                        <span class="interest-tag">Tourfahren</span>
+                                        <span class="interest-tag">Schrauben</span>
+                                        <span class="interest-tag">Fotografie</span>
+                                        <span class="interest-tag">Camping</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane" id="posts-tab">
+                            <div class="card">
+                                <h3>Meine Beiträge</h3>
+                                <p>Hier werden deine Beiträge angezeigt...</p>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane" id="tours-tab">
+                            <div class="card">
+                                <h3>Meine Touren</h3>
+                                <div class="tours-list">
+                                    <div class="tour-card">
+                                        <h4>Alpen-Rundtour 2024</h4>
+                                        <p>5 Tage | 1.240 km | 8 Pässe</p>
+                                        <span class="tour-date">15. - 20. Juli 2024</span>
+                                    </div>
+                                    <div class="tour-card">
+                                        <h4>Schwarzwald-Wochenende</h4>
+                                        <p>2 Tage | 380 km | Kurvenparadies</p>
+                                        <span class="tour-date">3. - 4. Juni 2024</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane" id="bikes-tab">
+                            <div class="card">
+                                <h3>Meine Bikes</h3>
+                                <div class="bike-card">
+                                    <div class="bike-icon">🏍️</div>
+                                    <div class="bike-details">
+                                        <h4>Yamaha MT-07</h4>
+                                        <p>Baujahr: 2021 | 73 PS | 689 ccm</p>
+                                        <p>Km-Stand: 18.500 km</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane" id="friends-tab">
+                            <div class="card">
+                                <h3>Freunde (342)</h3>
+                                <div class="friends-grid">
+                                    <div class="friend-card">
+                                        <div class="user-avatar">LM</div>
+                                        <span>Lisa Motorrad</span>
+                                    </div>
+                                    <div class="friend-card">
+                                        <div class="user-avatar">TK</div>
+                                        <span>Tom Kurven</span>
+                                    </div>
+                                    <div class="friend-card">
+                                        <div class="user-avatar">SK</div>
+                                        <span>Sarah Kawasaki</span>
+                                    </div>
+                                    <div class="friend-card">
+                                        <div class="user-avatar">PH</div>
+                                        <span>Paul Honda</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
