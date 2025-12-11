@@ -1,269 +1,251 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BikerConnect - Dein Social Network für Biker</title>
-    <link rel="stylesheet" href="style.css">
+    <title>BikeBook - Home</title>
+    <style>
+        /* --- DESIGN VARIABLEN (HELL / LIGHT MODE) --- */
+        /* Diese Farben passen exakt zu deinem Profil */
+        :root {
+            --bg-body: #f0f2f5;       /* Helles Grau */
+            --bg-card: #ffffff;       /* Weiß */
+            --text-main: #050505;     /* Schwarz/Dunkelgrau */
+            --text-muted: #65676b;    /* Grau für Details */
+            --accent: #1877f2;        /* Facebook Blau */
+            --accent-hover: #166fe5;
+            --border-color: #ddd;     /* Heller Rahmen */
+            --shadow: 0 1px 2px rgba(0,0,0,0.1); /* Leichter Schatten */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding-top: 80px; /* Platz für Navbar */
+        }
+
+        /* --- NAVIGATION --- */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px; /* Etwas flacher wie bei FB */
+            background-color: var(--bg-card);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent);
+            text-decoration: none;
+            letter-spacing: -0.5px;
+        }
+        .nav-brand svg { fill: var(--accent); height: 28px; width: 28px; }
+
+        .nav-items { display: flex; align-items: center; gap: 10px; }
+
+        /* Home Button (AKTIV) */
+        .nav-btn-active {
+            background-color: #e7f3ff; /* Helles Blau als Hintergrund */
+            color: var(--accent);
+            padding: 8px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Profil Button (LINK) */
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .nav-link:hover { background-color: #f2f2f2; }
+
+        .icon { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+
+        /* --- FEED CONTAINER --- */
+        .feed-container {
+            max-width: 600px; /* Typische Breite für FB Feed */
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        /* --- CARDS --- */
+        .card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        /* Eingabe Feld */
+        .input-wrapper { display: flex; gap: 10px; align-items: center; }
+        .input-avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');
+            background-size: cover;
+        }
+        .feed-input {
+            background: #f0f2f5; 
+            border: none;
+            padding: 10px 15px;
+            border-radius: 20px;
+            color: black;
+            width: 100%;
+            font-size: 15px;
+            outline: none;
+        }
+        .feed-input::placeholder { color: var(--text-muted); }
+
+        /* Post Inhalt */
+        .post-header { display: flex; align-items: center; margin-bottom: 12px; }
+        .post-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
+        .user-info h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-main); }
+        .user-meta { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+        .post-text { font-size: 15px; line-height: 1.5; margin-bottom: 15px; color: var(--text-main); }
+        .post-image { width: 100%; height: auto; border-radius: 0px; display: block; margin-bottom: 10px; margin-left: -15px; margin-right: -15px; width: calc(100% + 30px); } 
+
+        /* Action Buttons unten */
+        .post-actions {
+            display: flex;
+            justify-content: space-around; /* Gleichmäßig verteilt */
+            border-top: 1px solid #ced0d4;
+            padding-top: 10px;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+        .action-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 600; padding: 5px 10px; border-radius: 5px; }
+        .action-item:hover { background-color: #f2f2f2; }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .navbar { padding: 0 10px; }
+            .nav-brand span { display: none; }
+        }
+    </style>
 </head>
 <body>
-    <!-- Navigation -->
+
     <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand">
-                <span class="logo">🏍️</span>
-                <span class="brand-name">BikerConnect</span>
-            </div>
-            <div class="nav-menu">
-                <a href="#home" class="nav-link active">Home</a>
-                <a href="#profile" class="nav-link">Profil</a>
-                <a href="#" class="nav-link">Touren</a>
-                <a href="#" class="nav-link">Community</a>
-            </div>
-            <div class="nav-user">
-                <span class="user-name">Max Rider</span>
-                <div class="user-avatar">MR</div>
-            </div>
+        <a href="index.html" class="nav-brand">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 13c.7 0 1.37.14 2 .39V9a2 2 0 00-2-2h-3l-2.5-4h-5L6 7H4a2 2 0 00-2 2v10a2 2 0 002 2h2m13-2a3 3 0 100-6 3 3 0 000 6zM7 19a3 3 0 100-6 3 3 0 000 6z"></path></svg>
+            <span>BikeBook</span>
+        </a>
+
+        <div class="nav-items">
+            <a href="index.html" class="nav-btn-active">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                Home
+            </a>
+            
+            <a href="profil.html" class="nav-link">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                Profil
+            </a>
+            <a href="forum.html" class="nav-link">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+    Forum
+</a>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <!-- Home Page -->
-        <div id="home-page" class="page active">
-            <div class="content-grid">
-                <!-- Sidebar -->
-                <aside class="sidebar">
-                    <div class="card profile-summary">
-                        <div class="profile-header">
-                            <div class="profile-avatar-large">MR</div>
-                            <h3>Max Rider</h3>
-                            <p class="profile-subtitle">Yamaha MT-07 Fahrer</p>
-                        </div>
-                        <div class="profile-stats">
-                            <div class="stat">
-                                <span class="stat-value">127</span>
-                                <span class="stat-label">Touren</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-value">342</span>
-                                <span class="stat-label">Freunde</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-value">18.5k</span>
-                                <span class="stat-label">km</span>
-                            </div>
-                        </div>
-                    </div>
+    <div class="feed-container">
 
-                    <div class="card quick-links">
-                        <h4>Quick Links</h4>
-                        <ul>
-                            <li>🗓️ Anstehende Events</li>
-                            <li>🔧 Werkstatt-Tipps</li>
-                            <li>📸 Galerie</li>
-                            <li>⚙️ Einstellungen</li>
-                        </ul>
-                    </div>
-                </aside>
-
-                <!-- Feed -->
-                <section class="feed">
-                    <!-- Create Post -->
-                    <div class="card create-post">
-                        <div class="post-input-area">
-                            <div class="user-avatar">MR</div>
-                            <input type="text" placeholder="Was gibt's Neues auf der Straße?" class="post-input" id="postInput">
-                        </div>
-                        <div class="post-actions">
-                            <button class="post-action-btn">📸 Foto</button>
-                            <button class="post-action-btn">📍 Ort</button>
-                            <button class="post-action-btn">🏍️ Bike</button>
-                            <button class="post-btn" id="postBtn">Posten</button>
-                        </div>
-                    </div>
-
-                    <!-- Feed Posts -->
-                    <div id="feed-posts">
-                        <!-- Posts will be dynamically added here -->
-                    </div>
-                </section>
-
-                <!-- Right Sidebar -->
-                <aside class="sidebar-right">
-                    <div class="card">
-                        <h4>Aktive Biker in der Nähe</h4>
-                        <div class="active-users">
-                            <div class="active-user">
-                                <div class="user-avatar small">LM</div>
-                                <div class="user-info">
-                                    <span class="user-name-small">Lisa Motorrad</span>
-                                    <span class="user-status">🟢 Online</span>
-                                </div>
-                            </div>
-                            <div class="active-user">
-                                <div class="user-avatar small">TK</div>
-                                <div class="user-info">
-                                    <span class="user-name-small">Tom Kurven</span>
-                                    <span class="user-status">🟢 Online</span>
-                                </div>
-                            </div>
-                            <div class="active-user">
-                                <div class="user-avatar small">SK</div>
-                                <div class="user-info">
-                                    <span class="user-name-small">Sarah Kawasaki</span>
-                                    <span class="user-status">🟡 Unterwegs</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <h4>Beliebte Touren</h4>
-                        <div class="popular-tours">
-                            <div class="tour-item">
-                                <span>🏔️ Alpenpass-Tour</span>
-                                <span class="tour-distance">285 km</span>
-                            </div>
-                            <div class="tour-item">
-                                <span>🌲 Schwarzwald-Route</span>
-                                <span class="tour-distance">156 km</span>
-                            </div>
-                            <div class="tour-item">
-                                <span>🏖️ Küstenstraße</span>
-                                <span class="tour-distance">321 km</span>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
+        <div class="card">
+            <div class="input-wrapper">
+                <div class="input-avatar"></div>
+                <input type="text" class="feed-input" placeholder="Start eine neue Diskussion, Max...">
+            </div>
+            <div style="border-top:1px solid #f0f2f5; margin-top:10px; padding-top:10px; display:flex; gap:20px; font-weight:600; color:#65676b; font-size:14px;">
+                <span>📷 Foto/Video</span>
+                <span>📍 Markieren</span>
             </div>
         </div>
 
-        <!-- Profile Page -->
-        <div id="profile-page" class="page">
-            <div class="profile-container">
-                <div class="profile-banner">
-                    <div class="banner-image"></div>
-                    <div class="profile-main">
-                        <div class="profile-avatar-xl">MR</div>
-                        <div class="profile-info">
-                            <h1>Max Rider</h1>
-                            <p class="profile-bio">Leidenschaftlicher Motorradfahrer seit 2015 | Yamaha MT-07 | Immer auf der Suche nach neuen Routen</p>
-                            <div class="profile-meta">
-                                <span>📍 Hamburg, Deutschland</span>
-                                <span>🏍️ Yamaha MT-07</span>
-                                <span>📅 Dabei seit März 2020</span>
-                            </div>
-                        </div>
-                        <button class="edit-profile-btn">Profil bearbeiten</button>
-                    </div>
+        <div class="card">
+            <div class="post-header">
+                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=60" alt="Avatar" class="post-avatar">
+                <div class="user-info">
+                    <h3>Max Thunder</h3>
+                    <div class="user-meta">@thunder_rider • vor 1 Std</div>
                 </div>
+            </div>
 
-                <div class="profile-content">
-                    <div class="profile-tabs">
-                        <button class="tab-btn active" data-tab="about">Über mich</button>
-                        <button class="tab-btn" data-tab="posts">Beiträge</button>
-                        <button class="tab-btn" data-tab="tours">Touren</button>
-                        <button class="tab-btn" data-tab="bikes">Meine Bikes</button>
-                        <button class="tab-btn" data-tab="friends">Freunde</button>
-                    </div>
+            <div class="post-text">
+                Heute eine wunderschöne Tour durch die bayerischen Alpen gemacht! Die Aussicht war atemberaubend. 🏔️
+            </div>
 
-                    <div class="tab-content">
-                        <div class="tab-pane active" id="about-tab">
-                            <div class="card">
-                                <h3>Über mich</h3>
-                                <div class="about-section">
-                                    <h4>Fahrer-Info</h4>
-                                    <p>Fahre seit 8 Jahren Motorrad und liebe Touren durch die Alpen. Am Wochenende bin ich meistens unterwegs und erkunde neue Strecken.</p>
-                                </div>
-                                <div class="about-section">
-                                    <h4>Lieblingsstrecken</h4>
-                                    <ul>
-                                        <li>Großglockner Hochalpenstraße</li>
-                                        <li>Stilfser Joch</li>
-                                        <li>Schwarzwald-Hochstraße</li>
-                                    </ul>
-                                </div>
-                                <div class="about-section">
-                                    <h4>Interessen</h4>
-                                    <div class="interests">
-                                        <span class="interest-tag">Tourfahren</span>
-                                        <span class="interest-tag">Schrauben</span>
-                                        <span class="interest-tag">Fotografie</span>
-                                        <span class="interest-tag">Camping</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+            <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1000&q=80" alt="Alpen" class="post-image">
 
-                        <div class="tab-pane" id="posts-tab">
-                            <div class="card">
-                                <h3>Meine Beiträge</h3>
-                                <p>Hier werden deine Beiträge angezeigt...</p>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane" id="tours-tab">
-                            <div class="card">
-                                <h3>Meine Touren</h3>
-                                <div class="tours-list">
-                                    <div class="tour-card">
-                                        <h4>Alpen-Rundtour 2024</h4>
-                                        <p>5 Tage | 1.240 km | 8 Pässe</p>
-                                        <span class="tour-date">15. - 20. Juli 2024</span>
-                                    </div>
-                                    <div class="tour-card">
-                                        <h4>Schwarzwald-Wochenende</h4>
-                                        <p>2 Tage | 380 km | Kurvenparadies</p>
-                                        <span class="tour-date">3. - 4. Juni 2024</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane" id="bikes-tab">
-                            <div class="card">
-                                <h3>Meine Bikes</h3>
-                                <div class="bike-card">
-                                    <div class="bike-icon">🏍️</div>
-                                    <div class="bike-details">
-                                        <h4>Yamaha MT-07</h4>
-                                        <p>Baujahr: 2021 | 73 PS | 689 ccm</p>
-                                        <p>Km-Stand: 18.500 km</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane" id="friends-tab">
-                            <div class="card">
-                                <h3>Freunde (342)</h3>
-                                <div class="friends-grid">
-                                    <div class="friend-card">
-                                        <div class="user-avatar">LM</div>
-                                        <span>Lisa Motorrad</span>
-                                    </div>
-                                    <div class="friend-card">
-                                        <div class="user-avatar">TK</div>
-                                        <span>Tom Kurven</span>
-                                    </div>
-                                    <div class="friend-card">
-                                        <div class="user-avatar">SK</div>
-                                        <span>Sarah Kawasaki</span>
-                                    </div>
-                                    <div class="friend-card">
-                                        <div class="user-avatar">PH</div>
-                                        <span>Paul Honda</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="post-actions">
+                <div class="action-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                    Gefällt mir (42)
+                </div>
+                <div class="action-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    Kommentieren
+                </div>
+                <div class="action-item">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                    Teilen
                 </div>
             </div>
         </div>
-    </main>
 
-    <script src="app.js"></script>
+        <div class="card">
+            <div class="post-header">
+                <img src="https://images.unsplash.com/photo-1558898479-33c0057a5d12?auto=format&fit=crop&w=100&q=60" alt="Avatar" class="post-avatar">
+                <div class="user-info">
+                    <h3>Sarah Speed</h3>
+                    <div class="user-meta">@sarah_moto • vor 3 Std</div>
+                </div>
+            </div>
+            
+            <div class="post-text">
+                Neue Reifen sind endlich drauf! Michelin Road 6, bin gespannt auf den Grip im Regen. Hat jemand Erfahrung damit?
+            </div>
+            
+            <div class="post-actions">
+                <div class="action-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                    Gefällt mir (18)
+                </div>
+                <div class="action-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    Kommentieren
+                </div>
+            </div>
+        </div>
+
+    </div>
+
 </body>
 </html>
+```

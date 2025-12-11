@@ -222,3 +222,128 @@ document.addEventListener('click', function(e) {
         alert(action + ' - Feature kommt bald!');
     }
 });
+
+// --- TOUREN DATEN ---
+const toursData = [
+    {
+        id: 1,
+        title: "Schwarzwald Hochstraße",
+        km: 65,
+        time: "1:30",
+        curves: "Extrem",
+        desc: "Der Klassiker im Schwarzwald. Perfekter Asphalt, weite Kurven und toller Ausblick.",
+        coords: [48.6000, 8.2000] // Ungefähre Start-Koordinaten
+    },
+    {
+        id: 2,
+        title: "Elbufer Straße",
+        km: 45,
+        time: "1:00",
+        curves: "Mittel",
+        desc: "Entspanntes Cruisen am Deich entlang. Wenig Verkehr, aber Vorsicht vor Schafen!",
+        coords: [53.5511, 9.9937]
+    },
+    {
+        id: 3,
+        title: "Kyffhäuser 36 Kurven",
+        km: 12,
+        time: "0:20",
+        curves: "Legendär",
+        desc: "Die berühmten 36 Kurven zum Kyffhäuser Denkmal. Nichts für Anfänger!",
+        coords: [51.4116, 11.1039]
+    }
+];
+
+// Map Variable global definieren
+let map = null;
+let markers = [];
+
+// Funktion zum Initialisieren der Karte
+function initMap() {
+    // Wenn Karte schon existiert, nichts tun (sonst Crash)
+    if (map !== null) return;
+
+    // Karte erstellen und auf Deutschland zentrieren
+    map = L.map('map').setView([51.1657, 10.4515], 6);
+
+    // Dark Mode Karten-Style laden (CartoDB Dark Matter)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 19
+    }).addTo(map);
+
+    // Marker für alle Touren setzen
+    toursData.forEach(tour => {
+        const marker = L.marker(tour.coords).addTo(map);
+        marker.bindPopup(`<b>${tour.title}</b><br>${tour.km} km`);
+        markers.push({ id: tour.id, marker: marker });
+        
+        // Klick auf Marker öffnet Details
+        marker.on('click', () => showTourDetails(tour));
+    });
+}
+
+// Touren Liste rendern
+function renderTourList() {
+    const container = document.getElementById('tours-container');
+    container.innerHTML = '';
+
+    toursData.forEach(tour => {
+        const card = document.createElement('div');
+        card.className = 'mini-tour-card';
+        card.innerHTML = `
+            <h4>${tour.title}</h4>
+            <div class="tour-meta">
+                <span>📍 ${tour.km} km</span>
+                <span>⏱️ ${tour.time} h</span>
+                <span>${tour.curves}</span>
+            </div>
+        `;
+        
+        // Klick auf Karte zoomt zur Map
+        card.addEventListener('click', () => {
+            map.flyTo(tour.coords, 13);
+            showTourDetails(tour);
+        });
+        
+        container.appendChild(card);
+    });
+}
+
+function showTourDetails(tour) {
+    document.getElementById('tour-details').style.display = 'block';
+    document.getElementById('detail-title').textContent = tour.title;
+    document.getElementById('detail-km').textContent = tour.km;
+    document.getElementById('detail-time').textContent = tour.time;
+    document.getElementById('detail-curves').textContent = tour.curves;
+    document.getElementById('detail-desc').textContent = tour.desc;
+}
+
+// --- UPDATE NAVIGATION LOGIC ---
+// Suche den bestehenden Navigations-Code in app.js und erweitere ihn:
+
+document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        // ... (dein bestehender Code zum active setzen) ...
+        
+        // Ziemlich weit unten in deinem Event Listener:
+        const target = this.getAttribute('href').substring(1); // z.B. "tours"
+        
+        // Hide all pages... (dein Code)
+
+        if (target === 'home') {
+            document.getElementById('home-page').classList.add('active');
+        } else if (target === 'profile') {
+            document.getElementById('profile-page').classList.add('active');
+        } else if (target === 'tours') { // NEU HINZUFÜGEN
+            document.getElementById('tours-page').classList.add('active');
+            
+            // WICHTIG: Karte muss neu berechnet werden, wenn sie sichtbar wird
+            setTimeout(() => {
+                initMap();
+                map.invalidateSize(); // Repariert graue Kacheln
+                renderTourList();
+            }, 100);
+        }
+    });
+});

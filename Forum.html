@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forum - BikeBook</title>
+    <style>
+        /* --- DESIGN VARIABLEN (Identisch zu Index/Profil) --- */
+        :root {
+            --bg-body: #f0f2f5;
+            --bg-card: #ffffff;
+            --text-main: #050505;
+            --text-muted: #65676b;
+            --accent: #1877f2;
+            --border-color: #ddd;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding-top: 80px;
+        }
+
+        /* --- NAVIGATION --- */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: var(--bg-card);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent);
+            text-decoration: none;
+            letter-spacing: -0.5px;
+        }
+        .nav-brand svg { fill: var(--accent); height: 28px; width: 28px; }
+
+        .nav-items { display: flex; align-items: center; gap: 10px; }
+
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .nav-link:hover { background-color: #f2f2f2; }
+
+        .nav-btn-active {
+            background-color: #e7f3ff;
+            color: var(--accent);
+            padding: 8px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+
+        /* --- FORUM LAYOUT --- */
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 15px; }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            color: var(--text-main);
+        }
+
+        .forum-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            overflow: hidden; /* Damit Border-Radius wirkt */
+            margin-bottom: 20px;
+        }
+
+        .forum-header {
+            background-color: #f7f8fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .forum-header h2 { margin: 0; font-size: 18px; color: var(--text-main); }
+        .forum-header svg { color: var(--accent); width: 24px; height: 24px; }
+
+        /* Forum Zeilen */
+        .forum-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .forum-row:last-child { border-bottom: none; }
+        .forum-row:hover { background-color: #f9f9f9; }
+
+        .row-main { display: flex; align-items: center; gap: 15px; flex-grow: 1; }
+        .row-icon {
+            width: 40px; height: 40px;
+            background-color: #e7f3ff;
+            color: var(--accent);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .row-icon svg { width: 20px; height: 20px; stroke: currentColor; }
+
+        .row-info h3 { margin: 0; font-size: 16px; font-weight: 600; color: #050505; }
+        .row-info p { margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted); }
+
+        .row-stats {
+            text-align: right;
+            min-width: 100px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .stat-number { font-weight: bold; font-size: 14px; color: #050505; }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .navbar { padding: 0 10px; }
+            .row-stats { display: none; } /* Statistik auf Handy ausblenden für Platz */
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 13c.7 0 1.37.14 2 .39V9a2 2 0 00-2-2h-3l-2.5-4h-5L6 7H4a2 2 0 00-2 2v10a2 2 0 002 2h2m13-2a3 3 0 100-6 3 3 0 000 6zM7 19a3 3 0 100-6 3 3 0 000 6z"></path></svg>
+            <span>BikeBook</span>
+        </a>
+
+        <div class="nav-items">
+            <a href="index.html" class="nav-link">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                Home
+            </a>
+            
+            <a href="profil.html" class="nav-link">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                Profil
+            </a>
+
+            <a href="#" class="nav-btn-active">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                Forum
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1 class="page-title">Community Forum</h1>
+
+        <div class="forum-card">
+            <div class="forum-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <h2>Motorrad & Marken</h2>
+            </div>
+            
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
+                    <div class="row-info">
+                        <h3>BMW Motorrad</h3>
+                        <p>GS-Reihe, S1000RR, R-NineT & mehr</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">12.5k</div>
+                    Beiträge
+                </div>
+            </div>
+
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg></div>
+                    <div class="row-info">
+                        <h3>Honda</h3>
+                        <p>Fireblade, Africa Twin, CB-Reihe</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">9.2k</div>
+                    Beiträge
+                </div>
+            </div>
+
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon" style="color:#4ade80;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg></div>
+                    <div class="row-info">
+                        <h3>Kawasaki</h3>
+                        <p>Ninja, Z-Reihe, Versys</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">8.1k</div>
+                    Beiträge
+                </div>
+            </div>
+
+             <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon" style="color:#60a5fa;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
+                    <div class="row-info">
+                        <h3>Yamaha</h3>
+                        <p>MT-Reihe, R1/R6, Ténéré</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">10.4k</div>
+                    Beiträge
+                </div>
+            </div>
+
+        </div>
+
+        <div class="forum-card">
+            <div class="forum-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <h2>Touren & Reisen (Europa)</h2>
+            </div>
+
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon"><span style="font-size:20px;">🇩🇪</span></div>
+                    <div class="row-info">
+                        <h3>Deutschland</h3>
+                        <p>Schwarzwald, Eifel, Harz, Bayerischer Wald</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">450</div>
+                    Touren
+                </div>
+            </div>
+
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon"><span style="font-size:20px;">🇦🇹</span></div>
+                    <div class="row-info">
+                        <h3>Österreich</h3>
+                        <p>Großglockner, Tirol, Alpenpässe</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">320</div>
+                    Touren
+                </div>
+            </div>
+
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon"><span style="font-size:20px;">🇮🇹</span></div>
+                    <div class="row-info">
+                        <h3>Italien</h3>
+                        <p>Dolomiten, Gardasee, Toskana</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">280</div>
+                    Touren
+                </div>
+            </div>
+        </div>
+
+        <div class="forum-card">
+            <div class="forum-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                <h2>Hilfe & Werkstatt</h2>
+            </div>
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon" style="background:#fff3cd; color:#d97706;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
+                    <div class="row-info">
+                        <h3>Pannenhilfe & Schrauber-Tipps</h3>
+                        <p>Ölwechsel, Reifenwahl, Elektrik-Probleme</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">5.6k</div>
+                    Beiträge
+                </div>
+            </div>
+        </div>
+
+        <div class="forum-card">
+            <div class="forum-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <h2>Community</h2>
+            </div>
+            <div class="forum-row">
+                <div class="row-main">
+                    <div class="row-icon" style="background:#e6fffa; color:#059669;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg></div>
+                    <div class="row-info">
+                        <h3>Plauderecke</h3>
+                        <p>Off-Topic, Biker-Grüße, Treffen organisieren</p>
+                    </div>
+                </div>
+                <div class="row-stats">
+                    <div class="stat-number">34k</div>
+                    Beiträge
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>
