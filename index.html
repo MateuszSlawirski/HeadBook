@@ -1,251 +1,104 @@
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BikeBook - Home</title>
-    <style>
-        /* --- DESIGN VARIABLEN (HELL / LIGHT MODE) --- */
-        /* Diese Farben passen exakt zu deinem Profil */
-        :root {
-            --bg-body: #f0f2f5;       /* Helles Grau */
-            --bg-card: #ffffff;       /* Weiß */
-            --text-main: #050505;     /* Schwarz/Dunkelgrau */
-            --text-muted: #65676b;    /* Grau für Details */
-            --accent: #1877f2;        /* Facebook Blau */
-            --accent-hover: #166fe5;
-            --border-color: #ddd;     /* Heller Rahmen */
-            --shadow: 0 1px 2px rgba(0,0,0,0.1); /* Leichter Schatten */
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            margin: 0;
-            padding-top: 80px; /* Platz für Navbar */
-        }
-
-        /* --- NAVIGATION --- */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 60px; /* Etwas flacher wie bei FB */
-            background-color: var(--bg-card);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-sizing: border-box;
-            z-index: 1000;
-        }
-
-        .nav-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 24px;
-            font-weight: 800;
-            color: var(--accent);
-            text-decoration: none;
-            letter-spacing: -0.5px;
-        }
-        .nav-brand svg { fill: var(--accent); height: 28px; width: 28px; }
-
-        .nav-items { display: flex; align-items: center; gap: 10px; }
-
-        /* Home Button (AKTIV) */
-        .nav-btn-active {
-            background-color: #e7f3ff; /* Helles Blau als Hintergrund */
-            color: var(--accent);
-            padding: 8px 20px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* Profil Button (LINK) */
-        .nav-link {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 15px;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-        .nav-link:hover { background-color: #f2f2f2; }
-
-        .icon { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
-
-        /* --- FEED CONTAINER --- */
-        .feed-container {
-            max-width: 600px; /* Typische Breite für FB Feed */
-            margin: 0 auto;
-            padding: 0 15px;
-        }
-
-        /* --- CARDS --- */
-        .card {
-            background: var(--bg-card);
-            border-radius: 8px;
-            box-shadow: var(--shadow);
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        /* Eingabe Feld */
-        .input-wrapper { display: flex; gap: 10px; align-items: center; }
-        .input-avatar {
-            width: 40px; height: 40px; border-radius: 50%;
-            background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');
-            background-size: cover;
-        }
-        .feed-input {
-            background: #f0f2f5; 
-            border: none;
-            padding: 10px 15px;
-            border-radius: 20px;
-            color: black;
-            width: 100%;
-            font-size: 15px;
-            outline: none;
-        }
-        .feed-input::placeholder { color: var(--text-muted); }
-
-        /* Post Inhalt */
-        .post-header { display: flex; align-items: center; margin-bottom: 12px; }
-        .post-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
-        .user-info h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-main); }
-        .user-meta { margin: 0; font-size: 13px; color: var(--text-muted); }
-
-        .post-text { font-size: 15px; line-height: 1.5; margin-bottom: 15px; color: var(--text-main); }
-        .post-image { width: 100%; height: auto; border-radius: 0px; display: block; margin-bottom: 10px; margin-left: -15px; margin-right: -15px; width: calc(100% + 30px); } 
-
-        /* Action Buttons unten */
-        .post-actions {
-            display: flex;
-            justify-content: space-around; /* Gleichmäßig verteilt */
-            border-top: 1px solid #ced0d4;
-            padding-top: 10px;
-            color: var(--text-muted);
-            margin-top: 10px;
-        }
-        .action-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 600; padding: 5px 10px; border-radius: 5px; }
-        .action-item:hover { background-color: #f2f2f2; }
-
-        /* Responsive */
-        @media (max-width: 600px) {
-            .navbar { padding: 0 10px; }
-            .nav-brand span { display: none; }
-        }
-    </style>
+    <title>BikeBook - Startseite</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <nav class="navbar">
         <a href="index.html" class="nav-brand">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 13c.7 0 1.37.14 2 .39V9a2 2 0 00-2-2h-3l-2.5-4h-5L6 7H4a2 2 0 00-2 2v10a2 2 0 002 2h2m13-2a3 3 0 100-6 3 3 0 000 6zM7 19a3 3 0 100-6 3 3 0 000 6z"></path></svg>
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 13c.7 0 1.37.14 2 .39V9a2 2 0 00-2-2h-3l-2.5-4h-5L6 7H4a2 2 0 00-2 2v10a2 2 0 002 2h2m13-2a3 3 0 100-6 3 3 0 000 6zM7 19a3 3 0 100-6 3 3 0 000 6z"></path>
+            </svg>
             <span>BikeBook</span>
         </a>
 
         <div class="nav-items">
             <a href="index.html" class="nav-btn-active">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
                 Home
             </a>
-            
             <a href="profil.html" class="nav-link">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
                 Profil
             </a>
             <a href="forum.html" class="nav-link">
-    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-    Forum
-</a>
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                Forum
+            </a>
         </div>
     </nav>
 
-    <div class="feed-container">
+    <div class="container">
+        <div class="content-grid">
 
-        <div class="card">
-            <div class="input-wrapper">
-                <div class="input-avatar"></div>
-                <input type="text" class="feed-input" placeholder="Start eine neue Diskussion, Max...">
+            <div class="sidebar">
+                <div class="card">
+                    <div class="card-header">Willkommen</div>
+                    <p>Hier findest du die neuesten Touren, Tipps und die Community.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">Beliebte Motorräder</div>
+                    <div class="bike-card">
+                        <img src="https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=500&q=60" alt="Bike" class="bike-img">
+                        <div class="bike-info">
+                            <div class="bike-model">Yamaha MT-09</div>
+                            <div class="bike-specs">Baujahr 2023 • 119 PS</div>
+                            <div class="bike-status">● Saisonbereit</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="border-top:1px solid #f0f2f5; margin-top:10px; padding-top:10px; display:flex; gap:20px; font-weight:600; color:#65676b; font-size:14px;">
-                <span>📷 Foto/Video</span>
-                <span>📍 Markieren</span>
+
+            <div class="feed">
+                <div class="card">
+                    <div style="display:flex; gap:10px;">
+                        <div class="new-post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
+                        <input type="text" class="new-post-input" placeholder="Was möchtest du teilen, Max?">
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="post-header">
+                        <div class="post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
+                        <div class="post-meta">
+                            <div>Max Mustermann</div>
+                            <div>Gestern um 14:30 Uhr • 🌍</div>
+                        </div>
+                    </div>
+                    <div class="post-content">
+                        Heute war ich eine Runde am Kesselberg unterwegs – das Wetter war perfekt!
+                    </div>
+                    <div class="tour-stats-box">
+                        <div><div class="stat-val">124 km</div><div class="stat-label">Distanz</div></div>
+                        <div><div class="stat-val">02:15 h</div><div class="stat-label">Dauer</div></div>
+                        <div><div class="stat-val">68 km/h</div><div class="stat-label">Ø Speed</div></div>
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1605218427306-635ba7497942?auto=format&fit=crop&w=800&q=80" class="post-image" alt="Map">
+                    <div class="post-actions">
+                        <span>👍 Gefällt mir</span>
+                        <span>💬 Kommentieren</span>
+                        <span>⤴️ Route speichern</span>
+                    </div>
+                </div>
+
             </div>
+
         </div>
-
-        <div class="card">
-            <div class="post-header">
-                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=60" alt="Avatar" class="post-avatar">
-                <div class="user-info">
-                    <h3>Max Thunder</h3>
-                    <div class="user-meta">@thunder_rider • vor 1 Std</div>
-                </div>
-            </div>
-
-            <div class="post-text">
-                Heute eine wunderschöne Tour durch die bayerischen Alpen gemacht! Die Aussicht war atemberaubend. 🏔️
-            </div>
-
-            <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1000&q=80" alt="Alpen" class="post-image">
-
-            <div class="post-actions">
-                <div class="action-item">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
-                    Gefällt mir (42)
-                </div>
-                <div class="action-item">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                    Kommentieren
-                </div>
-                <div class="action-item">
-                    <svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                    Teilen
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="post-header">
-                <img src="https://images.unsplash.com/photo-1558898479-33c0057a5d12?auto=format&fit=crop&w=100&q=60" alt="Avatar" class="post-avatar">
-                <div class="user-info">
-                    <h3>Sarah Speed</h3>
-                    <div class="user-meta">@sarah_moto • vor 3 Std</div>
-                </div>
-            </div>
-            
-            <div class="post-text">
-                Neue Reifen sind endlich drauf! Michelin Road 6, bin gespannt auf den Grip im Regen. Hat jemand Erfahrung damit?
-            </div>
-            
-            <div class="post-actions">
-                <div class="action-item">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
-                    Gefällt mir (18)
-                </div>
-                <div class="action-item">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                    Kommentieren
-                </div>
-            </div>
-        </div>
-
     </div>
 
 </body>
 </html>
-```
+

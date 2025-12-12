@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BikeBook - Touren</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand">BikeBook</a>
+        <div class="nav-items">
+            <a href="profil.html" class="nav-link">Profil</a>
+            <a href="tours.html" class="nav-link nav-btn-active">Touren</a>
+        </div>
+    </nav>
+
+    <main class="main-content page active" id="tours-page">
+        <div class="tours-layout">
+            <div id="tours-container" class="tours-list">
+                <!-- Touren werden von app.js geladen -->
+            </div>
+            <div class="map-card" id="map">
+                <!-- Leaflet-Karte -->
+            </div>
+        </div>
+        <div id="tour-details" style="display:none;">
+            <h2 id="detail-title"></h2>
+            <p>Kilometer: <span id="detail-km"></span></p>
+            <p>Dauer: <span id="detail-time"></span></p>
+            <p>Kurven: <span id="detail-curves"></span></p>
+            <p id="detail-desc"></p>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
