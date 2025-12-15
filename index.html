@@ -3,60 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BikeBook - Startseite</title>
+    <title>BikeBook - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <nav class="navbar">
-        <a href="index.html" class="nav-brand">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 13c.7 0 1.37.14 2 .39V9a2 2 0 00-2-2h-3l-2.5-4h-5L6 7H4a2 2 0 00-2 2v10a2 2 0 002 2h2m13-2a3 3 0 100-6 3 3 0 000 6zM7 19a3 3 0 100-6 3 3 0 000 6z"></path>
-            </svg>
-            <span>BikeBook</span>
+  
+ <nav class="navbar navbar-expand-lg fixed-top py-2">
+    <div class="container">
+        <a href="index.html" class="navbar-brand d-flex align-items-center">
+            <img src="logo-maske.png" alt="Riderpoint" class="nav-logo-img">
         </a>
 
-        <div class="nav-items">
-            <a href="index.html" class="nav-btn-active">
-                <svg class="icon" viewBox="0 0 24 24">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-                Home
-            </a>
-            <a href="profil.html" class="nav-link">
-                <svg class="icon" viewBox="0 0 24 24">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                Profil
-            </a>
-            <a href="forum.html" class="nav-link">
-                <svg class="icon" viewBox="0 0 24 24">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                </svg>
-                Forum
-            </a>
+        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar">
+            <div class="offcanvas-header">
+                <h5 class="offcanvas-title">Menu</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body">
+                <ul class="navbar-nav justify-content-center flex-grow-1 pe-3">
+                    
+                    <li class="nav-item mx-3">
+                        <a class="nav-link d-flex flex-column align-items-center" href="index.html">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            Home
+                        </a>
+                    </li>
+
+                    <li class="nav-item mx-3">
+                        <a class="nav-link d-flex flex-column align-items-center" href="tours.html">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                            Touren
+                        </a>
+                    </li>
+
+                    <li class="nav-item mx-3">
+                        <a class="nav-link d-flex flex-column align-items-center" href="Forum.html">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            Community
+                        </a>
+                    </li>
+
+                    <li class="nav-item mx-3">
+                        <a class="nav-link d-flex flex-column align-items-center notification-link" href="#">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                            Benachrichtigung
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="d-flex justify-content-center align-items-center mt-3 mt-lg-0">
+                    <a href="profil.html" class="nav-link d-flex flex-column align-items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Profil
+                    </a>
+                </div>
+            </div>
         </div>
-    </nav>
+    </div>
+</nav>
 
     <div class="container">
         <div class="content-grid">
-
             <div class="sidebar">
                 <div class="card">
                     <div class="card-header">Willkommen</div>
-                    <p>Hier findest du die neuesten Touren, Tipps und die Community.</p>
+                    <p>Finde neue Touren, Freunde und Events.</p>
                 </div>
-
                 <div class="card">
-                    <div class="card-header">Beliebte Motorräder</div>
+                    <div class="card-header">Bike der Woche</div>
                     <div class="bike-card">
                         <img src="https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=500&q=60" alt="Bike" class="bike-img">
                         <div class="bike-info">
                             <div class="bike-model">Yamaha MT-09</div>
-                            <div class="bike-specs">Baujahr 2023 • 119 PS</div>
-                            <div class="bike-status">● Saisonbereit</div>
+                            <div class="bike-specs">2023 • 119 PS</div>
                         </div>
                     </div>
                 </div>
@@ -65,40 +89,16 @@
             <div class="feed">
                 <div class="card">
                     <div style="display:flex; gap:10px;">
-                        <div class="new-post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
-                        <input type="text" class="new-post-input" placeholder="Was möchtest du teilen, Max?">
+                        <div class="new-post-avatar"></div>
+                        <input type="text" class="new-post-input" placeholder="Was gibt's Neues? (Enter zum Senden)">
                     </div>
                 </div>
-
-                <div class="card">
-                    <div class="post-header">
-                        <div class="post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
-                        <div class="post-meta">
-                            <div>Max Mustermann</div>
-                            <div>Gestern um 14:30 Uhr • 🌍</div>
-                        </div>
-                    </div>
-                    <div class="post-content">
-                        Heute war ich eine Runde am Kesselberg unterwegs – das Wetter war perfekt!
-                    </div>
-                    <div class="tour-stats-box">
-                        <div><div class="stat-val">124 km</div><div class="stat-label">Distanz</div></div>
-                        <div><div class="stat-val">02:15 h</div><div class="stat-label">Dauer</div></div>
-                        <div><div class="stat-val">68 km/h</div><div class="stat-label">Ø Speed</div></div>
-                    </div>
-                    <img src="https://images.unsplash.com/photo-1605218427306-635ba7497942?auto=format&fit=crop&w=800&q=80" class="post-image" alt="Map">
-                    <div class="post-actions">
-                        <span>👍 Gefällt mir</span>
-                        <span>💬 Kommentieren</span>
-                        <span>⤴️ Route speichern</span>
-                    </div>
-                </div>
-
+                <div id="feed-posts"></div>
             </div>
-
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
-
