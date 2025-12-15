@@ -37,7 +37,7 @@ function initTours() {
         map = L.map('map').setView([51.1657, 10.4515], 6); 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
     }
-    renderTours(toursData); 
+    filterTours();
 }
 
 /* --- RENDER TOURS --- */
@@ -84,10 +84,10 @@ function renderTours(data) {
     });
 }
 
-/* --- RENDER POSTS (NEU: Für Home Feed) --- */
+/* --- RENDER POSTS (Für Home Feed) --- */
 function loadPosts() {
     const feedContainer = document.getElementById('feed-posts');
-    if (!feedContainer) return; // Abbruch, wenn wir nicht auf Home sind
+    if (!feedContainer) return; 
 
     feedContainer.innerHTML = '';
     posts.forEach(post => {
@@ -111,62 +111,183 @@ function loadPosts() {
     });
 }
 
-/* --- FILTER LOGIK (CHECKBOXEN & SUCHE) --- */
+/* --- HELPER: Label für Slider --- */
+function updateKmLabel() {
+    const val = document.getElementById('kmRange').value;
+    if(document.getElementById('kmValue')) {
+        document.getElementById('kmValue').innerText = val;
+    }
+}
+
+/* =========================================
+   FILTER LOGIK (KASKADIEREND & CLEAN)
+   ========================================= */
+
+// 1. Initialisierung: Nur Kategorien laden
+function initFilters() {
+    const categorySelect = document.getElementById('filter-category');
+    if(!categorySelect) return;
+
+    const categories = [...new Set(toursData.map(t => t.category))].sort();
+    
+    // Wichtig: Startwert ist "all" (Bitte wählen...)
+    categorySelect.innerHTML = '<option value="all">Bitte wählen...</option>';
+    categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.innerText = cat;
+        categorySelect.appendChild(opt);
+    });
+}
+
+// 2. Wenn Region geändert wird
+function onCategoryChange() {
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+    const selectedCat = catSelect.value;
+
+    // Reset der unteren Ebenen
+    countrySelect.innerHTML = '<option value="all">Alle Länder</option>';
+    stateSelect.innerHTML = '<option value="all">Alle Bundesländer</option>';
+    stateSelect.disabled = true; 
+
+    // Wenn wieder "Bitte wählen..." gewählt wurde -> Alles ausblenden
+    if (selectedCat === 'all') {
+        countrySelect.disabled = true;
+        countrySelect.innerHTML = '<option value="all">--</option>';
+        stateSelect.innerHTML = '<option value="all">--</option>';
+        filterTours(); 
+        return;
+    }
+
+    // Länder aktivieren
+    countrySelect.disabled = false;
+    
+    const matchingTours = toursData.filter(t => t.category === selectedCat);
+    const uniqueCountries = [...new Set(matchingTours.map(t => t.country))].sort();
+
+    uniqueCountries.forEach(country => {
+        const opt = document.createElement('option');
+        opt.value = country;
+        opt.innerText = country;
+        countrySelect.appendChild(opt);
+    });
+
+    filterTours(); 
+}
+
+// 3. Wenn Land geändert wird
+function onCountryChange() {
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+    const selectedCountry = countrySelect.value;
+
+    stateSelect.innerHTML = '<option value="all">Alle Bundesländer</option>';
+
+    if (selectedCountry === 'all') {
+        stateSelect.disabled = true;
+        stateSelect.innerHTML = '<option value="all">--</option>';
+        filterTours();
+        return;
+    }
+
+    stateSelect.disabled = false;
+
+    const matchingTours = toursData.filter(t => t.country === selectedCountry);
+    const uniqueStates = [...new Set(matchingTours.map(t => t.state))].sort();
+
+    uniqueStates.forEach(state => {
+        const opt = document.createElement('option');
+        opt.value = state;
+        opt.innerText = state;
+        stateSelect.appendChild(opt);
+    });
+
+    filterTours(); 
+}
+
+// 4. HAUPT-FILTER (Slider Logik entfernt)
 function filterTours() {
-    // 1. Suche auslesen (Sicherheitscheck, falls Input fehlt)
     const searchInput = document.getElementById('search-input');
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+    const listContainer = document.getElementById('tours-container');
+
+    if(!catSelect) return;
+
+    const sCat = catSelect.value;
+    
+    // --- NEU: ABBRUCH WENN KEINE REGION GEWÄHLT ---
+    if (sCat === 'all') {
+        // Liste leeren
+        listContainer.innerHTML = '<p class="text-center text-muted mt-5">👋 Bitte wähle zuerst eine Region links im Filter.</p>';
+        // Karte leeren
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        return; 
+    }
+    // ----------------------------------------------
+
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : "";
+    const sCountry = countrySelect.value;
+    const sState = stateSelect.value;
 
-    // 2. Checkboxen auslesen
-    // Sammelt alle Werte der angehakten Boxen in Arrays (z.B. ['Alpen', 'Harz'])
-    const checkedRegions = Array.from(document.querySelectorAll('input[data-type="region"]:checked')).map(cb => cb.value);
-    const checkedCountries = Array.from(document.querySelectorAll('input[data-type="country"]:checked')).map(cb => cb.value);
-    const checkedStates = Array.from(document.querySelectorAll('input[data-type="state"]:checked')).map(cb => cb.value);
-
-    // 3. Filtern
     const filtered = toursData.filter(tour => {
-        // A. Kategorien prüfen (Leer = Alle, Sonst = Treffer in Liste)
-        const regionMatch = checkedRegions.length === 0 || checkedRegions.includes(tour.category);
-        const countryMatch = checkedCountries.length === 0 || checkedCountries.includes(tour.country);
-        const stateMatch = checkedStates.length === 0 || checkedStates.includes(tour.state);
+        const catMatch = (tour.category === sCat); // Muss exakt passen, da 'all' oben abgefangen wird
+        
+        let countryMatch = true;
+        if (sCountry !== 'all') {
+             countryMatch = (tour.country === sCountry);
+        }
 
-        // B. Suche prüfen (Titel ODER Beschreibung)
-        // (tour.desc || "") verhindert Absturz bei fehlender Beschreibung
+        let stateMatch = true;
+        if (sCountry !== 'all' && sState !== 'all' && !stateSelect.disabled) {
+            stateMatch = (tour.state === sState);
+        }
+
         const searchMatch = tour.title.toLowerCase().includes(searchTerm) || 
                             (tour.desc || "").toLowerCase().includes(searchTerm);
-
-        // Nur wenn ALLES zutrifft, wird die Tour angezeigt
-        return regionMatch && countryMatch && stateMatch && searchMatch;
+        
+        return catMatch && countryMatch && stateMatch && searchMatch;
     });
 
     renderTours(filtered);
 }
 
-// Funktion zum Zurücksetzen
+// 5. Reset
 function resetFilters() {
-    const searchInput = document.getElementById('search-input');
-    if(searchInput) searchInput.value = "";
+    document.getElementById('search-input').value = "";
     
-    // Wichtig: Deine Inputs im HTML müssen class="filter-cb" haben!
-    document.querySelectorAll('.filter-cb').forEach(cb => cb.checked = false);
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+
+    catSelect.value = 'all';
     
-    filterTours(); // Ansicht aktualisieren
+    countrySelect.innerHTML = '<option value="all">--</option>';
+    countrySelect.disabled = true;
+    
+    stateSelect.innerHTML = '<option value="all">--</option>';
+    stateSelect.disabled = true;
+
+    filterTours(); // Das leert jetzt die Liste, weil catSelect auf 'all' steht
 }
+
 
 /* --- BEWERTUNGEN --- */
 function rateTour(id, starValue, event) {
-    if(event) event.stopPropagation(); // Verhindert Klick auf die Karte dahinter
+    if(event) event.stopPropagation(); 
     
     const tour = toursData.find(t => t.id === id);
     if(tour) {
-        // Neuen Durchschnitt berechnen
         tour.rating = ((tour.rating * tour.votes) + starValue) / (tour.votes + 1);
-        // Auf 1 Nachkommastelle runden
         tour.rating = Math.round(tour.rating * 10) / 10; 
         tour.votes++;
         
         alert(`Danke! Du hast "${tour.title}" mit ${starValue} Sternen bewertet.`);
-        filterTours(); // UI neu rendern um Sterne zu aktualisieren
+        filterTours(); 
     }
 }
 
@@ -176,28 +297,26 @@ if(addTourForm) {
     addTourForm.addEventListener('submit', (e) => {
         e.preventDefault();
         
-        // Zufallskoordinaten für Demo-Zwecke (Mitteleuropa grob)
         const lat = 47 + Math.random() * 6; 
         const lng = 7 + Math.random() * 6;
 
         const newTour = {
-            id: Date.now(), // Einfache einzigartige ID
+            id: Date.now(),
             title: document.getElementById('newTitle').value,
             category: document.getElementById('newRegion').value,
             country: document.getElementById('newCountry').value,
             state: document.getElementById('newState').value || "Unbekannt",
             km: document.getElementById('newKm').value,
             time: document.getElementById('newTime').value,
-            curves: "Unbekannt", // Da kein Input-Feld dafür da ist
+            curves: "Unbekannt", 
             desc: document.getElementById('newDesc').value,
             coords: [lat, lng],
             rating: 0,
             votes: 0
         };
 
-        toursData.unshift(newTour); // Fügt neue Tour OBEN hinzu
+        toursData.unshift(newTour); 
         
-        // Bootstrap Modal schließen
         const modalEl = document.getElementById('addTourModal');
         if(modalEl && window.bootstrap) {
              const modal = bootstrap.Modal.getInstance(modalEl);
@@ -206,13 +325,18 @@ if(addTourForm) {
 
         addTourForm.reset();
         alert("Route erfolgreich hinzugefügt!");
+        
+        // WICHTIG: Filter neu initialisieren, falls neue Kategorie dazu kam
+        initFilters(); 
         filterTours(); 
     });
 }
 
 /* --- INIT --- */
 document.addEventListener('DOMContentLoaded', () => {
-    // Prüfen ob Funktionen existieren, um Fehler zu vermeiden
     if(typeof initTours === 'function') initTours();
     if(typeof loadPosts === 'function') loadPosts();
+    
+    // NEU: Startet die Kaskaden-Filter
+    if(typeof initFilters === 'function') initFilters();
 });
