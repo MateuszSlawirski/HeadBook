@@ -3,7 +3,7 @@
     --bg-card: #ffffff;
     --text-main: #050505; 
     --text-muted: #65676b;
-    --accent: #d32f2f; /* Dein neues Rot */
+    --accent: #d32f2f; 
     --accent-hover: #b71c1c; 
     --border-color: #ddd;
 }
@@ -13,16 +13,17 @@ body {
     background-color: var(--bg-body); 
     color: var(--text-main);
     margin: 0; 
-    padding-top: 120px; /* Platz für die fixierte Navbar */
+    padding-top: 120px; 
 }
 
 a { text-decoration: none; }
 
-/* --- 1. NEUE NAVBAR STYLES (Bootstrap Overrides) --- */
-.navbar {
-    background-color: #fff;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-}
+/* --- NAVBAR --- */
+.navbar { background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.nav-logo-img { height: 65px; width: auto; transition: transform 0.3s ease; filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); }
+.nav-logo-img:hover { transform: scale(1.1); }
+.nav-link { color: #444; font-size: 0.9rem; font-weight: 500; transition: all 0.3s ease; }
+.nav-link:hover, .nav-link.active { color: var(--accent); }
 
 /* Das Logo Bild (Die Maske) */
 .nav-logo-img {
@@ -63,86 +64,83 @@ a { text-decoration: none; }
 }
 
 /* --- 2. LAYOUT & GRID (Für den Inhalt unter der Navbar) --- */
+/* --- GLOBAL LAYOUT (HOME & PROFIL) - WIEDER HINZUGEFÜGT --- */
 .container { max-width: 1000px; margin: 0 auto; padding: 0 15px; }
-.content-grid { display: flex; gap: 15px; align-items: flex-start; }
-.sidebar { width: 360px; flex-shrink: 0; }
-.feed { flex-grow: 1; }
 
-/* --- 3. CARDS & INHALTE --- */
-.card { background: var(--bg-card); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 15px; padding: 15px; }
-.card-header { font-size: 20px; font-weight: bold; margin-bottom: 15px; }
+/* Das ist die Klasse, die Profil.html und Index.html brauchen */
+.content-grid { 
+    display: flex; 
+    gap: 20px; 
+    align-items: flex-start; 
+}
+
+.sidebar { 
+    width: 360px; 
+    flex-shrink: 0; 
+}
+
+.feed { 
+    flex-grow: 1; 
+}
+
+/* Responsive Verhalten für Home/Profil */
+@media (max-width: 992px) {
+    .content-grid { flex-direction: column; }
+    .sidebar { width: 100%; display: none; } /* Sidebar mobil ausblenden */
+}
+
+/* --- TOUREN PAGE LAYOUT (Bleibt separat, damit Map funktioniert) --- */
+.tours-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+.map-card {
+    width: 100%;
+    height: 500px; /* Wichtig für Sichtbarkeit */
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    background-color: #e5e5e5;
+    z-index: 1;
+}
+.tours-list { width: 100%; }
+
+/* --- KARTEN STYLING (Allgemein) --- */
+.card { background: var(--bg-card); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 15px; padding: 15px; border: none; }
+.card-header { font-size: 20px; font-weight: bold; margin-bottom: 15px; padding: 0; background: none; border-bottom: none; }
 
 /* Bike Card */
 .bike-card { border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; }
-.bike-img { width: 100%; height: 120px; object-fit: cover; }
+.bike-img { width: 100%; height: 150px; object-fit: cover; }
 .bike-info { padding: 10px; }
 
-/* Inputs & Posts */
-.post-header { display: flex; align-items: center; margin-bottom: 10px; }
-.post-avatar, .new-post-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; background-color: #ddd; background-size: cover; }
-.new-post-input { width: 100%; border-radius: 20px; border: 1px solid #ddd; padding: 10px; background: #f0f2f5; }
-.post-actions { border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-around; color: var(--text-muted); font-weight: 600; cursor: pointer; }
-
-/* --- 4. RESPONSIVE --- */
-@media (max-width: 992px) {
-    .content-grid { flex-direction: column; }
-    .sidebar { width: 100%; display: none; /* Sidebar mobil ausblenden oder untereinander */ }
-    .sidebar.active { display: block; } /* Optional */
+/* Mini Tour Card (für Liste) */
+.mini-tour-card {
+    background: white;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
-
-/* --- ZUSATZ FÜR PROFIL & TOUREN (Bitte unten anfügen) --- */
-
-/* Profil Header */
-.profile-header { background: white; box-shadow: 0 1px 2px rgba(199, 93, 93, 0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
-.cover-photo { height: 250px; background: url('https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80') center/cover; }
-.profile-nav { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; padding: 0 30px; margin-top: -50px; position: relative; z-index: 2; }
-.profile-pic { width: 140px; height: 140px; border-radius: 50%; border: 4px solid white; background: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=300&q=80') center/cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.user-details { padding-top: 60px; flex-grow: 1; margin-left: 20px; margin-bottom: 10px; }
-.user-name { font-size: 28px; font-weight: 800; margin: 0; color: #333; }
-.user-tag { color: var(--text-muted); font-size: 0.95rem; }
-.action-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
-
-/* Buttons */
-.btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: background 0.2s; text-decoration: none; display: inline-block;}
-.btn-primary { background: var(--accent); color: white; }
-.btn-primary:hover { background: var(--accent-hover); color: white; }
-.btn-secondary { background: #e4e6eb; color: rgb(0, 0, 0); }
-.btn-secondary:hover { background: #d8dadf; color: black; }
-
-/* Sidebar Elemente */
-.info-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 15px; color: #555; }
-.friends-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.friend-item img { width: 100%; border-radius: 6px; aspect-ratio: 1/1; object-fit: cover; }
-.friend-name { font-size: 11px; font-weight: 600; margin-top: 4px; text-align: center; overflow: hidden; text-overflow: ellipsis; }
-
-/* Touren Stats im Feed */
-.tour-stats-box { background: #f7f8fa; border: 1px solid #e1e3e8; border-radius: 8px; padding: 10px; margin-top: 10px; display: flex; justify-content: space-around; text-align: center; }
-.stat-val { font-weight: bold; font-size: 18px; color: var(--accent); }
-.stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-
-/* Touren Seite Layout */
-.tours-layout { display: flex; flex-direction: column; gap: 20px; height: calc(100vh - 100px); }
-.tours-list { width: 100%; overflow-y: auto; padding-right: 5px; }
-.map-card { width: 100%; height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); }
-
-@media (min-width: 992px) {
-    .tours-layout { flex-direction: row; }
-    .tours-list { width: 350px; flex-shrink: 0; }
-    .map-card { height: 100%; }
-}
-
-.mini-tour-card { padding: 15px; background: white; margin-bottom: 10px; border-radius: 8px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid transparent; transition: all 0.2s; }
 .mini-tour-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .tour-meta { font-size: 0.85em; color: var(--text-muted); display: flex; gap: 10px; margin-top: 6px; }
 
-/* Mobile Anpassung Profil */
-@media (max-width: 768px) {
-    .profile-nav { flex-direction: column; align-items: center; text-align: center; margin-top: -70px; }
-    .user-details { margin-left: 0; padding-top: 10px; }
-    .action-buttons { width: 100%; justify-content: center; padding-bottom: 15px; }
+@media (min-width: 768px) {
+    .mini-tour-card { flex-direction: row; align-items: center; justify-content: space-between; }
+    .tour-meta { margin-top: 0; margin-left: auto; margin-right: 20px; }
+    .mini-tour-card p { display: none; }
 }
 
-/* --- SIDEBAR FILTER STYLES (Option 2) --- */
+/* --- SIDEBAR FILTER (Touren) --- */
 .sidebar-filter-card {
     background: white;
     padding: 20px;
@@ -151,34 +149,42 @@ a { text-decoration: none; }
     border: 1px solid #eee;
     height: fit-content;
 }
+.filter-title { font-size: 0.85rem; text-transform: uppercase; color: #888; font-weight: 700; margin-bottom: 10px; }
+.filter-divider { margin: 15px 0; color: #eee; }
 
-.filter-title {
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    color: #888;
-    font-weight: 700;
-    margin-bottom: 10px;
-    letter-spacing: 0.5px;
-}
+/* Profil Header */
+.profile-header { background: white; box-shadow: 0 1px 2px rgba(199, 93, 93, 0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
+/* --- PROFIL HEADER & ELEMENTS --- */
+.profile-header { background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
+.cover-photo { height: 250px; background: url('https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80') center/cover; }
+.profile-nav { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; padding: 0 30px; margin-top: -50px; position: relative; z-index: 2; }
+.profile-pic { width: 140px; height: 140px; border-radius: 50%; border: 4px solid white; background: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=300&q=80') center/cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.user-details { padding-top: 60px; flex-grow: 1; margin-left: 20px; margin-bottom: 10px; }
+.user-name { font-size: 28px; font-weight: 800; margin: 0; color: #333; }
+.user-tag { color: var(--text-muted); font-size: 0.95rem; }
+.action-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
 
-.filter-divider {
-    margin: 15px 0;
-    color: #eee;
-}
+/* Posts */
+.post-header { display: flex; align-items: center; margin-bottom: 10px; }
+.post-avatar, .new-post-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; background-color: #ddd; background-size: cover; }
+.new-post-input { width: 100%; border-radius: 20px; border: 1px solid #ddd; padding: 10px; background: #f0f2f5; }
+.post-actions { border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-around; color: var(--text-muted); font-weight: 600; cursor: pointer; }
 
-.form-check-label {
-    font-size: 0.95rem;
-    color: #444;
-    cursor: pointer;
-}
+/* Freunde Grid */
+.info-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 15px; color: #555; }
+.friends-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.friend-item img { width: 100%; border-radius: 6px; aspect-ratio: 1/1; object-fit: cover; }
+.friend-name { font-size: 11px; font-weight: 600; margin-top: 4px; text-align: center; overflow: hidden; text-overflow: ellipsis; }
 
-.form-check-input:checked {
-    background-color: var(--accent);
-    border-color: var(--accent);
-}
+/* Buttons */
+.btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: background 0.2s; text-decoration: none; display: inline-block;}
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-hover); color: white; }
+.btn-secondary { background: #e4e6eb; color: rgb(0, 0, 0); }
+.btn-secondary:hover { background: #d8dadf; color: black; }
 
-/* Anpassung der Touren-Liste, wenn sie neben der Sidebar ist */
-@media (min-width: 992px) {
-    /* Die Liste soll etwas schmaler sein, da sie jetzt weniger Platz hat */
-    .tours-list { width: 300px; } 
+@media (max-width: 768px) {
+    .profile-nav { flex-direction: column; align-items: center; text-align: center; margin-top: -70px; }
+    .user-details { margin-left: 0; padding-top: 10px; }
+    .action-buttons { width: 100%; justify-content: center; padding-bottom: 15px; }
 }
