@@ -152,7 +152,6 @@ function onCategoryChange() {
     stateSelect.innerHTML = '<option value="all">Alle Bundesländer</option>';
     stateSelect.disabled = true; 
 
-    // Wenn wieder "Bitte wählen..." gewählt wurde -> Alles ausblenden
     if (selectedCat === 'all') {
         countrySelect.disabled = true;
         countrySelect.innerHTML = '<option value="all">--</option>';
@@ -161,7 +160,6 @@ function onCategoryChange() {
         return;
     }
 
-    // Länder aktivieren
     countrySelect.disabled = false;
     
     const matchingTours = toursData.filter(t => t.category === selectedCat);
@@ -221,33 +219,18 @@ function filterTours() {
     
     // --- NEU: ABBRUCH WENN KEINE REGION GEWÄHLT ---
     if (sCat === 'all') {
-        // Liste leeren
         listContainer.innerHTML = '<p class="text-center text-muted mt-5">👋 Bitte wähle zuerst eine Region links im Filter.</p>';
-        // Karte leeren
         markers.forEach(m => map.removeLayer(m));
         markers = [];
         return; 
     }
-    // ----------------------------------------------
 
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : "";
     const sCountry = countrySelect.value;
     const sState = stateSelect.value;
 
-    // 2. Checkboxen auslesen
-    const checkedRegions = Array.from(document.querySelectorAll('input[data-type="region"]:checked')).map(cb => cb.value);
-    const checkedCountries = Array.from(document.querySelectorAll('input[data-type="country"]:checked')).map(cb => cb.value);
-    const checkedStates = Array.from(document.querySelectorAll('input[data-type="state"]:checked')).map(cb => cb.value);
-
-    // 3. Filtern
     const filtered = toursData.filter(tour => {
-        const regionMatch = checkedRegions.length === 0 || checkedRegions.includes(tour.category);
-        const countryMatch = checkedCountries.length === 0 || checkedCountries.includes(tour.country);
-        const stateMatch = checkedStates.length === 0 || checkedStates.includes(tour.state);
-        const searchMatch = tour.title.toLowerCase().includes(searchTerm) || (tour.desc || "").toLowerCase().includes(searchTerm);
-        return regionMatch && countryMatch && stateMatch && searchMatch;
-    const filtered = toursData.filter(tour => {
-        const catMatch = (tour.category === sCat); // Muss exakt passen, da 'all' oben abgefangen wird
+        const catMatch = (tour.category === sCat); 
         
         let countryMatch = true;
         if (sCountry !== 'all') {
@@ -285,9 +268,8 @@ function resetFilters() {
     stateSelect.innerHTML = '<option value="all">--</option>';
     stateSelect.disabled = true;
 
-    filterTours(); // Das leert jetzt die Liste, weil catSelect auf 'all' steht
+    filterTours(); 
 }
-
 
 /* --- BEWERTUNGEN --- */
 function rateTour(id, starValue, event) {
@@ -322,7 +304,6 @@ if(addTourForm) {
             km: document.getElementById('newKm').value,
             time: document.getElementById('newTime').value,
             curves: "Unbekannt",
-            curves: "Unbekannt", 
             desc: document.getElementById('newDesc').value,
             coords: [lat, lng],
             rating: 0,
@@ -340,7 +321,6 @@ if(addTourForm) {
         addTourForm.reset();
         alert("Route erfolgreich hinzugefügt!");
         
-        // WICHTIG: Filter neu initialisieren, falls neue Kategorie dazu kam
         initFilters(); 
         filterTours(); 
     });
@@ -353,21 +333,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Funktion zur Markierung des aktiven Links in der Navbar
     function setActiveNavLink() {
-        const navLinks = document.querySelectorAll('.nav-link');  // Alle Links in der Navigation
-        const currentPage = window.location.pathname.toLowerCase();  // Der Pfad der aktuellen Seite in Kleinbuchstaben
+        const navLinks = document.querySelectorAll('.nav-link');  
+        const currentPage = window.location.pathname.toLowerCase();  
 
         navLinks.forEach(link => {
-            link.classList.remove('active');  // Entfernt die aktive Klasse von allen Links
-            // Hier prüfen wir, ob der Link href-Attribut den aktuellen Pfad als Teil enthält
+            link.classList.remove('active');  
             if (currentPage.includes(link.getAttribute('href').toLowerCase())) {
-                link.classList.add('active');  // Füge die aktive Klasse zum aktuellen Link hinzu
+                link.classList.add('active');  
             }
         });
     }
 
     // Setze den aktiven Link beim Laden der Seite
     setActiveNavLink();
-});
     
     // NEU: Startet die Kaskaden-Filter
     if(typeof initFilters === 'function') initFilters();
