@@ -29,6 +29,7 @@ a { text-decoration: none; }
     /* Hier den Wert erhöhen, z.B. auf 65px oder 70px */
     height: 65px; 
     width: auto;
+    cursor: default;
     transition: transform 0.3s ease;
     /* Der Schatten hilft, dass es sich auch ohne Hintergrund gut abhebt */
     filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); 
@@ -42,6 +43,14 @@ a { text-decoration: none; }
     font-size: 0.9rem;
     font-weight: 500;
     transition: all 0.3s ease;
+}
+
+.navbar .nav-link.active {
+    color: var(--accent); /* Textfarbe für aktiven Reiter */
+    font-weight: 600; /* Etwas fetterer Text */
+    background-color: rgba(135, 132, 132, 0.1); /* Leichter Hintergrund für den aktiven Reiter */
+    border-radius: 5px; /* Optionale Abrundung der Ecken für den aktiven Link */
+    padding: 10px 15px; /* Etwas mehr Padding für bessere Klickfläche */
 }
 
 .nav-link:hover, .nav-link.active {
@@ -84,7 +93,7 @@ a { text-decoration: none; }
 /* --- ZUSATZ FÜR PROFIL & TOUREN (Bitte unten anfügen) --- */
 
 /* Profil Header */
-.profile-header { background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
+.profile-header { background: white; box-shadow: 0 1px 2px rgba(199, 93, 93, 0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
 .cover-photo { height: 250px; background: url('https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80') center/cover; }
 .profile-nav { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; padding: 0 30px; margin-top: -50px; position: relative; z-index: 2; }
 .profile-pic { width: 140px; height: 140px; border-radius: 50%; border: 4px solid white; background: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=300&q=80') center/cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -97,7 +106,7 @@ a { text-decoration: none; }
 .btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: background 0.2s; text-decoration: none; display: inline-block;}
 .btn-primary { background: var(--accent); color: white; }
 .btn-primary:hover { background: var(--accent-hover); color: white; }
-.btn-secondary { background: #e4e6eb; color: black; }
+.btn-secondary { background: #e4e6eb; color: rgb(0, 0, 0); }
 .btn-secondary:hover { background: #d8dadf; color: black; }
 
 /* Sidebar Elemente */

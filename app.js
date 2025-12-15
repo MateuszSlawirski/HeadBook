@@ -118,24 +118,16 @@ function filterTours() {
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : "";
 
     // 2. Checkboxen auslesen
-    // Sammelt alle Werte der angehakten Boxen in Arrays (z.B. ['Alpen', 'Harz'])
     const checkedRegions = Array.from(document.querySelectorAll('input[data-type="region"]:checked')).map(cb => cb.value);
     const checkedCountries = Array.from(document.querySelectorAll('input[data-type="country"]:checked')).map(cb => cb.value);
     const checkedStates = Array.from(document.querySelectorAll('input[data-type="state"]:checked')).map(cb => cb.value);
 
     // 3. Filtern
     const filtered = toursData.filter(tour => {
-        // A. Kategorien prüfen (Leer = Alle, Sonst = Treffer in Liste)
         const regionMatch = checkedRegions.length === 0 || checkedRegions.includes(tour.category);
         const countryMatch = checkedCountries.length === 0 || checkedCountries.includes(tour.country);
         const stateMatch = checkedStates.length === 0 || checkedStates.includes(tour.state);
-
-        // B. Suche prüfen (Titel ODER Beschreibung)
-        // (tour.desc || "") verhindert Absturz bei fehlender Beschreibung
-        const searchMatch = tour.title.toLowerCase().includes(searchTerm) || 
-                            (tour.desc || "").toLowerCase().includes(searchTerm);
-
-        // Nur wenn ALLES zutrifft, wird die Tour angezeigt
+        const searchMatch = tour.title.toLowerCase().includes(searchTerm) || (tour.desc || "").toLowerCase().includes(searchTerm);
         return regionMatch && countryMatch && stateMatch && searchMatch;
     });
 
@@ -147,7 +139,6 @@ function resetFilters() {
     const searchInput = document.getElementById('search-input');
     if(searchInput) searchInput.value = "";
     
-    // Wichtig: Deine Inputs im HTML müssen class="filter-cb" haben!
     document.querySelectorAll('.filter-cb').forEach(cb => cb.checked = false);
     
     filterTours(); // Ansicht aktualisieren
@@ -161,7 +152,6 @@ function rateTour(id, starValue, event) {
     if(tour) {
         // Neuen Durchschnitt berechnen
         tour.rating = ((tour.rating * tour.votes) + starValue) / (tour.votes + 1);
-        // Auf 1 Nachkommastelle runden
         tour.rating = Math.round(tour.rating * 10) / 10; 
         tour.votes++;
         
@@ -176,28 +166,26 @@ if(addTourForm) {
     addTourForm.addEventListener('submit', (e) => {
         e.preventDefault();
         
-        // Zufallskoordinaten für Demo-Zwecke (Mitteleuropa grob)
         const lat = 47 + Math.random() * 6; 
         const lng = 7 + Math.random() * 6;
 
         const newTour = {
-            id: Date.now(), // Einfache einzigartige ID
+            id: Date.now(),
             title: document.getElementById('newTitle').value,
             category: document.getElementById('newRegion').value,
             country: document.getElementById('newCountry').value,
             state: document.getElementById('newState').value || "Unbekannt",
             km: document.getElementById('newKm').value,
             time: document.getElementById('newTime').value,
-            curves: "Unbekannt", // Da kein Input-Feld dafür da ist
+            curves: "Unbekannt",
             desc: document.getElementById('newDesc').value,
             coords: [lat, lng],
             rating: 0,
             votes: 0
         };
 
-        toursData.unshift(newTour); // Fügt neue Tour OBEN hinzu
+        toursData.unshift(newTour); 
         
-        // Bootstrap Modal schließen
         const modalEl = document.getElementById('addTourModal');
         if(modalEl && window.bootstrap) {
              const modal = bootstrap.Modal.getInstance(modalEl);
@@ -215,4 +203,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Prüfen ob Funktionen existieren, um Fehler zu vermeiden
     if(typeof initTours === 'function') initTours();
     if(typeof loadPosts === 'function') loadPosts();
+
+    // Funktion zur Markierung des aktiven Links in der Navbar
+    function setActiveNavLink() {
+        const navLinks = document.querySelectorAll('.nav-link');  // Alle Links in der Navigation
+        const currentPage = window.location.pathname.toLowerCase();  // Der Pfad der aktuellen Seite in Kleinbuchstaben
+
+        navLinks.forEach(link => {
+            link.classList.remove('active');  // Entfernt die aktive Klasse von allen Links
+            // Hier prüfen wir, ob der Link href-Attribut den aktuellen Pfad als Teil enthält
+            if (currentPage.includes(link.getAttribute('href').toLowerCase())) {
+                link.classList.add('active');  // Füge die aktive Klasse zum aktuellen Link hinzu
+            }
+        });
+    }
+
+    // Setze den aktiven Link beim Laden der Seite
+    setActiveNavLink();
 });
