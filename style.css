@@ -13,7 +13,7 @@ body {
     background-color: var(--bg-body); 
     color: var(--text-main);
     margin: 0; 
-    padding-top: 80px; /* Platz für die fixierte Navbar */
+    padding-top: 120px; /* Platz für die fixierte Navbar */
 }
 
 a { text-decoration: none; }
@@ -31,12 +31,10 @@ a { text-decoration: none; }
     width: auto;
     transition: transform 0.3s ease;
     /* Der Schatten hilft, dass es sich auch ohne Hintergrund gut abhebt */
-    filter: drop-shadow(0px 3px 6px rgba(0,0,0,0.3)); 
+    filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); 
 }
 
-.nav-logo-img:hover {
-    transform: scale(1.1);
-}
+
 
 /* Links Styling */
 .nav-link {
