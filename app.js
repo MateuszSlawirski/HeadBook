@@ -35,7 +35,11 @@ function initTours() {
 
     if (!map) {
         map = L.map('map').setView([51.1657, 10.4515], 6); 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+        
     }
     filterTours();
 }
