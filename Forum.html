@@ -3,16 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community - Riderpoint</title>
+    <title>Community - RiderPoint</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Abstand für die fixierte Navbar */
+        body { padding-top: 80px; background-color: #f8f9fa; }
+        /* Styling für das Accordion, damit es sauber aussieht */
+        .accordion-button:not(.collapsed) {
+            background-color: #e7f3ff; /* Hellblaues Highlight bei offenem Menü */
+            color: #0d6efd;
+        }
+        .accordion-button:focus {
+            box-shadow: none; /* Entfernt den blauen Rahmen beim Klicken */
+            border-color: rgba(0,0,0,.125);
+        }
+    </style>
 </head>
 <body>
 
-    <nav class="navbar navbar-expand-lg fixed-top py-2">
+    <nav class="navbar navbar-expand-lg fixed-top py-2 bg-white shadow-sm">
         <div class="container">
             <a href="index.html" class="navbar-brand d-flex align-items-center">
-                <img src="logo-maske.png" alt="Riderpoint" class="nav-logo-img">
+                <img src="logo-maske.png" alt="RiderPoint" class="nav-logo-img" style="height: 40px;">
+                <span class="ms-2 fw-bold text-primary">RiderPoint</span>
             </a>
     
             <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
@@ -26,52 +40,153 @@
                 </div>
                 <div class="offcanvas-body">
                     <ul class="navbar-nav justify-content-center flex-grow-1 pe-3">
-                        
-                        <li class="nav-item mx-3">
-                            <a class="nav-link d-flex flex-column align-items-center" href="index.html">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                                Home
-                            </a>
-                        </li>
-    
-                        <li class="nav-item mx-3">
-                            <a class="nav-link d-flex flex-column align-items-center" href="tours.html">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
-                                Touren
-                            </a>
-                        </li>
-    
-                        <li class="nav-item mx-3">
-                            <a class="nav-link d-flex flex-column align-items-center active" href="Forum.html">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                                Community
-                            </a>
-                        </li>
-    
-                        <li class="nav-item mx-3">
-                            <a class="nav-link d-flex flex-column align-items-center notification-link" href="#">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                                Benachrichtigung
-                            </a>
-                        </li>
+                        <li class="nav-item mx-3"><a class="nav-link d-flex flex-column align-items-center" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a></li>
+                        <li class="nav-item mx-3"><a class="nav-link d-flex flex-column align-items-center" href="tours.html"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Touren</a></li>
+                        <li class="nav-item mx-3"><a class="nav-link d-flex flex-column align-items-center active text-primary" href="forum.html"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Community</a></li>
+                        <li class="nav-item mx-3"><a class="nav-link d-flex flex-column align-items-center notification-link" href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>Benachrichtigung</a></li>
                     </ul>
-    
                     <div class="d-flex justify-content-center align-items-center mt-3 mt-lg-0">
-                        <a href="profil.html" class="nav-link d-flex flex-column align-items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            Profil
-                        </a>
+                        <a href="profil.html" class="nav-link d-flex flex-column align-items-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profil</a>
                     </div>
                 </div>
             </div>
         </div>
     </nav>
-    <div class="container" style="margin-top: 20px;">
-        <h1 class="page-title">Community Forum</h1>
 
-        <div class="card">
-            <div class="card-header">Themenübersicht</div>
-            <p style="padding: 10px; color: gray;">Hier entstehen bald spannende Diskussionen!</p>
+    <div class="container mb-5">
+        
+        <div class="text-center mb-4">
+            <h1 class="fw-bold">Community Forum</h1>
+            <p class="text-muted">Wähle eine Kategorie, um die Foren zu sehen.</p>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                
+                <div class="accordion" id="forumAccordion">
+
+                    <div class="accordion-item mb-3 shadow-sm border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header" id="headingCommunity">
+                            <button class="accordion-button fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCommunity" aria-expanded="true" aria-controls="collapseCommunity">
+                                <span class="me-2">💬</span> Community
+                            </button>
+                        </h2>
+                        <div id="collapseCommunity" class="accordion-collapse collapse show" aria-labelledby="headingCommunity" data-bs-parent="#forumAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Regeln</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">News</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Vorstellung</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Off topic</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Bekleidung & Sicherheit</h6></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="accordion-item mb-3 shadow-sm border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header" id="headingBikes">
+                            <button class="accordion-button collapsed fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBikes" aria-expanded="false" aria-controls="collapseBikes">
+                                <span class="me-2">🏍️</span> Bikes, Scooter & Co.
+                            </button>
+                        </h2>
+                        <div id="collapseBikes" class="accordion-collapse collapse" aria-labelledby="headingBikes" data-bs-parent="#forumAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Bikes (Europa)</h6>
+                                        <small class="text-muted">bmw, ktm, ducati, triumph, vespa & mehr</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Bikes (Asien)</h6>
+                                        <small class="text-muted">honda, yamaha, kawasaki, suzuki, kymco & cfmoto</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Bikes (Amerika)</h6>
+                                        <small class="text-muted">harley-davidson, indian, can-am & zero</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Bikes (China & Co.)</h6>
+                                        <small class="text-muted">cfmoto, voge, benelli, zontes, brixton</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Rest der Welt & Exoten</h6>
+                                        <small class="text-muted">royal enfield, ural, jawa, mash, custom-bikes & gespanne</small>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="accordion-item mb-3 shadow-sm border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header" id="headingGarage">
+                            <button class="accordion-button collapsed fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGarage" aria-expanded="false" aria-controls="collapseGarage">
+                                <span class="me-2">🔧</span> Die Garage
+                            </button>
+                        </h2>
+                        <div id="collapseGarage" class="accordion-collapse collapse" aria-labelledby="headingGarage" data-bs-parent="#forumAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Werkstatt & Pflege</h6>
+                                        <small class="text-muted">technik, repair, tuning & pflege</small>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="accordion-item mb-3 shadow-sm border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header" id="headingTours">
+                            <button class="accordion-button collapsed fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTours" aria-expanded="false" aria-controls="collapseTours">
+                                <span class="me-2">🌍</span> Touren & Abenteuer
+                            </button>
+                        </h2>
+                        <div id="collapseTours" class="accordion-collapse collapse" aria-labelledby="headingTours" data-bs-parent="#forumAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Deutschland & Hausstrecken</h6>
+                                        <small class="text-muted">schwarzwald, eifel, harz, alpenvorland - wo man am wochenende fährt</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Europa & Fernweh</h6>
+                                        <small class="text-muted">dolomiten, sardinien, nordkap, balkan - für den urlaub</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Navigation & Planung</h6>
+                                        <small class="text-muted">kurviger, calimoto, garmin, tomtom, halterungen & routen-dateien</small>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3">
+                                        <h6 class="mb-1 fw-semibold">Reiseberichte & Bilder</h6>
+                                        <small class="text-muted">hier können user ihre stories erzählen: "mein trip zum nordkap"</small>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="accordion-item mb-3 shadow-sm border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header" id="headingMarket">
+                            <button class="accordion-button collapsed fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMarket" aria-expanded="false" aria-controls="collapseMarket">
+                                <span class="me-2">🛒</span> RiderMarket
+                            </button>
+                        </h2>
+                        <div id="collapseMarket" class="accordion-collapse collapse" aria-labelledby="headingMarket" data-bs-parent="#forumAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                                        <div><h6 class="mb-1 fw-semibold">Fahrzeugbörse</h6><small class="text-muted">biete bike</small></div>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Teilemarkt & Zubehör</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Bekleidung</h6></a>
+                                    <a href="#" class="list-group-item list-group-item-action py-3"><h6 class="mb-0 fw-semibold">Suche / Tausche</h6></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                </div> </div>
         </div>
     </div>
 
