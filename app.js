@@ -297,28 +297,81 @@ async function handleAddTour(e) {
     } catch (err) { alert("Fehler: " + err.message); } finally { btn.disabled = false; }
 }
 
+/* ==========================================
+   FILTER & EXTRAS (Ersetze diesen Bereich in app.js)
+   ========================================== */
+
+// Globale Delete Funktion
 window.deleteTour = async (id, event) => {
     event.stopPropagation();
     if(!confirm("Als Admin wirklich löschen?")) return;
-    alert("Backend Lösch-Befehl ID: " + id);
+    // Hier würde der Fetch-Call kommen
+    console.log("Lösche ID:", id);
+    // TODO: await fetch(`${API_URL}/tours/${id}`, { method: 'DELETE' });
+    // Danach: loadToursFromServer();
 };
 
 function initFilters() {
     const catSelect = document.getElementById('filter-category');
     if(!catSelect) return;
-    const cats = [...new Set(toursData.map(t => t.category))].sort();
+    
+    // Bestehende Optionen löschen (außer der ersten)
     catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
-    cats.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c; opt.innerText = c;
-        catSelect.appendChild(opt);
-    });
+
+    // Kategorien aus den geladenen Daten extrahieren
+    if(toursData.length > 0) {
+        const cats = [...new Set(toursData.map(t => t.category))].sort();
+        cats.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c; 
+            opt.innerText = c;
+            catSelect.appendChild(opt);
+        });
+    }
 }
 
 function filterTours() {
     const cat = document.getElementById('filter-category')?.value;
-    if(!cat || cat === 'all') renderTours(toursData); 
-    else renderTours(toursData.filter(t => t.category === cat));
+    const search = document.getElementById('search-input')?.value.toLowerCase();
+
+    let filtered = toursData;
+
+    // 1. Nach Kategorie filtern
+    if(cat && cat !== 'all') {
+        filtered = filtered.filter(t => t.category === cat);
+    }
+
+    // 2. Nach Suchtext filtern (Titel oder Beschreibung)
+    if(search && search.trim() !== '') {
+        filtered = filtered.filter(t => 
+            t.title.toLowerCase().includes(search) || 
+            (t.desc && t.desc.toLowerCase().includes(search))
+        );
+    }
+
+    renderTours(filtered);
 }
+
+// --- HIER WAR DER FEHLER: resetFilters fehlte ---
+function resetFilters() {
+    // Eingabefelder leeren
+    const searchInput = document.getElementById('search-input');
+    const catSelect = document.getElementById('filter-category');
+    
+    if(searchInput) searchInput.value = "";
+    if(catSelect) catSelect.value = "all";
+
+    // Alle Touren wieder anzeigen
+    renderTours(toursData);
+}
+
+// Dummy-Funktion für Country Change (damit kein Fehler kommt)
+function onCountryChange() {
+    console.log("Land geändert - Logik noch nicht implementiert");
+}
+
+// WICHTIG: Funktionen global verfügbar machen!
 window.filterTours = filterTours;
-window.onCategoryChange = filterTours;
+window.onCategoryChange = filterTours; // Wenn Kategorie geändert wird -> filtern
+window.onCountryChange = onCountryChange; 
+window.resetFilters = resetFilters; // <--- Das fehlte!
