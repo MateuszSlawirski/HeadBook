@@ -1,14 +1,6 @@
-const { app, output, input } = require('@azure/functions');
+const { app, output } = require('@azure/functions');
 
-// Wir lesen aus der 'users' Tabelle
-const cosmosInput = input.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'users',
-    connection: 'CosmosDbConnectionString',
-    sqlQuery: 'SELECT * FROM c WHERE c.id = {id}' // Sucht genau diesen User
-});
-
-// Wir schreiben in die 'users' Tabelle (für neue User)
+// Wir definieren nur noch den Ausgang (Output), um zu speichern
 const cosmosOutput = output.cosmosDB({
     databaseName: 'riderpoint-db',
     containerName: 'users',
@@ -19,35 +11,35 @@ const cosmosOutput = output.cosmosDB({
 app.http('user-sync', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    extraInputs: [cosmosInput],
-    extraOutputs: [cosmosOutput],
+    extraOutputs: [cosmosOutput], // Wir sagen der Funktion: Du darfst schreiben
     
     handler: async (request, context) => {
-        // Der Frontend schickt uns die User-Daten von Firebase
-        const { uid, email } = await request.json();
+        try {
+            // 1. Daten aus dem Frontend lesen
+            const data = await request.json();
+            const { uid, email, displayName } = data;
 
-        if (!uid) return { status: 400, body: "Keine UID gesendet" };
+            if (!uid) {
+                return { status: 400, body: "Fehler: Keine User-ID (uid) gesendet." };
+            }
 
-        // 1. In Datenbank suchen
-        const existingUsers = context.extraInputs.get(cosmosInput);
-
-        if (existingUsers && existingUsers.length > 0) {
-            // User existiert schon -> Rolle zurückgeben
-            const userInDb = existingUsers[0];
-            return { jsonBody: userInDb };
-        } else {
-            // 2. User existiert noch nicht -> Neu anlegen als "user"
-            const newUser = {
-                id: uid,       // Die Firebase UID ist unser Schlüssel
+            // 2. Das User-Objekt vorbereiten
+            // WICHTIG: 'id' muss in CosmosDB immer die uid sein!
+            const userProfile = {
+                id: uid,              // Das ist der Schlüssel in der Datenbank
                 email: email,
-                role: "user",  // Standard-Rolle
-                createdAt: new Date().toISOString()
+                displayName: displayName || "Biker",
+                lastLogin: new Date().toISOString() // Wir speichern, wann er zuletzt da war
             };
 
-            // Speichern
-            context.extraOutputs.set(cosmosOutput, newUser);
+            // 3. Einfach speichern (überschreibt existierende Einträge = Update)
+            context.extraOutputs.set(cosmosOutput, userProfile);
 
-            return { jsonBody: newUser };
+            return { status: 200, body: "User erfolgreich synchronisiert." };
+
+        } catch (error) {
+            context.log("Fehler beim Speichern:", error);
+            return { status: 500, body: "Interner Server Fehler: " + error.message };
         }
     }
 });
