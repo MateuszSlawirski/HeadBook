@@ -1,21 +1,97 @@
-/* --- DATEN --- */
-let toursData = [
-    { 
-        id: 1, title: "Schwarzwald Hochstraße", km: 65, time: "1:30", curves: "Extrem", 
-        desc: "Der Klassiker in Baden-Württemberg. Tolle Aussicht, perfekter Asphalt.", 
-        coords: [48.6000, 8.2000], category: "Europa", country: "Deutschland", state: "Baden-Württemberg", rating: 4.8, votes: 124
-    },
-    { 
-        id: 2, title: "Elbufer Straße", km: 45, time: "1:00", curves: "Mittel", 
-        desc: "Entspanntes Cruisen am Deich im Norden.", 
-        coords: [53.5511, 9.9937], category: "Europa", country: "Deutschland", state: "Hamburg", rating: 4.2, votes: 56
-    },
-    { 
-        id: 3, title: "Kyffhäuser 36", km: 12, time: "0:20", curves: "Legendär", 
-        desc: "36 Kurven auf engstem Raum. Nichts für Anfänger!", 
-        coords: [51.4116, 11.1039], category: "Europa", country: "Deutschland", state: "Thüringen", rating: 4.9, votes: 310
+/* --- KONFIGURATION --- */
+// Automatische Erkennung: Lokal nutzen wir Localhost, Online nutzen wir Azure
+const API_BASE = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    ? "http://localhost:7071/api"  // Falls du die API lokal startest (optional)
+    : "/api";                      // Wenn die Seite online ist (Azure)
+
+let toursData = []; 
+
+/* --- INIT --- */
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("App startet... Backend URL:", API_BASE);
+    loadTours();
+});
+
+/* --- DATEN LADEN --- */
+async function loadTours() {
+    const listContainer = document.getElementById('tours-container');
+    if(listContainer) listContainer.innerHTML = '<div class="text-center mt-5">⏳ Lade Touren aus der Cloud...</div>';
+
+    try {
+        const response = await fetch(`${API_BASE}/tours`);
+        if (!response.ok) throw new Error(`HTTP Fehler: ${response.status}`);
+        
+        toursData = await response.json();
+        console.log("Daten empfangen:", toursData);
+        
+        if(typeof initTours === 'function') initTours(); // Karte starten
+        if(typeof filterTours === 'function') filterTours(); // Liste anzeigen
+
+    } catch (error) {
+        console.error("Fehler:", error);
+        if(listContainer) listContainer.innerHTML = `
+            <div class="text-center text-danger mt-5">
+                <p>Verbindung zum Backend fehlgeschlagen.</p>
+                <small>${error.message}</small>
+            </div>`;
     }
-];
+}
+
+/* --- NEUE TOUR SPEICHERN --- */
+const addTourForm = document.getElementById('addTourForm');
+if(addTourForm) {
+    addTourForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = addTourForm.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerText = "Speichere...";
+
+        const newTour = {
+            title: document.getElementById('newTitle').value,
+            category: document.getElementById('newRegion').value,
+            country: document.getElementById('newCountry').value,
+            state: document.getElementById('newState').value || "Unbekannt",
+            km: document.getElementById('newKm').value,
+            time: document.getElementById('newTime').value,
+            desc: document.getElementById('newDesc').value,
+            coords: [48 + Math.random()*2, 10 + Math.random()*2] // Zufallsposition für Demo
+        };
+
+        try {
+            const resp = await fetch(`${API_BASE}/tours`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newTour)
+            });
+
+            if(resp.ok) {
+                const savedTour = await resp.json();
+                toursData.unshift(savedTour);
+                
+                // Modal schließen (Bootstrap)
+                const modalEl = document.getElementById('addTourModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal.hide();
+                
+                addTourForm.reset();
+                if(typeof filterTours === 'function') filterTours();
+                alert("Erfolg! Tour in der Cloud gespeichert.");
+            } else {
+                alert("Fehler beim Speichern.");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Server-Fehler: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Veröffentlichen";
+        }
+    });
+}
+
+// Hierunter folgen deine alten Funktionen wie initTours(), filterTours(), rateTour()...
+// Kopiere deine alten Hilfsfunktionen (Map, Filter) unbedingt wieder hier drunter! 
+// Falls du sie nicht mehr hast, sag Bescheid, dann geb ich dir den vollen Code.
 
 // Posts für Home/Community
 const posts = [
