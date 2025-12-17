@@ -298,50 +298,119 @@ async function handleAddTour(e) {
 }
 
 /* ==========================================
-   FILTER & EXTRAS (Ersetze diesen Bereich in app.js)
+   FILTER LOGIK & SYNC
    ========================================== */
 
 // Globale Delete Funktion
 window.deleteTour = async (id, event) => {
     event.stopPropagation();
     if(!confirm("Als Admin wirklich löschen?")) return;
-    // Hier würde der Fetch-Call kommen
-    console.log("Lösche ID:", id);
-    // TODO: await fetch(`${API_URL}/tours/${id}`, { method: 'DELETE' });
-    // Danach: loadToursFromServer();
+    alert("Delete ID: " + id);
+    // TODO: fetch api delete...
 };
 
+// 1. Initialisierung
 function initFilters() {
     const catSelect = document.getElementById('filter-category');
     if(!catSelect) return;
     
-    // Bestehende Optionen löschen (außer der ersten)
+    // Reset
     catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
 
-    // Kategorien aus den geladenen Daten extrahieren
-    if(toursData.length > 0) {
-        const cats = [...new Set(toursData.map(t => t.category))].sort();
-        cats.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c; 
-            opt.innerText = c;
-            catSelect.appendChild(opt);
-        });
-    }
+    // Alle Regionen (Kategorien) aus den Daten holen
+    const cats = [...new Set(toursData.map(t => t.category))].sort();
+    cats.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; 
+        opt.innerText = c;
+        catSelect.appendChild(opt);
+    });
 }
 
+// 2. WENN REGION GEÄNDERT WIRD
+function onCategoryChange() {
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+    
+    const selectedCat = catSelect.value;
+
+    // Reset der abhängigen Filter (Land & State)
+    countrySelect.innerHTML = '<option value="all">--</option>';
+    stateSelect.innerHTML = '<option value="all">--</option>';
+    countrySelect.disabled = true;
+    stateSelect.disabled = true;
+
+    if (selectedCat !== 'all') {
+        // Filtere Touren nach der gewählten Region
+        const matchingTours = toursData.filter(t => t.category === selectedCat);
+        // Suche alle Länder, die in dieser Region vorkommen
+        const countries = [...new Set(matchingTours.map(t => t.country))].sort();
+        
+        // Fülle das Länder-Dropdown
+        countrySelect.innerHTML = '<option value="all">Alle Länder</option>';
+        countries.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.innerText = c;
+            countrySelect.appendChild(opt);
+        });
+        countrySelect.disabled = false; // Jetzt aktivieren wir es
+    }
+
+    filterTours(); // Liste aktualisieren
+}
+
+// 3. WENN LAND GEÄNDERT WIRD
+function onCountryChange() {
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+
+    const selectedCat = catSelect.value;
+    const selectedCountry = countrySelect.value;
+
+    // Reset State
+    stateSelect.innerHTML = '<option value="all">--</option>';
+    stateSelect.disabled = true;
+
+    if (selectedCountry !== 'all') {
+        // Suche Touren, die zur Region UND zum Land passen
+        const matchingTours = toursData.filter(t => 
+            (selectedCat === 'all' || t.category === selectedCat) && 
+            t.country === selectedCountry
+        );
+        // Suche alle Bundesländer/Gebiete
+        const states = [...new Set(matchingTours.map(t => t.state))].sort();
+
+        // Fülle das Bundesland-Dropdown
+        stateSelect.innerHTML = '<option value="all">Alle Gebiete</option>';
+        states.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.innerText = s;
+            stateSelect.appendChild(opt);
+        });
+        stateSelect.disabled = false; // Aktivieren
+    }
+    
+    filterTours(); // Liste aktualisieren
+}
+
+// 4. HAUPT FILTER FUNKTION
 function filterTours() {
     const cat = document.getElementById('filter-category')?.value;
+    const country = document.getElementById('filter-country')?.value;
+    const state = document.getElementById('filter-state')?.value;
     const search = document.getElementById('search-input')?.value.toLowerCase();
 
     let filtered = toursData;
 
-    // 1. Nach Kategorie filtern
-    if(cat && cat !== 'all') {
-        filtered = filtered.filter(t => t.category === cat);
-    }
-
-    // 2. Nach Suchtext filtern (Titel oder Beschreibung)
+    // Filterkette anwenden
+    if(cat && cat !== 'all') filtered = filtered.filter(t => t.category === cat);
+    if(country && country !== 'all') filtered = filtered.filter(t => t.country === country);
+    if(state && state !== 'all') filtered = filtered.filter(t => t.state === state);
+    
     if(search && search.trim() !== '') {
         filtered = filtered.filter(t => 
             t.title.toLowerCase().includes(search) || 
@@ -352,26 +421,91 @@ function filterTours() {
     renderTours(filtered);
 }
 
-// --- HIER WAR DER FEHLER: resetFilters fehlte ---
+// 5. RESET BUTTON
 function resetFilters() {
-    // Eingabefelder leeren
-    const searchInput = document.getElementById('search-input');
-    const catSelect = document.getElementById('filter-category');
+    document.getElementById('search-input').value = "";
+    document.getElementById('filter-category').value = "all";
     
-    if(searchInput) searchInput.value = "";
-    if(catSelect) catSelect.value = "all";
-
-    // Alle Touren wieder anzeigen
-    renderTours(toursData);
+    // Durch Aufruf von onCategoryChange setzen wir alles zurück
+    onCategoryChange(); 
 }
 
-// Dummy-Funktion für Country Change (damit kein Fehler kommt)
-function onCountryChange() {
-    console.log("Land geändert - Logik noch nicht implementiert");
+// 6. SYNC BEIM KLICKEN (Das Feature, das du wolltest)
+function selectTourCard(tour) {
+    const catSelect = document.getElementById('filter-category');
+    const countrySelect = document.getElementById('filter-country');
+    const stateSelect = document.getElementById('filter-state');
+
+    // Karte fliegen lassen
+    if(tour.coords && map) map.flyTo(tour.coords, 10);
+
+    // Filter links automatisch setzen
+    if(tour.category) {
+        catSelect.value = tour.category;
+        onCategoryChange(); // Trigger Logik, um Länder zu laden
+    }
+
+    if(tour.country) {
+        countrySelect.value = tour.country;
+        onCountryChange(); // Trigger Logik, um Bundesländer zu laden
+    }
+
+    if(tour.state) {
+        stateSelect.value = tour.state;
+        filterTours(); // Liste filtern, damit man nur noch passende sieht
+    }
 }
 
-// WICHTIG: Funktionen global verfügbar machen!
+// Render Funktion leicht anpassen, damit selectTourCard genutzt wird
+function renderTours(data) {
+    const listContainer = document.getElementById('tours-container');
+    if(!listContainer) return;
+    listContainer.innerHTML = '';
+    
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    if(data.length === 0) {
+        listContainer.innerHTML = '<div class="text-center text-muted p-3">Keine Touren gefunden.</div>';
+        return;
+    }
+
+    data.forEach(tour => {
+        // Marker auf Karte
+        if(tour.coords) {
+            const marker = L.marker(tour.coords).addTo(map);
+            marker.bindPopup(`<b>${tour.title}</b><br><small>${tour.country}</small>`);
+            // Klick auf Marker löst auch den Sync aus
+            marker.on('click', () => selectTourCard(tour));
+            markers.push(marker);
+        }
+
+        // Karte in Liste
+        const card = document.createElement('div');
+        card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
+        card.style.cursor = 'pointer';
+        card.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold m-0">${tour.title}</h5>
+                <button class="btn btn-sm btn-danger delete-btn" style="display:none;" onclick="deleteTour('${tour.id}', event)">🗑️</button>
+            </div>
+            <div class="small text-muted mb-2">
+                ${tour.category} • ${tour.country} • ${tour.state}
+            </div>
+            <p class="small mb-0 text-secondary">${tour.desc || "Keine Beschreibung"}</p>
+        `;
+        
+        // WICHTIG: Klick auf die Karte füllt die Filter links!
+        card.addEventListener('click', () => selectTourCard(tour));
+        
+        listContainer.appendChild(card);
+    });
+    
+    showDeleteButtons();
+}
+
+// Funktionen global verfügbar machen
 window.filterTours = filterTours;
-window.onCategoryChange = filterTours; // Wenn Kategorie geändert wird -> filtern
-window.onCountryChange = onCountryChange; 
-window.resetFilters = resetFilters; // <--- Das fehlte!
+window.onCategoryChange = onCategoryChange;
+window.onCountryChange = onCountryChange;
+window.resetFilters = resetFilters;
