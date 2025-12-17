@@ -90,36 +90,41 @@ function updateUI() {
     const userInfo = document.getElementById('user-info');
     const addTourBtn = document.querySelector('[data-bs-target="#addTourModal"]');
 
-    // UI Reset
+    // 1. Alles erstmal sicher zurücksetzen (ausblenden/anzeigen für Gast)
     if(authBtn) authBtn.style.display = 'block';
     if(logoutBtn) logoutBtn.style.display = 'none';
     if(userInfo) userInfo.style.display = 'none';
-    if(addTourBtn) addTourBtn.style.display = 'none'; // Erstmal ausblenden
+    if(addTourBtn) addTourBtn.style.display = 'none';
 
     if (currentUser) {
         // --- EINGELOGGT ---
-        authBtn.style.display = 'none';
-        logoutBtn.style.display = 'block';
-        userInfo.style.display = 'block';
         
-        // Badge für Rolle
-        let roleBadge = '<span class="badge bg-secondary">USER</span>';
-        if(currentRole === 'admin') roleBadge = '<span class="badge bg-danger">ADMIN</span>';
-        if(currentRole === 'moderator') roleBadge = '<span class="badge bg-primary">MOD</span>';
+        // SICHERHEITS-CHECKS: Nur ändern, wenn das Element wirklich existiert
+        if(authBtn) authBtn.style.display = 'none';
+        if(logoutBtn) logoutBtn.style.display = 'block';
+        
+        if(userInfo) {
+            userInfo.style.display = 'block';
+            
+            // Badge für Rolle
+            let roleBadge = '<span class="badge bg-secondary">USER</span>';
+            if(currentRole === 'admin') roleBadge = '<span class="badge bg-danger">ADMIN</span>';
+            if(currentRole === 'moderator') roleBadge = '<span class="badge bg-primary">MOD</span>';
 
-        // Badge für E-Mail Status
-        let statusBadge = currentUser.emailVerified 
-            ? '<span class="badge bg-success">Verifiziert</span>' 
-            : '<span class="badge bg-warning text-dark">Unbestätigt</span>';
+            // Badge für E-Mail Status
+            let statusBadge = currentUser.emailVerified 
+                ? '<span class="badge bg-success">Verifiziert</span>' 
+                : '<span class="badge bg-warning text-dark">Unbestätigt</span>';
 
-        userInfo.innerHTML = `<small>${currentUser.email}</small> ${roleBadge} ${statusBadge}`;
+            userInfo.innerHTML = `<small>${currentUser.email}</small> ${roleBadge} ${statusBadge}`;
+        }
 
-        // BERECHTIGUNG: Posten darf nur wer verifiziert ist (oder Admin/Mod)
+        // BERECHTIGUNG: Posten
         if (currentUser.emailVerified || currentRole === 'admin') {
              if(addTourBtn) addTourBtn.style.display = 'block';
         }
         
-        // BERECHTIGUNG: Löschen-Buttons anzeigen (Admin/Mod)
+        // BERECHTIGUNG: Löschen-Buttons
         showDeleteButtons();
     }
 }
