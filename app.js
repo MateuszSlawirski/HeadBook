@@ -9,10 +9,9 @@ import {
     signInWithEmailAndPassword, 
     onAuthStateChanged, 
     signOut,
-    sendEmailVerification 
+    sendEmailVerification,
+    updateProfile // <--- NEU: Wichtig für den Nicknamen
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-
 
 // --- 2. BACKEND URL (Azure) ---
 const API_URL = "/api"; // Basis-URL für unser Backend
@@ -84,48 +83,83 @@ async function syncUserWithBackend(firebaseUser) {
     }
 }
 
+// --- HIER IST DIE NEUE UPDATE UI LOGIK ---
 function updateUI() {
     const authBtn = document.getElementById('auth-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
-    const addTourBtn = document.querySelector('[data-bs-target="#addTourModal"]');
+    
+    // Alle "geheimen" Menüpunkte finden (Klasse 'auth-required')
+    const secureLinks = document.querySelectorAll('.auth-required');
 
-    // 1. Alles erstmal sicher zurücksetzen (ausblenden/anzeigen für Gast)
-    if(authBtn) authBtn.style.display = 'block';
-    if(logoutBtn) logoutBtn.style.display = 'none';
-    if(userInfo) userInfo.style.display = 'none';
-    if(addTourBtn) addTourBtn.style.display = 'none';
+    // 1. Erstmal alles verstecken (Standard-Zustand: Gast)
+    if(authBtn) authBtn.style.display = 'block';     // Login-Button zeigen
+    if(logoutBtn) logoutBtn.style.display = 'none';  // Logout verstecken
+    if(userInfo) userInfo.style.display = 'none';    // User-Info verstecken
+    
+    // Geheime Links ausblenden
+    secureLinks.forEach(link => link.style.display = 'none');
 
+    // 2. Wenn User eingeloggt ist -> Alles anzeigen
     if (currentUser) {
-        // --- EINGELOGGT ---
+        // Geheime Links wieder sichtbar machen
+        secureLinks.forEach(link => {
+            link.style.display = 'block'; 
+        });
+
+        if(authBtn) authBtn.style.display = 'none'; // Login-Button weg
         
-        // SICHERHEITS-CHECKS: Nur ändern, wenn das Element wirklich existiert
-        if(authBtn) authBtn.style.display = 'none';
+        // Logout Button anzeigen
         if(logoutBtn) logoutBtn.style.display = 'block';
-        
+
         if(userInfo) {
             userInfo.style.display = 'block';
             
-            // Badge für Rolle
+            // Nickname anzeigen (oder Email, falls kein Name da ist)
+            const displayName = currentUser.displayName || currentUser.email.split('@')[0];
+            
             let roleBadge = '<span class="badge bg-secondary">USER</span>';
             if(currentRole === 'admin') roleBadge = '<span class="badge bg-danger">ADMIN</span>';
-            if(currentRole === 'moderator') roleBadge = '<span class="badge bg-primary">MOD</span>';
 
-            // Badge für E-Mail Status
-            let statusBadge = currentUser.emailVerified 
-                ? '<span class="badge bg-success">Verifiziert</span>' 
-                : '<span class="badge bg-warning text-dark">Unbestätigt</span>';
-
-            userInfo.innerHTML = `<small>${currentUser.email}</small> ${roleBadge} ${statusBadge}`;
+            userInfo.innerHTML = `Hallo, <b>${displayName}</b> ${roleBadge}`;
         }
 
-        // BERECHTIGUNG: Posten
-        if (currentUser.emailVerified || currentRole === 'admin') {
-             if(addTourBtn) addTourBtn.style.display = 'block';
+        // Add Tour Button nur für Verifizierte
+        const addTourBtn = document.querySelector('[data-bs-target="#addTourModal"]');
+        if(addTourBtn) {
+             if (currentUser.emailVerified || currentRole === 'admin') {
+                 addTourBtn.style.display = 'block';
+             } else {
+                 addTourBtn.style.display = 'none';
+             }
         }
+
+        // Profil-Seite Daten füllen (falls wir gerade auf profil.html sind)
+        fillProfilePageData();
+    }
+}
+
+// Hilfsfunktion für die Profil-Seite
+function fillProfilePageData() {
+    const profileDisplay = document.getElementById('profile-email-display');
+    const profileEmailInput = document.getElementById('profile-email-input');
+    const profileRoleInput = document.getElementById('profile-role-input');
+    const profileBadges = document.getElementById('profile-badges');
+    const profileDateInput = document.getElementById('profile-date-input');
+
+    if(profileDisplay && currentUser) {
+        profileDisplay.innerText = currentUser.displayName || "Biker";
+        if(profileEmailInput) profileEmailInput.value = currentUser.email;
+        if(profileRoleInput) profileRoleInput.value = currentRole.toUpperCase();
         
-        // BERECHTIGUNG: Löschen-Buttons
-        showDeleteButtons();
+        if(currentUser.metadata.creationTime && profileDateInput) {
+            profileDateInput.value = new Date(currentUser.metadata.creationTime).toLocaleDateString('de-DE');
+        }
+
+        let badgesHtml = '';
+        if(currentRole === 'admin') badgesHtml += '<span class="badge bg-danger me-1">Admin</span>';
+        if(currentUser.emailVerified) badgesHtml += '<span class="badge bg-success">Verifiziert</span>';
+        if(profileBadges) profileBadges.innerHTML = badgesHtml;
     }
 }
 
@@ -141,25 +175,62 @@ function showDeleteButtons() {
 }
 
 /* ==========================================
-   LOGIN / REGISTER LOGIK
+   LOGIN / REGISTER LOGIK (NEU)
    ========================================== */
 
 function setupEventListeners() {
-    // Registrieren Button im Modal
-    const btnRegister = document.getElementById('btn-register');
-    if(btnRegister) btnRegister.addEventListener('click', handleRegister);
-
-    // Login Formular
-    const authForm = document.getElementById('authForm');
-    if(authForm) authForm.addEventListener('submit', handleLogin);
-
-    // Logout Button (Navbar)
+    // 1. Logout Button
     const btnLogout = document.getElementById('logout-btn');
     if(btnLogout) {
         btnLogout.addEventListener('click', async () => {
             await signOut(auth);
             alert("Erfolgreich ausgeloggt.");
-            window.location.reload();
+            window.location.href = "index.html"; // Zurück zur Startseite
+        });
+    }
+
+    // 2. Auth Formular Logik (Login vs. Register umschalten)
+    const switchBtn = document.getElementById('btn-switch-mode');
+    const nameContainer = document.getElementById('authNameContainer');
+    const submitBtn = document.getElementById('btn-submit-auth');
+    const authForm = document.getElementById('authForm');
+    const modalTitle = document.querySelector('.modal-title');
+
+    // Umschalten zwischen Login und Registrieren
+    if(switchBtn && nameContainer) {
+        switchBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Prüfen ob das Namensfeld gerade sichtbar ist (style.display)
+            const isRegisterMode = nameContainer.style.display === 'block';
+
+            if(isRegisterMode) {
+                // ZURÜCK ZUM LOGIN
+                nameContainer.style.display = 'none';
+                submitBtn.innerText = "Einloggen";
+                switchBtn.innerText = "Hier registrieren";
+                if(modalTitle) modalTitle.innerText = "Anmelden";
+            } else {
+                // ZUM REGISTRIEREN WECHSELN
+                nameContainer.style.display = 'block';
+                submitBtn.innerText = "Kostenlos Registrieren";
+                switchBtn.innerText = "Zurück zum Login";
+                if(modalTitle) modalTitle.innerText = "Neues Konto erstellen";
+            }
+        });
+    }
+
+    // Formular Absenden
+    if(authForm) {
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            // Wir entscheiden anhand der Sichtbarkeit des Namensfeldes, was zu tun ist
+            const isRegisterMode = nameContainer && nameContainer.style.display === 'block';
+            
+            if (isRegisterMode) {
+                handleRegister();
+            } else {
+                handleLogin(e);
+            }
         });
     }
 
@@ -168,22 +239,44 @@ function setupEventListeners() {
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
 
+// --- NEUE REGISTRIERUNG MIT NICKNAME ---
 async function handleRegister() {
     const email = document.getElementById('authEmail').value;
     const pass = document.getElementById('authPass').value;
+    const nickname = document.getElementById('authName').value; // Den Namen holen
     const msg = document.getElementById('auth-message');
 
+    // Sicherheitscheck: Name darf nicht leer sein
+    if (!nickname || nickname.trim() === "") {
+        msg.innerHTML = `<span class="text-danger">Bitte wähle einen Nickname!</span>`;
+        return;
+    }
+
     try {
+        // 1. User erstellen
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        
+        // 2. Nickname in Firebase speichern (Profil-Update)
+        await updateProfile(cred.user, {
+            displayName: nickname
+        });
+
+        // 3. Verifizierungs-Mail senden
         await sendEmailVerification(cred.user);
-        msg.innerHTML = `<span class="text-success">Account erstellt! <b>Bitte E-Mails prüfen.</b></span>`;
+        
+        msg.innerHTML = `<span class="text-success">Willkommen <b>${nickname}</b>! Account erstellt. Bitte E-Mails prüfen.</span>`;
+        
+        // Seite neu laden nach 2 Sekunden
+        setTimeout(() => window.location.reload(), 2000);
+
     } catch (error) {
         msg.innerHTML = `<span class="text-danger">${error.message}</span>`;
     }
 }
 
 async function handleLogin(e) {
-    e.preventDefault();
+    // e.preventDefault() ist hier nicht nötig, da setupEventListeners das schon macht,
+    // schadet aber auch nicht.
     const email = document.getElementById('authEmail').value;
     const pass = document.getElementById('authPass').value;
     const msg = document.getElementById('auth-message');
