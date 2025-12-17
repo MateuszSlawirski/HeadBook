@@ -13,33 +13,35 @@ app.http('user-sync', {
     authLevel: 'anonymous',
     extraOutputs: [cosmosOutput], // Wir sagen der Funktion: Du darfst schreiben
     
-    handler: async (request, context) => {
+  handler: async (request, context) => {
         try {
             // 1. Daten aus dem Frontend lesen
             const data = await request.json();
             const { uid, email, displayName } = data;
 
             if (!uid) {
-                return { status: 400, body: "Fehler: Keine User-ID (uid) gesendet." };
+                // ÄNDERUNG: jsonBody statt body
+                return { status: 400, jsonBody: { error: "Keine UID gesendet" } };
             }
 
             // 2. Das User-Objekt vorbereiten
-            // WICHTIG: 'id' muss in CosmosDB immer die uid sein!
             const userProfile = {
-                id: uid,              // Das ist der Schlüssel in der Datenbank
+                id: uid,
                 email: email,
                 displayName: displayName || "Biker",
-                lastLogin: new Date().toISOString() // Wir speichern, wann er zuletzt da war
+                lastLogin: new Date().toISOString()
             };
 
-            // 3. Einfach speichern (überschreibt existierende Einträge = Update)
+            // 3. Speichern (Upsert)
             context.extraOutputs.set(cosmosOutput, userProfile);
 
-            return { status: 200, body: "User erfolgreich synchronisiert." };
+            // ÄNDERUNG: Wir senden jetzt ein echtes JSON-Objekt zurück
+            return { status: 200, jsonBody: { message: "User erfolgreich synchronisiert." } };
 
         } catch (error) {
             context.log("Fehler beim Speichern:", error);
-            return { status: 500, body: "Interner Server Fehler: " + error.message };
+            // ÄNDERUNG: Auch im Fehlerfall JSON senden
+            return { status: 500, jsonBody: { error: "Interner Server Fehler: " + error.message } };
         }
     }
 });
