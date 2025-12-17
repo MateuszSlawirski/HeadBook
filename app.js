@@ -1,216 +1,251 @@
-/* --- KONFIGURATION --- */
-// Automatische Erkennung: Lokal nutzen wir Localhost, Online nutzen wir Azure
-const API_BASE = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-    ? "http://localhost:7071/api"  // Falls du die API lokal startest (optional)
-    : "/api";                      // Wenn die Seite online ist (Azure)
+/* ==========================================
+   KONFIGURATION & GLOBALE VARIABLEN
+   ========================================== */
 
+// Die Adresse deines Backends. 
+// Da Frontend und Backend auf derselben Azure-Domain liegen, reicht "/api".
+const API_URL = "/api/tours";
+
+// Hier speichern wir die Daten, sobald sie vom Server kommen
 let toursData = []; 
 
-/* --- INIT --- */
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("App startet... Backend URL:", API_BASE);
-    loadTours();
-});
-
-/* --- DATEN LADEN --- */
-async function loadTours() {
-    const listContainer = document.getElementById('tours-container');
-    if(listContainer) listContainer.innerHTML = '<div class="text-center mt-5">⏳ Lade Touren aus der Cloud...</div>';
-
-    try {
-        const response = await fetch(`${API_BASE}/tours`);
-        if (!response.ok) throw new Error(`HTTP Fehler: ${response.status}`);
-        
-        toursData = await response.json();
-        console.log("Daten empfangen:", toursData);
-        
-        if(typeof initTours === 'function') initTours(); // Karte starten
-        if(typeof filterTours === 'function') filterTours(); // Liste anzeigen
-
-    } catch (error) {
-        console.error("Fehler:", error);
-        if(listContainer) listContainer.innerHTML = `
-            <div class="text-center text-danger mt-5">
-                <p>Verbindung zum Backend fehlgeschlagen.</p>
-                <small>${error.message}</small>
-            </div>`;
-    }
-}
-
-/* --- NEUE TOUR SPEICHERN --- */
-const addTourForm = document.getElementById('addTourForm');
-if(addTourForm) {
-    addTourForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = addTourForm.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.innerText = "Speichere...";
-
-        const newTour = {
-            title: document.getElementById('newTitle').value,
-            category: document.getElementById('newRegion').value,
-            country: document.getElementById('newCountry').value,
-            state: document.getElementById('newState').value || "Unbekannt",
-            km: document.getElementById('newKm').value,
-            time: document.getElementById('newTime').value,
-            desc: document.getElementById('newDesc').value,
-            coords: [48 + Math.random()*2, 10 + Math.random()*2] // Zufallsposition für Demo
-        };
-
-        try {
-            const resp = await fetch(`${API_BASE}/tours`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newTour)
-            });
-
-            if(resp.ok) {
-                const savedTour = await resp.json();
-                toursData.unshift(savedTour);
-                
-                // Modal schließen (Bootstrap)
-                const modalEl = document.getElementById('addTourModal');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                modal.hide();
-                
-                addTourForm.reset();
-                if(typeof filterTours === 'function') filterTours();
-                alert("Erfolg! Tour in der Cloud gespeichert.");
-            } else {
-                alert("Fehler beim Speichern.");
-            }
-        } catch (err) {
-            console.error(err);
-            alert("Server-Fehler: " + err.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "Veröffentlichen";
-        }
-    });
-}
-
-// Hierunter folgen deine alten Funktionen wie initTours(), filterTours(), rateTour()...
-// Kopiere deine alten Hilfsfunktionen (Map, Filter) unbedingt wieder hier drunter! 
-// Falls du sie nicht mehr hast, sag Bescheid, dann geb ich dir den vollen Code.
-
-// Posts für Home/Community
-const posts = [
-    { id: 1, author: "Lisa Motorrad", avatar: "LM", time: "vor 2 Std", content: "Super Tour im Schwarzwald heute gemacht! Das Wetter war perfekt.", likes: 45, comments: 12 },
-    { id: 2, author: "Tom Rider", avatar: "TR", time: "Gestern", content: "Hat jemand Tipps für neue Reifen auf der MT-09?", likes: 8, comments: 24 }
-];
-
-/* --- MAP & TOURS LOGIK --- */
+// Karten-Variablen
 let map = null;
 let markers = []; 
 
-function initTours() {
-    const mapContainer = document.getElementById('map');
+/* ==========================================
+   INITIALISIERUNG (START)
+   ========================================== */
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("🚀 App startet...");
+    
+    // 1. Daten vom Server holen
+    loadToursFromServer();
+
+    // 2. Navigation aktiv setzen (Optik)
+    setActiveNavLink();
+});
+
+/* ==========================================
+   DATEN LADEN (BACKEND VERBINDUNG)
+   ========================================== */
+
+async function loadToursFromServer() {
     const listContainer = document.getElementById('tours-container');
     
-    if (!mapContainer || !listContainer) return; 
-
-    if (!map) {
-        map = L.map('map').setView([51.1657, 10.4515], 6); 
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
-        }).addTo(map);
-        
+    // Lade-Animation anzeigen
+    if(listContainer) {
+        listContainer.innerHTML = `
+            <div class="text-center mt-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Lade Touren aus der Cloud...</p>
+            </div>`;
     }
-    filterTours();
+
+    try {
+        // DER API AUFRUF
+        const response = await fetch(API_URL);
+        
+        if (!response.ok) throw new Error(`Server antwortete mit Fehler: ${response.status}`);
+        
+        // Daten in unsere Variable speichern
+        toursData = await response.json();
+        console.log("✅ Daten erfolgreich geladen:", toursData);
+
+        // Jetzt alles starten, was Daten braucht
+        initMap();      // Karte vorbereiten
+        initFilters();  // Filter-Menüs füllen
+        filterTours();  // Liste und Marker anzeigen
+
+    } catch (error) {
+        console.error("❌ Fehler beim Laden:", error);
+        if(listContainer) {
+            listContainer.innerHTML = `
+                <div class="text-center text-danger mt-5">
+                    <h5>Verbindung fehlgeschlagen</h5>
+                    <p>Konnte keine Touren laden. Läuft das Backend?</p>
+                    <small>${error.message}</small>
+                </div>`;
+        }
+    }
 }
 
-/* --- RENDER TOURS --- */
+/* ==========================================
+   KARTE & ANZEIGE (LEAFLET)
+   ========================================== */
+
+function initMap() {
+    // Verhindern, dass wir die Karte doppelt laden
+    if (map) return; 
+
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) return;
+
+    // Karte erstellen (Zentrum Deutschland)
+    map = L.map('map').setView([51.1657, 10.4515], 6); 
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+}
+
 function renderTours(data) {
     const listContainer = document.getElementById('tours-container');
+    if(!listContainer) return;
+
     listContainer.innerHTML = '';
     
+    // Alte Marker entfernen
     markers.forEach(m => map.removeLayer(m));
     markers = [];
 
+    if(data.length === 0) {
+        listContainer.innerHTML = '<p class="text-center text-muted mt-5">Keine Touren gefunden.</p>';
+        return;
+    }
+
     data.forEach(tour => {
-        const marker = L.marker(tour.coords).addTo(map);
-        marker.bindPopup(`<b>${tour.title}</b><br>⭐ ${tour.rating} (${tour.votes})`);
-        markers.push(marker);
-        
-        let starsHTML = '';
-        for(let i=1; i<=5; i++) {
-            let starClass = i <= Math.round(tour.rating) ? 'star-filled' : 'star-empty';
-            starsHTML += `<span class="${starClass}" onclick="rateTour(${tour.id}, ${i}, event)">★</span>`;
+        // 1. Marker auf Karte setzen
+        if(tour.coords && tour.coords.length === 2) {
+            const marker = L.marker(tour.coords).addTo(map);
+            marker.bindPopup(`<b>${tour.title}</b><br>⭐ ${tour.rating || 0} (${tour.votes || 0})`);
+            markers.push(marker);
+            
+            // Klick auf Marker öffnet Popup
+            marker.on('click', () => {
+                map.flyTo(tour.coords, 10);
+            });
         }
 
+        // 2. Karte in der Liste erstellen
         const card = document.createElement('div');
         card.className = 'mini-tour-card';
         card.innerHTML = `
             <div class="d-flex justify-content-between">
-                <h5 style="margin:0">${tour.title}</h5>
-                <div class="rating-box" title="Klicken zum Bewerten">${starsHTML} <small class="text-muted">(${tour.votes})</small></div>
+                <h5 class="fw-bold m-0">${tour.title}</h5>
+                <div class="text-warning">
+                    ${getStars(tour.rating)} 
+                    <small class="text-muted">(${tour.votes || 0})</small>
+                </div>
             </div>
-            <div class="tour-subline">${tour.country} • ${tour.state}</div>
-            <div class="tour-meta">
+            <div class="tour-subline text-muted small mb-2">
+                ${tour.country} • ${tour.state}
+            </div>
+            <div class="tour-meta d-flex gap-3 small text-secondary">
                 <span>📏 ${tour.km} km</span>
                 <span>⏱️ ${tour.time} h</span>
-                <span>〰️ ${tour.curves}</span>
             </div>
-            <p style="font-size:13px; color:#666; margin-top:5px;">${tour.desc}</p>
+            <p class="mt-2 mb-0 small text-muted">${tour.desc || "Keine Beschreibung"}</p>
         `;
         
-        card.addEventListener('click', (e) => {
-            if(e.target.classList.contains('star-filled') || e.target.classList.contains('star-empty')) return;
-            map.flyTo(tour.coords, 10);
-            marker.openPopup();
+        // Klick auf Karte zoomt zum Marker
+        card.addEventListener('click', () => {
+            if(tour.coords) {
+                map.flyTo(tour.coords, 10);
+            }
         });
+
         listContainer.appendChild(card);
     });
 }
 
-/* --- RENDER POSTS (Für Home Feed) --- */
-function loadPosts() {
-    const feedContainer = document.getElementById('feed-posts');
-    if (!feedContainer) return; 
+function getStars(rating) {
+    if(!rating) rating = 0;
+    let stars = '';
+    for(let i=1; i<=5; i++) {
+        stars += i <= Math.round(rating) ? '★' : '☆';
+    }
+    return stars;
+}
 
-    feedContainer.innerHTML = '';
-    posts.forEach(post => {
-        const div = document.createElement('div');
-        div.className = 'card';
-        div.innerHTML = `
-            <div class="post-header">
-                <div class="post-avatar" style="display:flex;align-items:center;justify-content:center;font-weight:bold;color:#666;">${post.avatar}</div>
-                <div>
-                    <div style="font-weight:bold;">${post.author}</div>
-                    <div style="font-size:12px;color:gray;">${post.time}</div>
-                </div>
-            </div>
-            <div class="post-content">${post.content}</div>
-            <div class="post-actions">
-                <span>👍 ${post.likes} Likes</span>
-                <span>💬 ${post.comments} Kommentare</span>
-            </div>
-        `;
-        feedContainer.appendChild(div);
+/* ==========================================
+   NEUE TOUR HINZUFÜGEN (POST REQUEST)
+   ========================================== */
+
+const addTourForm = document.getElementById('addTourForm');
+
+if(addTourForm) {
+    addTourForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        // Button sperren (Ladezustand)
+        const submitBtn = addTourForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerText;
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Speichere in Cloud...";
+
+        // Daten sammeln
+        // Zufalls-Koordinaten für Demo (da wir keine Klick-Map haben)
+        const lat = 47 + Math.random() * 5; 
+        const lng = 7 + Math.random() * 5;
+
+        const newTourObj = {
+            title: document.getElementById('newTitle').value,
+            category: document.getElementById('newRegion').value,
+            country: document.getElementById('newCountry').value,
+            state: document.getElementById('newState').value || "Community",
+            km: document.getElementById('newKm').value,
+            time: document.getElementById('newTime').value,
+            curves: "Unbekannt",
+            desc: document.getElementById('newDesc').value,
+            coords: [lat, lng]
+        };
+
+        try {
+            // POST an Azure Backend
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newTourObj)
+            });
+
+            if(response.ok) {
+                const savedTour = await response.json();
+                
+                // Lokal hinzufügen für sofortiges Feedback
+                toursData.unshift(savedTour);
+                
+                // Modal schließen
+                const modalEl = document.getElementById('addTourModal');
+                if(modalEl && window.bootstrap) {
+                     const modal = bootstrap.Modal.getInstance(modalEl);
+                     if(modal) modal.hide();
+                }
+
+                addTourForm.reset();
+                alert("✅ Erfolgreich gespeichert!");
+                
+                // Liste aktualisieren
+                filterTours();
+
+            } else {
+                alert("❌ Fehler: Server hat nicht gespeichert.");
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert("Fehler: Server nicht erreichbar.");
+        } finally {
+            // Button wieder freigeben
+            submitBtn.disabled = false;
+            submitBtn.innerText = originalText;
+        }
     });
 }
 
-/* --- HELPER: Label für Slider --- */
-function updateKmLabel() {
-    const val = document.getElementById('kmRange').value;
-    if(document.getElementById('kmValue')) {
-        document.getElementById('kmValue').innerText = val;
-    }
-}
+/* ==========================================
+   FILTER LOGIK
+   ========================================== */
 
-/* =========================================
-   FILTER LOGIK (KASKADIEREND & CLEAN)
-   ========================================= */
-
-// 1. Initialisierung: Nur Kategorien laden
 function initFilters() {
     const categorySelect = document.getElementById('filter-category');
     if(!categorySelect) return;
 
+    // Alle Kategorien aus den geladenen Daten sammeln
     const categories = [...new Set(toursData.map(t => t.category))].sort();
     
-    // Wichtig: Startwert ist "all" (Bitte wählen...)
     categorySelect.innerHTML = '<option value="all">Bitte wählen...</option>';
     categories.forEach(cat => {
         const opt = document.createElement('option');
@@ -220,7 +255,7 @@ function initFilters() {
     });
 }
 
-// 2. Wenn Region geändert wird
+// Wenn Region geändert wird
 function onCategoryChange() {
     const catSelect = document.getElementById('filter-category');
     const countrySelect = document.getElementById('filter-country');
@@ -255,7 +290,7 @@ function onCategoryChange() {
     filterTours(); 
 }
 
-// 3. Wenn Land geändert wird
+// Wenn Land geändert wird
 function onCountryChange() {
     const countrySelect = document.getElementById('filter-country');
     const stateSelect = document.getElementById('filter-state');
@@ -285,21 +320,26 @@ function onCountryChange() {
     filterTours(); 
 }
 
-// 4. HAUPT-FILTER (Slider Logik entfernt)
+// Haupt-Filter Funktion
 function filterTours() {
     const searchInput = document.getElementById('search-input');
     const catSelect = document.getElementById('filter-category');
     const countrySelect = document.getElementById('filter-country');
     const stateSelect = document.getElementById('filter-state');
-    const listContainer = document.getElementById('tours-container');
-
+    
+    // Abbruch wenn Elemente nicht da sind
     if(!catSelect) return;
 
+    const listContainer = document.getElementById('tours-container');
     const sCat = catSelect.value;
     
-    // --- NEU: ABBRUCH WENN KEINE REGION GEWÄHLT ---
+    // Wenn keine Region gewählt: Hinweis zeigen
     if (sCat === 'all') {
-        listContainer.innerHTML = '<p class="text-center text-muted mt-5">👋 Bitte wähle zuerst eine Region links im Filter.</p>';
+        listContainer.innerHTML = `
+            <div class="text-center mt-5 p-4 bg-light rounded">
+                <h5>👋 Willkommen!</h5>
+                <p class="text-muted">Bitte wähle links eine <b>Region</b> (z.B. Europa), um Touren zu laden.</p>
+            </div>`;
         markers.forEach(m => map.removeLayer(m));
         markers = [];
         return; 
@@ -309,13 +349,12 @@ function filterTours() {
     const sCountry = countrySelect.value;
     const sState = stateSelect.value;
 
+    // Filtern
     const filtered = toursData.filter(tour => {
         const catMatch = (tour.category === sCat); 
         
         let countryMatch = true;
-        if (sCountry !== 'all') {
-             countryMatch = (tour.country === sCountry);
-        }
+        if (sCountry !== 'all') countryMatch = (tour.country === sCountry);
 
         let stateMatch = true;
         if (sCountry !== 'all' && sState !== 'all' && !stateSelect.disabled) {
@@ -331,102 +370,24 @@ function filterTours() {
     renderTours(filtered);
 }
 
-// 5. Reset
 function resetFilters() {
     document.getElementById('search-input').value = "";
-    
-    document.querySelectorAll('.filter-cb').forEach(cb => cb.checked = false);
-    const catSelect = document.getElementById('filter-category');
-    const countrySelect = document.getElementById('filter-country');
-    const stateSelect = document.getElementById('filter-state');
-
-    catSelect.value = 'all';
-    
-    countrySelect.innerHTML = '<option value="all">--</option>';
-    countrySelect.disabled = true;
-    
-    stateSelect.innerHTML = '<option value="all">--</option>';
-    stateSelect.disabled = true;
-
-    filterTours(); 
+    document.getElementById('filter-category').value = 'all';
+    onCategoryChange(); // Setzt alles zurück
 }
 
-/* --- BEWERTUNGEN --- */
-function rateTour(id, starValue, event) {
-    if(event) event.stopPropagation(); 
-    
-    const tour = toursData.find(t => t.id === id);
-    if(tour) {
-        tour.rating = ((tour.rating * tour.votes) + starValue) / (tour.votes + 1);
-        tour.rating = Math.round(tour.rating * 10) / 10; 
-        tour.votes++;
-        
-        alert(`Danke! Du hast "${tour.title}" mit ${starValue} Sternen bewertet.`);
-        filterTours(); 
-    }
-}
+/* ==========================================
+   HILFSFUNKTIONEN (Navbar etc.)
+   ========================================== */
 
-/* --- NEUE TOUR (Add Logic) --- */
-const addTourForm = document.getElementById('addTourForm');
-if(addTourForm) {
-    addTourForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const lat = 47 + Math.random() * 6; 
-        const lng = 7 + Math.random() * 6;
+function setActiveNavLink() {
+    const navLinks = document.querySelectorAll('.nav-link');  
+    const currentPage = window.location.pathname.toLowerCase();  
 
-        const newTour = {
-            id: Date.now(),
-            title: document.getElementById('newTitle').value,
-            category: document.getElementById('newRegion').value,
-            country: document.getElementById('newCountry').value,
-            state: document.getElementById('newState').value || "Unbekannt",
-            km: document.getElementById('newKm').value,
-            time: document.getElementById('newTime').value,
-            curves: "Unbekannt",
-            desc: document.getElementById('newDesc').value,
-            coords: [lat, lng],
-            rating: 0,
-            votes: 0
-        };
-
-        toursData.unshift(newTour); 
-        
-        const modalEl = document.getElementById('addTourModal');
-        if(modalEl && window.bootstrap) {
-             const modal = bootstrap.Modal.getInstance(modalEl);
-             if(modal) modal.hide();
+    navLinks.forEach(link => {
+        link.classList.remove('active');  
+        if (currentPage.includes(link.getAttribute('href').toLowerCase())) {
+            link.classList.add('active');  
         }
-
-        addTourForm.reset();
-        alert("Route erfolgreich hinzugefügt!");
-        
-        initFilters(); 
-        filterTours(); 
     });
 }
-
-/* --- INIT --- */
-document.addEventListener('DOMContentLoaded', () => {
-    if(typeof initTours === 'function') initTours();
-    if(typeof loadPosts === 'function') loadPosts();
-
-    // Funktion zur Markierung des aktiven Links in der Navbar
-    function setActiveNavLink() {
-        const navLinks = document.querySelectorAll('.nav-link');  
-        const currentPage = window.location.pathname.toLowerCase();  
-
-        navLinks.forEach(link => {
-            link.classList.remove('active');  
-            if (currentPage.includes(link.getAttribute('href').toLowerCase())) {
-                link.classList.add('active');  
-            }
-        });
-    }
-
-    // Setze den aktiven Link beim Laden der Seite
-    setActiveNavLink();
-    
-    // NEU: Startet die Kaskaden-Filter
-    if(typeof initFilters === 'function') initFilters();
-});
