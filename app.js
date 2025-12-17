@@ -1,6 +1,7 @@
 /* ==========================================
    IMPORTS & KONFIGURATION
    ========================================== */
+import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getAuth, 
@@ -11,15 +12,7 @@ import {
     sendEmailVerification 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// --- 1. FIREBASE KONFIGURATION (Hier deine Daten einfügen!) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyD6iG-Lx0dAZRp4FRGBLhK7WmJPZ5s1kEs",
-  authDomain: "riderpoint.firebaseapp.com",
-  projectId: "riderpoint",
-  storageBucket: "riderpoint.firebasestorage.app",
-  messagingSenderId: "426779644316",
-  appId: "1:426779644316:web:41f6f90d041ee6ff037859"
-};
+
 
 // --- 2. BACKEND URL (Azure) ---
 const API_URL = "/api"; // Basis-URL für unser Backend
