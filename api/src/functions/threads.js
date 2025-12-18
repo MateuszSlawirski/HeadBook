@@ -1,5 +1,5 @@
 const { app, input } = require('@azure/functions');
-
+const crypto = require('crypto');
 // 1. Verbindung zur Datenbank (Container: threads)
 const threadsInput = input.cosmosDB({
     databaseName: 'riderpoint-db',

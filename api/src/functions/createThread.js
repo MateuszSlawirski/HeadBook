@@ -1,5 +1,5 @@
 const { app, output } = require('@azure/functions');
-
+const crypto = require('crypto');
 // Wir definieren den Ausgang (wohin sollen die Daten?)
 const cosmosOutput = output.cosmosDB({
     databaseName: 'riderpoint-db',
