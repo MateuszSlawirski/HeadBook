@@ -514,7 +514,7 @@ window.insertEmoji = function(emoji, targetId = 'threadText') {
 };
 
 /* ==========================================
-   FORUM LOGIK
+   FORUM LOGIK (Level 1 -> 2 -> 3 -> 4)
    ========================================== */
 
 let allForumData = []; 
@@ -525,7 +525,6 @@ async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
     
-    // Wir zeigen den Spinner nur, wenn es noch gar keine Daten gibt
     if(allForumData.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
     }
@@ -535,14 +534,14 @@ async function loadForumData() {
         if (!catResponse.ok) throw new Error("Kategorie-Fehler");
         allForumData = await catResponse.json();
 
-        // Threads neu laden (für Cache Aktualisierung)
         const threadResponse = await fetch(`${API_URL}/threads`); 
         if (threadResponse.ok) {
             allThreadsCache = await threadResponse.json();
         }
 
-        // KORREKTUR: Wir prüfen jetzt auf unsere Variablen, nicht auf den HTML-Button
-        if (!currentCategoryId && !currentForumTopic) {
+        // Falls wir gerade auf der Home-Seite sind (kein Zurück-Button aktiv), neu malen
+        const backBtn = document.getElementById('forum-back-btn');
+        if (!backBtn || backBtn.style.display === 'none') {
             renderForumHome();
         }
     } catch (error) {
@@ -553,39 +552,49 @@ async function loadForumData() {
     }
 }
 
-// HELPER: Neuesten Thread Vorschau (Vereinfacht)
-function getLatestPostHtml(filterFn, showTopicName = false) {
+// HELPER: Neuesten Thread Vorschau-Box bauen
+function getLatestPostHtml(filterFn) {
     const relevantThreads = allThreadsCache.filter(filterFn);
-    relevantThreads.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Sortieren: Nutze createdAt (genau) falls vorhanden, sonst date (Tag)
+    relevantThreads.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
+        const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
+        return timeB - timeA; // Neueste zuerst
+    });
 
     if (relevantThreads.length === 0) {
-        return '<div class="mt-2 p-2 bg-light rounded text-muted small">Noch keine Beiträge</div>';
+        return `
+            <div class="p-3 bg-light rounded text-center text-muted border border-dashed">
+                <small>Noch keine Beiträge</small>
+            </div>`;
     }
 
     const last = relevantThreads[0];
     
-    // Nur Titel, User, Datum (Kein Text-Schnipsel mehr, wie gewünscht)
+    // Design der "Letzter Beitrag" Box
     return `
-        <div class="mt-2 p-2 bg-light rounded border start-0 border-start-3 border-primary" 
-             style="cursor: pointer;"
+        <div class="p-3 bg-light rounded border start-0 border-start-3 border-primary position-relative hover-bg-gray" 
+             style="cursor: pointer; transition: background 0.2s;"
              onclick="event.stopPropagation(); renderThreadDetail('${last.id}', '${last.topic}')">
             
-            <div class="fw-bold text-dark text-truncate" style="font-size: 0.9rem;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="badge bg-primary bg-opacity-10 text-primary" style="font-size: 0.7em;">NEU</span>
+                <small class="text-muted" style="font-size: 0.75em;">${last.date}</small>
+            </div>
+            
+            <div class="fw-bold text-dark text-truncate mb-1" style="max-width: 100%;">
                 ${last.title}
             </div>
             
-            <div class="small text-primary mt-1 d-flex justify-content-between">
-                <span>
-                    Von <b>${last.user}</b> 
-                    ${showTopicName ? ` in <em>${last.topic}</em>` : ''}
-                </span>
-                <span>${last.date || ''}</span>
+            <div class="small text-muted">
+                von <span class="fw-semibold text-dark">${last.user}</span>
             </div>
         </div>
     `;
 }
 
-// LEVEL 1: Hauptübersicht
+// LEVEL 1: Hauptübersicht (KARTEN DESIGN)
 window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
@@ -599,35 +608,42 @@ window.renderForumHome = function() {
     subtitle.innerText = "Wähle einen Bereich.";
     
     backBtn.style.display = 'none';
-    backBtn.innerText = "⬅ Übersicht"; 
-    backBtn.onclick = null;
-
     newThreadBtn.style.display = 'none';
     container.innerHTML = '';
 
     allForumData.forEach(cat => {
         const catTopicNames = cat.topics.map(t => t.title);
-        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic), true);
+        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic));
 
+        // CARD DESIGN: Auf Desktop nebeneinander (Row/Col), auf Handy untereinander
         const item = document.createElement('div');
-        item.className = 'list-group-item list-group-item-action py-3';
+        item.className = 'card mb-3 shadow-sm border-0 forum-card'; // CSS Klasse für Hover Effekte
         item.style.cursor = 'pointer';
         item.onclick = () => renderForumSubCategory(cat.id);
 
         item.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold text-dark">${cat.title}</h5>
-                <span class="text-muted">❯</span>
+            <div class="card-body p-4">
+                <div class="row align-items-center">
+                    <div class="col-md-7 mb-3 mb-md-0">
+                        <div class="d-flex align-items-center mb-2">
+                            <h4 class="fw-bold text-primary mb-0 me-2">${cat.title}</h4>
+                        </div>
+                        <p class="text-secondary mb-0">
+                            ${cat.desc || "Allgemeine Diskussionen und Themen."}
+                        </p>
+                    </div>
+
+                    <div class="col-md-5">
+                        ${latestHtml}
+                    </div>
+                </div>
             </div>
-            <p class="mb-2 mt-1 text-secondary small">${cat.desc || "Themenbereiche und Diskussionen"}</p>
-            
-            ${latestHtml}
         `;
         container.appendChild(item);
     });
 };
 
-// LEVEL 2: Unterkategorien
+// LEVEL 2: Unterkategorien (KARTEN DESIGN)
 window.renderForumSubCategory = function(catId) {
     currentCategoryId = catId;
     const category = allForumData.find(c => c.id === catId);
@@ -644,6 +660,7 @@ window.renderForumSubCategory = function(catId) {
     
     backBtn.style.display = 'inline-block';
     backBtn.innerText = "⬅ Übersicht";
+    backBtn.className = "btn btn-outline-secondary btn-sm mb-2"; // Styling sicherstellen
     backBtn.onclick = renderForumHome;
     
     newThreadBtn.style.display = 'none';
@@ -651,21 +668,25 @@ window.renderForumSubCategory = function(catId) {
 
     if (category.topics) {
         category.topics.forEach(topic => {
-            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title, false);
+            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title);
 
             const item = document.createElement('div');
-            item.className = 'list-group-item list-group-item-action py-3';
+            item.className = 'card mb-3 shadow-sm border-0 forum-card';
             item.style.cursor = 'pointer';
             item.onclick = () => renderForumThreads(topic.title);
 
             item.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold text-primary">${topic.title}</h6>
-                    <span class="text-muted">❯</span>
+                <div class="card-body p-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-7 mb-3 mb-md-0">
+                            <h5 class="fw-bold text-dark mb-1">${topic.title}</h5>
+                            <p class="text-muted small mb-0">${topic.desc || ""}</p>
+                        </div>
+                        <div class="col-md-5">
+                            ${latestHtml}
+                        </div>
+                    </div>
                 </div>
-                <p class="mb-2 mt-1 text-muted small">${topic.desc}</p>
-                
-                ${latestHtml}
             `;
             container.appendChild(item);
         });
@@ -715,29 +736,38 @@ window.renderForumThreads = async function(topicName) {
         container.innerHTML = ''; 
         if (threads.length === 0) {
             container.innerHTML = `
-                <div class="p-5 text-center text-muted">
-                    <h5>Noch nichts los hier. 🦗</h5>
-                    <p>Sei der Erste, der etwas zu ${topicName} schreibt!</p>
+                <div class="p-5 text-center text-muted bg-light rounded">
+                    <h3>📭</h3>
+                    <h5>Noch nichts los hier.</h5>
+                    <p>Sei der Erste, der etwas zu <b>${topicName}</b> schreibt!</p>
                 </div>`;
             subtitle.innerText = "Keine Beiträge";
             return;
         }
 
         subtitle.innerText = `${threads.length} Diskussionen gefunden`;
-        threads.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Sortieren nach createdAt (genau) oder date (Tag)
+        threads.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
+            const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
+            return timeB - timeA;
+        });
 
         threads.forEach(thread => {
             const item = document.createElement('div');
-            item.className = 'list-group-item py-3 list-group-item-action';
+            item.className = 'list-group-item py-3 list-group-item-action border-start-0 border-end-0';
             item.style.cursor = 'pointer';
             item.onclick = () => renderThreadDetail(thread.id, thread.topic);
 
             item.innerHTML = `
-                <div class="d-flex justify-content-between">
-                    <h6 class="mb-1 fw-bold text-dark">${thread.title}</h6>
-                    <span class="badge bg-light text-dark border">${thread.replies || 0} Antw.</span>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-1 fw-bold text-dark fs-5">${thread.title}</h6>
+                    <span class="badge bg-secondary rounded-pill">${thread.replies || 0}</span>
                 </div>
-                <small class="text-muted">Erstellt von <b>${thread.user}</b> • ${thread.date || 'Heute'}</small>
+                <div class="small text-muted mt-1">
+                    Gestartet von <b class="text-primary">${thread.user}</b> • ${thread.date || 'Heute'}
+                </div>
             `;
             container.appendChild(item);
         });
@@ -776,27 +806,37 @@ window.renderThreadDetail = async function(threadId, topicName) {
 
         // A) Original Post
         const originalPost = `
-            <div class="card mb-3 border-primary shadow-sm">
-                <div class="card-header bg-primary text-white d-flex justify-content-between">
-                    <span>👤 ${currentThread.user}</span>
-                    <small>${currentThread.date}</small>
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 40px; height: 40px; font-weight:bold;">
+                            ${currentThread.user.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold text-dark">${currentThread.user}</h6>
+                            <small class="text-muted">Themenstarter</small>
+                        </div>
+                    </div>
+                    <small class="text-muted">${currentThread.date}</small>
                 </div>
-                <div class="card-body bg-light">
-                    <p class="card-text fs-5" style="white-space: pre-wrap;">${currentThread.text}</p>
+                <div class="card-body">
+                    <p class="card-text fs-5" style="white-space: pre-wrap; line-height: 1.6;">${currentThread.text}</p>
                 </div>
             </div>
         `;
         container.innerHTML += originalPost;
 
-        // B) Antworten
+        // B) Antworten Überschrift
         if (currentThread.repliesList && currentThread.repliesList.length > 0) {
+            container.innerHTML += `<h6 class="text-muted mb-3 ms-2">Antworten (${currentThread.repliesList.length})</h6>`;
+            
             currentThread.repliesList.forEach(reply => {
                 const replyHtml = `
-                    <div class="card mb-3 border-0 ms-5 shadow-sm" style="background-color: #f8f9fa;">
-                        <div class="card-body py-2">
-                            <div class="d-flex justify-content-between mb-1">
-                                <strong class="small text-primary">↪ ${reply.user}</strong>
-                                <small class="text-muted" style="font-size:0.7em;">${reply.date}</small>
+                    <div class="card mb-3 border-0 shadow-sm ms-md-4" style="background-color: #fcfcfc;">
+                        <div class="card-body py-3">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <strong class="text-dark">↪ ${reply.user}</strong>
+                                <small class="text-muted">${reply.date}</small>
                             </div>
                             <p class="mb-0" style="white-space: pre-wrap;">${reply.text}</p>
                         </div>
@@ -804,38 +844,35 @@ window.renderThreadDetail = async function(threadId, topicName) {
                 `;
                 container.innerHTML += replyHtml;
             });
-        } else {
-            container.innerHTML += `<div class="text-center text-muted small my-4">Noch keine Antworten.</div>`;
         }
 
-        // C) Antwort-Formular mit Emojis
+        // C) Antwort-Formular
         if (currentUser) {
             const replyForm = `
-                <div class="mt-4 pt-3 border-top">
-                    <h6 class="fw-bold mb-3">Antworten</h6>
-                    <textarea id="replyText" class="form-control mb-2" rows="3" placeholder="Schreibe eine Antwort..."></textarea>
-                    
-                    <div class="mb-2">
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😀', 'replyText')">😀</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😂', 'replyText')">😂</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😍', 'replyText')">😍</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😎', 'replyText')">😎</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🤔', 'replyText')">🤔</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('👍', 'replyText')">👍</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
-                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🔧', 'replyText')">🔧</button>
+                <div class="card mt-4 border-0 shadow-sm bg-light">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-reply-fill"></i> Antwort schreiben</h6>
+                        <textarea id="replyText" class="form-control mb-2 border-0 shadow-sm" rows="3" placeholder="Deine Meinung dazu..."></textarea>
+                        
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😂', 'replyText')">😂</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
+                            </div>
+                            <button class="btn btn-primary px-4" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">
+                                Senden ✈️
+                            </button>
+                        </div>
                     </div>
-
-                    <button class="btn btn-primary btn-sm" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">
-                        Senden ✈️
-                    </button>
                 </div>
             `;
             container.innerHTML += replyForm;
         } else {
             container.innerHTML += `
-                <div class="alert alert-warning mt-4 text-center">
-                    Bitte <a href="#" onclick="document.getElementById('btn-switch-mode').click()" data-bs-toggle="modal" data-bs-target="#authModal">einloggen</a>, um zu antworten.
+                <div class="alert alert-info mt-4 text-center shadow-sm border-0">
+                    Willst du mitreden? Jetzt <a href="#" class="fw-bold" onclick="document.getElementById('btn-switch-mode').click()" data-bs-toggle="modal" data-bs-target="#authModal">einloggen</a>.
                 </div>
             `;
         }
@@ -843,39 +880,6 @@ window.renderThreadDetail = async function(threadId, topicName) {
     } catch (error) {
         console.error(error);
         container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden des Beitrags.</div>';
-    }
-};
-
-// HELPER: Antwort absenden
-window.sendReply = async function(threadId, topic) {
-    const text = document.getElementById('replyText').value;
-    if (!text.trim()) return alert("Bitte Text eingeben!");
-
-    const btn = document.querySelector('button[onclick^="sendReply"]');
-    if(btn) { btn.disabled = true; btn.innerText = "Sende..."; }
-
-    try {
-        const replyData = {
-            id: threadId,
-            topic: topic,
-            text: text,
-            user: currentUser.displayName || "Unbekannt"
-        };
-
-        const response = await fetch(`${API_URL}/reply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(replyData)
-        });
-
-        if (response.ok) {
-            renderThreadDetail(threadId, topic);
-        } else {
-            throw new Error("Fehler beim Senden");
-        }
-    } catch (err) {
-        alert(err.message);
-        if(btn) { btn.disabled = false; btn.innerText = "Senden ✈️"; }
     }
 };
 

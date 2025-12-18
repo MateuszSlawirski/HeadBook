@@ -30,7 +30,8 @@ app.http('createThread', {
                 text: data.text || "",   // Der eigentliche Text
                 user: data.user,
                 replies: 0,
-                date: new Date().toISOString().split('T')[0] // Heute (YYYY-MM-DD)
+                date: new Date().toISOString().split('T')[0], // Heute (YYYY-MM-DD)
+                createdAt: new Date().toISOString()
             };
 
             // 4. In die Datenbank speichern
