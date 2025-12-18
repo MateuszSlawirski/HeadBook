@@ -13,6 +13,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const API_URL = "/api"; 
+// const API_URL = "http://localhost:7071/api"; // Nur zum lokalen Testen aktivieren!
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
@@ -21,6 +23,7 @@ let currentUser = null;
 let currentRole = "guest"; 
 let map = null;
 let markers = []; 
+let currentForumTopic = null; // <--- WICHTIG FÜR DAS FORUM
 
 /* ==========================================
    APP START
@@ -29,10 +32,8 @@ let markers = [];
 document.addEventListener('DOMContentLoaded', () => {
     console.log("🚀 SPA startet...");
 
-    // Initial Map Setup (auch wenn versteckt)
     initMap();
 
-    // Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         if (user) {
@@ -40,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await syncUserWithBackend(user); 
         } else {
             currentRole = "guest";
-            // Wer ausgeloggt ist, darf Profil nicht sehen -> Ab nach Hause
             if (getActivePage() === 'profile') {
                 navigateTo('home');
             }
@@ -49,42 +49,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadToursFromServer();
-    loadForumData(); // <--- Forum starten!
+    loadForumData(); 
     setupEventListeners();
     
-    // Startseite laden (oder das was im Hash steht)
     const startPage = window.location.hash.replace('#', '') || 'home';
     navigateTo(startPage);
 });
 
 /* ==========================================
-   ROUTER (DAS HERZSTÜCK FÜR KEIN FLACKERN)
+   ROUTER
    ========================================== */
 
 function navigateTo(pageId) {
-    // 1. Alle Seiten verstecken
-    document.querySelectorAll('.page-section').forEach(el => {
-        el.classList.remove('active');
-    });
+    document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
 
-    // 2. Nav-Links deaktivieren
-    document.querySelectorAll('.nav-link').forEach(el => {
-        el.classList.remove('active');
-    });
-
-    // 3. Gewünschte Seite anzeigen
     const target = document.getElementById(`page-${pageId}`);
     if (target) {
         target.classList.add('active');
-        
-        // Menüpunkt aktiv setzen
         const navLink = document.getElementById(`nav-${pageId}`);
         if(navLink) navLink.classList.add('active');
-
-        // URL anpassen (ohne Reload)
         window.location.hash = pageId;
 
-        // SPEZIALBEHANDLUNG: Wenn Touren angezeigt werden, Karte aktualisieren!
         if (pageId === 'tours' && map) {
             setTimeout(() => { map.invalidateSize(); }, 100);
         }
@@ -94,8 +80,6 @@ function navigateTo(pageId) {
 function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
-
-// Global verfügbar machen für HTML onclicks
 window.navigateTo = navigateTo;
 
 /* ==========================================
@@ -125,13 +109,12 @@ function updateUI() {
     const addTourBtn = document.querySelector('#add-tour-btn');
 
     if (currentUser) {
-        // LOGGED IN
         if(authBtn) authBtn.style.display = 'none'; 
         if(logoutBtn) logoutBtn.style.display = 'block';
 
         secureLinks.forEach(link => {
             link.classList.remove('d-none');
-            link.style.display = ''; // Reset style
+            link.style.display = ''; 
         });
 
         if(userInfo) {
@@ -141,19 +124,14 @@ function updateUI() {
             if(currentRole === 'admin') roleBadge = '<span class="badge bg-danger">ADMIN</span>';
             userInfo.innerHTML = `Hallo, <b>${displayName}</b> ${roleBadge}`;
         }
-
         if(addTourBtn) addTourBtn.style.display = 'block';
         fillProfilePageData();
     } else {
-        // GAST
         if(authBtn) authBtn.style.display = 'block';     
         if(logoutBtn) logoutBtn.style.display = 'none';  
         if(userInfo) userInfo.style.display = 'none';    
-        
         secureLinks.forEach(link => link.classList.add('d-none'));
         if(addTourBtn) addTourBtn.style.display = 'none';
-        
-        // Wenn man auf einer geschützten Seite war, weg da
         if (getActivePage() === 'profile') navigateTo('home');
     }
 }
@@ -161,7 +139,6 @@ function updateUI() {
 function fillProfilePageData() {
     const nameDisplay = document.getElementById('profile-display-name');
     const emailDisplay = document.getElementById('profile-email-display');
-    
     if(currentUser) {
         if(nameDisplay) nameDisplay.innerText = currentUser.displayName || "Biker";
         if(emailDisplay) emailDisplay.innerText = currentUser.email;
@@ -176,11 +153,11 @@ function showDeleteButtons() {
 }
 
 /* ==========================================
-   BUTTONS & FORMS
+   BUTTONS & FORMS (HIER WAR DER FEHLER)
    ========================================== */
 
 function setupEventListeners() {
-    // Logout
+    // 1. LOGOUT
     const btnLogout = document.getElementById('logout-btn');
     if(btnLogout) {
         btnLogout.addEventListener('click', async () => {
@@ -189,7 +166,7 @@ function setupEventListeners() {
         });
     }
 
-    // Modal Logic
+    // 2. LOGIN / REGISTER SWITCH
     const switchBtn = document.getElementById('btn-switch-mode');
     const nameContainer = document.getElementById('authNameContainer');
     const submitBtn = document.getElementById('btn-submit-auth');
@@ -214,6 +191,7 @@ function setupEventListeners() {
         });
     }
 
+    // 3. AUTH SUBMIT
     if(authForm) {
         authForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -222,9 +200,63 @@ function setupEventListeners() {
         });
     }
 
+    // 4. TOUR HINZUFÜGEN
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
+
+    // 5. NEUER FORUM BEITRAG
+    const createThreadForm = document.getElementById('createThreadForm');
+    if (createThreadForm) {
+        createThreadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!currentUser) {
+                alert("Bitte logge dich erst ein!");
+                return;
+            }
+
+            const title = document.getElementById('threadTitle').value;
+            const text = document.getElementById('threadText').value;
+            const btn = e.target.querySelector('button');
+
+            btn.disabled = true;
+            btn.innerText = "Sende...";
+
+            try {
+                const newPost = {
+                    topic: currentForumTopic,
+                    title: title,
+                    text: text,
+                    user: currentUser.displayName || "Unbekannt"
+                };
+
+                const response = await fetch(`${API_URL}/threads`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newPost)
+                });
+
+                if (response.ok) {
+                    const modalEl = document.getElementById('createThreadModal');
+                    bootstrap.Modal.getInstance(modalEl).hide();
+                    e.target.reset();
+                    renderForumThreads(currentForumTopic);
+                } else {
+                    throw new Error("Fehler beim Speichern");
+                }
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Veröffentlichen";
+            }
+        });
+    }
 }
+
+/* ==========================================
+   HELPER FUNCTIONS (Register, Login, AddTour)
+   ========================================== */
 
 async function handleRegister() {
     const email = document.getElementById('authEmail').value;
@@ -343,6 +375,7 @@ function onCategoryChange() {
     const countrySelect = document.getElementById('filter-country');
     const stateSelect = document.getElementById('filter-state');
     const selectedCat = catSelect.value;
+    const selectedCountry = countrySelect.value; // Fix: Variable fehlte evtl.
 
     countrySelect.innerHTML = '<option value="all">--</option>';
     stateSelect.innerHTML = '<option value="all">--</option>';
@@ -466,32 +499,27 @@ function selectTourCard(tour) {
 }
 
 /* ==========================================
-   FORUM NAVIGATOR (Level 1 -> 2 -> 3)
+   FORUM LOGIK (Level 1 -> 2 -> 3)
    ========================================== */
 
-let allForumData = []; // Zwischenspeicher
+let allForumData = []; 
 
 async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
-    
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
-
     try {
         const response = await fetch(`${API_URL}/forum`);
         if (!response.ok) throw new Error("API Fehler");
         allForumData = await response.json();
-        
-        // Startseite anzeigen (Level 1)
         renderForumHome();
-
     } catch (error) {
         console.error(error);
         container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden.</div>';
     }
 }
 
-// LEVEL 1: Die Hauptübersicht
+// Level 1: Home
 window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
@@ -499,7 +527,7 @@ window.renderForumHome = function() {
     const backBtn = document.getElementById('forum-back-btn');
     const newThreadBtn = document.getElementById('new-thread-btn');
 
-    if(!title) return; // Falls User noch nicht auf Forum war
+    if(!title) return;
 
     title.innerText = "Community Forum";
     subtitle.innerText = "Wähle einen Bereich.";
@@ -523,7 +551,7 @@ window.renderForumHome = function() {
     });
 };
 
-// LEVEL 2: Unterkategorien
+// Level 2: Subcategories
 window.renderForumSubCategory = function(catId) {
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
@@ -559,35 +587,37 @@ window.renderForumSubCategory = function(catId) {
     }
 };
 
-// LEVEL 3: Threads (Echte Daten aus der DB)
+// Level 3: Threads
 window.renderForumThreads = async function(topicName) {
+    currentForumTopic = topicName; 
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
     const subtitle = document.getElementById('forum-subtitle');
     const backBtn = document.getElementById('forum-back-btn');
     const newThreadBtn = document.getElementById('new-thread-btn');
 
-    // UI Update
     title.innerText = topicName;
     subtitle.innerText = "Lade Diskussionen...";
+    
     backBtn.style.display = 'inline-block';
     backBtn.onclick = renderForumHome; 
-    newThreadBtn.style.display = 'inline-block';
     
-    // Spinner zeigen
+    newThreadBtn.style.display = 'inline-block';
+    newThreadBtn.onclick = () => {
+        const topicInput = document.getElementById('threadTopicDisplay');
+        if(topicInput) topicInput.value = currentForumTopic;
+        const modalEl = document.getElementById('createThreadModal');
+        if(modalEl) new bootstrap.Modal(modalEl).show();
+    };
+    
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
     try {
-        // HIER IST DER TRICK: Wir senden das Topic an die API
-        // encodeURIComponent sorgt dafür, dass Leerzeichen und Sonderzeichen (z.B. "&") kein Problem machen
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-        
         if (!response.ok) throw new Error("Netzwerk Fehler");
-        
         const threads = await response.json();
 
-        container.innerHTML = ''; // Liste leeren
-
+        container.innerHTML = ''; 
         if (threads.length === 0) {
             container.innerHTML = `
                 <div class="p-5 text-center text-muted">
@@ -599,8 +629,6 @@ window.renderForumThreads = async function(topicName) {
         }
 
         subtitle.innerText = `${threads.length} Diskussionen gefunden`;
-
-        // Die echten Threads anzeigen
         threads.forEach(thread => {
             const item = document.createElement('div');
             item.className = 'list-group-item py-3';
@@ -617,14 +645,15 @@ window.renderForumThreads = async function(topicName) {
             `;
             container.appendChild(item);
         });
-
     } catch (error) {
         console.error(error);
         container.innerHTML = '<div class="alert alert-danger">Konnte Beiträge nicht laden.</div>';
     }
 };
 
-// GLOBAL EXPORTS
+/* ==========================================
+   GLOBAL EXPORTS
+   ========================================== */
 window.deleteTour = async (id, event) => {
     event.stopPropagation();
     if(!confirm("Löschen?")) return;
