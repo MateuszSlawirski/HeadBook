@@ -541,8 +541,8 @@ async function loadForumData() {
             allThreadsCache = await threadResponse.json();
         }
 
-        // Falls wir gerade auf der Home-Seite sind, diese neu rendern
-        if (!document.getElementById('forum-back-btn').onclick) {
+        // KORREKTUR: Wir prüfen jetzt auf unsere Variablen, nicht auf den HTML-Button
+        if (!currentCategoryId && !currentForumTopic) {
             renderForumHome();
         }
     } catch (error) {
