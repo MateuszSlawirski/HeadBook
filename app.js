@@ -559,45 +559,68 @@ window.renderForumSubCategory = function(catId) {
     }
 };
 
-// LEVEL 3: Threads (Diskussionen)
-window.renderForumThreads = function(topicName) {
+// LEVEL 3: Threads (Echte Daten aus der DB)
+window.renderForumThreads = async function(topicName) {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
     const subtitle = document.getElementById('forum-subtitle');
     const backBtn = document.getElementById('forum-back-btn');
     const newThreadBtn = document.getElementById('new-thread-btn');
 
+    // UI Update
     title.innerText = topicName;
-    subtitle.innerText = "Aktuelle Diskussionen";
-    
+    subtitle.innerText = "Lade Diskussionen...";
     backBtn.style.display = 'inline-block';
     backBtn.onclick = renderForumHome; 
-    
     newThreadBtn.style.display = 'inline-block';
     
-    container.innerHTML = '';
+    // Spinner zeigen
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
-    // DEMO DATEN (Später aus Datenbank)
-    const fakeThreads = [
-        { title: "Welches Öl für die " + topicName + "?", user: "BikerMax", replies: 12 },
-        { title: "Treffen am Wochenende?", user: "GhostRider", replies: 5 }
-    ];
+    try {
+        // HIER IST DER TRICK: Wir senden das Topic an die API
+        // encodeURIComponent sorgt dafür, dass Leerzeichen und Sonderzeichen (z.B. "&") kein Problem machen
+        const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+        
+        if (!response.ok) throw new Error("Netzwerk Fehler");
+        
+        const threads = await response.json();
 
-    fakeThreads.forEach(thread => {
-        const item = document.createElement('div');
-        item.className = 'list-group-item py-3';
-        item.innerHTML = `
-            <div class="d-flex justify-content-between">
-                <h6 class="mb-1 fw-bold"><a href="#" class="text-decoration-none text-dark">${thread.title}</a></h6>
-                <small class="text-muted">${thread.replies} Antworten</small>
-            </div>
-            <small class="text-muted">Erstellt von ${thread.user}</small>
-        `;
-        container.appendChild(item);
-    });
+        container.innerHTML = ''; // Liste leeren
 
-    if (fakeThreads.length === 0) {
-        container.innerHTML = '<div class="p-4 text-center text-muted">Noch keine Beiträge. Sei der Erste!</div>';
+        if (threads.length === 0) {
+            container.innerHTML = `
+                <div class="p-5 text-center text-muted">
+                    <h5>Noch nichts los hier. 🦗</h5>
+                    <p>Sei der Erste, der etwas zu ${topicName} schreibt!</p>
+                </div>`;
+            subtitle.innerText = "Keine Beiträge";
+            return;
+        }
+
+        subtitle.innerText = `${threads.length} Diskussionen gefunden`;
+
+        // Die echten Threads anzeigen
+        threads.forEach(thread => {
+            const item = document.createElement('div');
+            item.className = 'list-group-item py-3';
+            item.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <h6 class="mb-1 fw-bold">
+                        <a href="#" class="text-decoration-none text-dark" onclick="alert('Hier geht es später zum Chat!')">
+                            ${thread.title}
+                        </a>
+                    </h6>
+                    <span class="badge bg-light text-dark border">${thread.replies || 0} Antw.</span>
+                </div>
+                <small class="text-muted">Erstellt von <b>${thread.user}</b> • ${thread.date || 'Heute'}</small>
+            `;
+            container.appendChild(item);
+        });
+
+    } catch (error) {
+        console.error(error);
+        container.innerHTML = '<div class="alert alert-danger">Konnte Beiträge nicht laden.</div>';
     }
 };
 
