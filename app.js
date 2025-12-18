@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadToursFromServer();
+    loadForumData();
     setupEventListeners();
     
     // Startseite laden (oder das was im Hash steht)
@@ -483,6 +484,74 @@ function selectTourCard(tour) {
             }
         }, 50);
     }, 50);
+}
+
+/* ==========================================
+   FORUM LOGIK (LÄDT DATEN AUS AZURE)
+   ========================================== */
+
+async function loadForumData() {
+    const container = document.getElementById('forum-container');
+    if(!container) return;
+
+    // Lade-Spinner anzeigen
+    container.innerHTML = `
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 small text-muted">Lade Community aus Azure...</p>
+        </div>
+    `;
+
+    try {
+        // Wir rufen deinen "Kellner" (API)
+        const response = await fetch(`${API_URL}/forum`);
+        
+        if (!response.ok) throw new Error("API Fehler");
+        
+        const categories = await response.json();
+        
+        // Menü bauen
+        renderForum(categories);
+
+    } catch (error) {
+        console.error(error);
+        container.innerHTML = `
+            <div class="alert alert-warning text-center m-3">
+                Keine Verbindung zur Datenbank.<br>
+                <small>${error.message}</small>
+            </div>`;
+    }
+}
+
+function renderForum(categories) {
+    const container = document.getElementById('forum-container');
+    container.innerHTML = ''; // Spinner weg
+
+    categories.forEach(cat => {
+        // HTML für eine Kategorie bauen
+        const itemHtml = `
+            <div class="accordion-item border-0 border-bottom">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${cat.id}">
+                        ${cat.title}
+                    </button>
+                </h2>
+                <div id="collapse-${cat.id}" class="accordion-collapse collapse" data-bs-parent="#forum-container">
+                    <div class="accordion-body p-0">
+                        <div class="list-group list-group-flush">
+                            ${cat.topics.map(topic => `
+                                <a href="#" class="list-group-item list-group-item-action py-3" onclick="alert('Öffne Thema: ${topic.title}')">
+                                    <h6 class="mb-1 fw-semibold">${topic.title}</h6>
+                                    <small class="text-muted">${topic.desc}</small>
+                                </a>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.innerHTML += itemHtml;
+    });
 }
 
 // GLOBAL EXPORTS
