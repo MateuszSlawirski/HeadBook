@@ -13,7 +13,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const API_URL = "/api"; 
-// const API_URL = "http://localhost:7071/api"; // Nur zum lokalen Testen aktivieren!
+// const API_URL = "http://localhost:7071/api"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -166,7 +166,7 @@ function setupEventListeners() {
         });
     }
 
-    // 2. LOGIN / REGISTER SWITCH
+    // 2. AUTH MODAL
     const switchBtn = document.getElementById('btn-switch-mode');
     const nameContainer = document.getElementById('authNameContainer');
     const submitBtn = document.getElementById('btn-submit-auth');
@@ -217,7 +217,7 @@ function setupEventListeners() {
 
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
-            const btn = e.target.querySelector('button');
+            const btn = e.target.querySelector('button[type="submit"]');
 
             btn.disabled = true;
             btn.innerText = "Sende...";
@@ -240,6 +240,10 @@ function setupEventListeners() {
                     const modalEl = document.getElementById('createThreadModal');
                     bootstrap.Modal.getInstance(modalEl).hide();
                     e.target.reset();
+                    
+                    // WICHTIG: Daten neu laden, damit der "neueste Thread" Cache aktualisiert wird
+                    await loadForumData(); 
+                    
                     renderForumThreads(currentForumTopic);
                 } else {
                     throw new Error("Fehler beim Speichern");
@@ -255,7 +259,7 @@ function setupEventListeners() {
 }
 
 /* ==========================================
-   HELPER FUNCTIONS (Register, Login, AddTour)
+   HELPER FUNCTIONS
    ========================================== */
 
 async function handleRegister() {
@@ -499,10 +503,10 @@ function selectTourCard(tour) {
 }
 
 /* ==========================================
-   HELPER: EMOJIS EINFÜGEN
+   HELPER: EMOJIS EINFÜGEN (Neu: Mit Ziel-ID)
    ========================================== */
-window.insertEmoji = function(emoji) {
-    const textarea = document.getElementById('threadText');
+window.insertEmoji = function(emoji, targetId = 'threadText') {
+    const textarea = document.getElementById(targetId);
     if (textarea) {
         textarea.value += emoji;
         textarea.focus();
@@ -510,7 +514,7 @@ window.insertEmoji = function(emoji) {
 };
 
 /* ==========================================
-   FORUM LOGIK (Level 1 -> 2 -> 3 -> 4)
+   FORUM LOGIK
    ========================================== */
 
 let allForumData = []; 
@@ -521,32 +525,37 @@ async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
     
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+    // Wir zeigen den Spinner nur, wenn es noch gar keine Daten gibt
+    if(allForumData.length === 0) {
+        container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+    }
     
     try {
-        // 1. Kategorien laden
         const catResponse = await fetch(`${API_URL}/forum`);
         if (!catResponse.ok) throw new Error("Kategorie-Fehler");
         allForumData = await catResponse.json();
 
-        // 2. ALLE Threads laden (für die Vorschau)
+        // Threads neu laden (für Cache Aktualisierung)
         const threadResponse = await fetch(`${API_URL}/threads`); 
         if (threadResponse.ok) {
             allThreadsCache = await threadResponse.json();
         }
 
-        renderForumHome();
+        // Falls wir gerade auf der Home-Seite sind, diese neu rendern
+        if (!document.getElementById('forum-back-btn').onclick) {
+            renderForumHome();
+        }
     } catch (error) {
         console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden.</div>';
+        if(allForumData.length === 0) {
+            container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden.</div>';
+        }
     }
 }
 
-// HELPER: Neuesten Thread finden & HTML bauen
+// HELPER: Neuesten Thread Vorschau (Vereinfacht)
 function getLatestPostHtml(filterFn, showTopicName = false) {
-    // Filtern
     const relevantThreads = allThreadsCache.filter(filterFn);
-    // Sortieren (Neueste zuerst)
     relevantThreads.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (relevantThreads.length === 0) {
@@ -555,13 +564,7 @@ function getLatestPostHtml(filterFn, showTopicName = false) {
 
     const last = relevantThreads[0];
     
-    // Text-Vorschau (max 50 Zeichen)
-    let snippet = last.text ? last.text.substring(0, 50) : "";
-    if (last.text && last.text.length > 50) snippet += "...";
-    if (!snippet) snippet = "Kein Text";
-
-    // Klick auf den Teaser öffnet direkt den Thread (Level 4)
-    // Wir nutzen event.stopPropagation(), damit nicht die Kategorie aufgeht
+    // Nur Titel, User, Datum (Kein Text-Schnipsel mehr, wie gewünscht)
     return `
         <div class="mt-2 p-2 bg-light rounded border start-0 border-start-3 border-primary" 
              style="cursor: pointer;"
@@ -569,10 +572,6 @@ function getLatestPostHtml(filterFn, showTopicName = false) {
             
             <div class="fw-bold text-dark text-truncate" style="font-size: 0.9rem;">
                 ${last.title}
-            </div>
-            
-            <div class="small text-muted mt-1">
-                "${snippet}"
             </div>
             
             <div class="small text-primary mt-1 d-flex justify-content-between">
@@ -600,33 +599,27 @@ window.renderForumHome = function() {
     subtitle.innerText = "Wähle einen Bereich.";
     
     backBtn.style.display = 'none';
+    backBtn.innerText = "⬅ Übersicht"; 
+    backBtn.onclick = null;
+
     newThreadBtn.style.display = 'none';
     container.innerHTML = '';
 
     allForumData.forEach(cat => {
-        // Logik: Finde Threads, deren Topic zu dieser Kategorie gehört
         const catTopicNames = cat.topics.map(t => t.title);
-        
-        // HTML für den neuesten Beitrag generieren
-        const latestHtml = getLatestPostHtml(
-            (t) => catTopicNames.includes(t.topic), 
-            true // Zeige auch den Topic-Namen an (z.B. "in BMW")
-        );
+        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic), true);
 
-        // WICHTIG: Wir nutzen <div> statt <a>, damit wir innen drin nochmal klicken können
         const item = document.createElement('div');
         item.className = 'list-group-item list-group-item-action py-3';
         item.style.cursor = 'pointer';
-        
-        // Klick auf die große Box -> Gehe zu Level 2 (Subkategorie)
         item.onclick = () => renderForumSubCategory(cat.id);
 
         item.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
-                <h5 class="mb-1 fw-bold text-dark">${cat.title}</h5>
+                <h5 class="mb-0 fw-bold text-dark">${cat.title}</h5>
                 <span class="text-muted">❯</span>
             </div>
-            <p class="mb-2 text-secondary small">${cat.desc || "Alle Themenbereiche"}</p>
+            <p class="mb-2 mt-1 text-secondary small">${cat.desc || "Themenbereiche und Diskussionen"}</p>
             
             ${latestHtml}
         `;
@@ -658,25 +651,19 @@ window.renderForumSubCategory = function(catId) {
 
     if (category.topics) {
         category.topics.forEach(topic => {
-            // HTML für den neuesten Beitrag in DIESEM Thema
-            const latestHtml = getLatestPostHtml(
-                (t) => t.topic === topic.title, 
-                false // Hier brauchen wir den Topic-Namen nicht, wir sind ja schon da
-            );
+            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title, false);
 
             const item = document.createElement('div');
             item.className = 'list-group-item list-group-item-action py-3';
             item.style.cursor = 'pointer';
-            
-            // Klick auf die große Box -> Gehe zu Level 3 (Thread Liste)
             item.onclick = () => renderForumThreads(topic.title);
 
             item.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="mb-1 fw-bold text-primary">${topic.title}</h6>
+                    <h6 class="mb-0 fw-bold text-primary">${topic.title}</h6>
                     <span class="text-muted">❯</span>
                 </div>
-                <p class="mb-2 text-muted small">${topic.desc}</p>
+                <p class="mb-2 mt-1 text-muted small">${topic.desc}</p>
                 
                 ${latestHtml}
             `;
@@ -737,16 +724,12 @@ window.renderForumThreads = async function(topicName) {
         }
 
         subtitle.innerText = `${threads.length} Diskussionen gefunden`;
-        
-        // Sortieren: Neueste zuerst
         threads.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         threads.forEach(thread => {
             const item = document.createElement('div');
             item.className = 'list-group-item py-3 list-group-item-action';
             item.style.cursor = 'pointer';
-            
-            // Klick auf den Thread -> Öffnet Detail
             item.onclick = () => renderThreadDetail(thread.id, thread.topic);
 
             item.innerHTML = `
@@ -755,7 +738,6 @@ window.renderForumThreads = async function(topicName) {
                     <span class="badge bg-light text-dark border">${thread.replies || 0} Antw.</span>
                 </div>
                 <small class="text-muted">Erstellt von <b>${thread.user}</b> • ${thread.date || 'Heute'}</small>
-                <p class="text-secondary small mt-1 mb-0 text-truncate">${thread.text || ''}</p>
             `;
             container.appendChild(item);
         });
@@ -826,12 +808,24 @@ window.renderThreadDetail = async function(threadId, topicName) {
             container.innerHTML += `<div class="text-center text-muted small my-4">Noch keine Antworten.</div>`;
         }
 
-        // C) Antwort-Formular
+        // C) Antwort-Formular mit Emojis
         if (currentUser) {
             const replyForm = `
                 <div class="mt-4 pt-3 border-top">
                     <h6 class="fw-bold mb-3">Antworten</h6>
                     <textarea id="replyText" class="form-control mb-2" rows="3" placeholder="Schreibe eine Antwort..."></textarea>
+                    
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😀', 'replyText')">😀</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😂', 'replyText')">😂</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😍', 'replyText')">😍</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😎', 'replyText')">😎</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🤔', 'replyText')">🤔</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('👍', 'replyText')">👍</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
+                        <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🔧', 'replyText')">🔧</button>
+                    </div>
+
                     <button class="btn btn-primary btn-sm" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">
                         Senden ✈️
                     </button>
@@ -886,7 +880,7 @@ window.sendReply = async function(threadId, topic) {
 };
 
 /* ==========================================
-   GLOBAL EXPORTS (Dies muss am Ende bleiben)
+   GLOBAL EXPORTS
    ========================================== */
 window.deleteTour = async (id, event) => {
     event.stopPropagation();
