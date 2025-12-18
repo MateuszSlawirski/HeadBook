@@ -152,20 +152,26 @@
             </div> 
         </section>
 
-        <section id="page-forum" class="page-section">
-    <div class="text-center mb-4">
-        <h1 class="fw-bold">Community Forum</h1>
-        <p class="text-muted">Wähle eine Kategorie, um die Foren zu sehen.</p>
+       <section id="page-forum" class="page-section">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <button id="forum-back-btn" class="btn btn-outline-secondary btn-sm mb-2" style="display:none;" onclick="renderForumHome()">
+                ⬅ Übersicht
+            </button>
+            <h1 class="fw-bold" id="forum-title">Community Forum</h1>
+            <p class="text-muted" id="forum-subtitle">Wähle eine Kategorie.</p>
+        </div>
+        <button id="new-thread-btn" class="btn btn-primary" style="display:none;" onclick="alert('Hier kommt das Formular für neue Threads!')">
+            + Neuer Beitrag
+        </button>
     </div>
 
-    <div id="forum-container" class="accordion shadow-sm border-0 rounded overflow-hidden">
+    <div id="forum-container" class="list-group shadow-sm">
         <div class="text-center p-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 small text-muted">Lade Kategorien aus Azure...</p>
+            <div class="spinner-border text-primary"></div>
         </div>
     </div>
 </section>
-
         <section id="page-profile" class="page-section">
             <div class="profile-header">
                 <div class="cover-photo"></div>

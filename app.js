@@ -9,7 +9,6 @@ import {
     signInWithEmailAndPassword, 
     onAuthStateChanged, 
     signOut,
-    sendEmailVerification,
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -50,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadToursFromServer();
-    loadForumData();
+    loadForumData(); // <--- Forum starten!
     setupEventListeners();
     
     // Startseite laden (oder das was im Hash steht)
@@ -300,7 +299,7 @@ async function handleAddTour(e) {
 }
 
 /* ==========================================
-   DATEN & FILTER
+   DATEN & FILTER (TOUREN)
    ========================================== */
 
 async function loadToursFromServer() {
@@ -312,8 +311,6 @@ async function loadToursFromServer() {
     } catch (error) {
         console.warn("API Offline, leere Liste.");
     } finally {
-        // initMap() wird jetzt beim Seitenstart gerufen, 
-        // hier updaten wir nur Filter und Liste
         initFilters();  
         filterTours();  
     }
@@ -459,132 +456,150 @@ function renderTours(data) {
 }
 
 function selectTourCard(tour) {
-    // 1. Erstmal zur Touren-Seite wechseln, falls man woanders ist
     navigateTo('tours');
-
     const catSelect = document.getElementById('filter-category');
-    const countrySelect = document.getElementById('filter-country');
-    const stateSelect = document.getElementById('filter-state');
-
     if(tour.coords && map) map.flyTo(tour.coords, 10);
-
     if(tour.category) {
         catSelect.value = tour.category;
         onCategoryChange(); 
     }
-    setTimeout(() => {
-        if(tour.country) {
-            countrySelect.value = tour.country;
-            onCountryChange(); 
-        }
-        setTimeout(() => {
-            if(tour.state) {
-                stateSelect.value = tour.state;
-                filterTours();
-            }
-        }, 50);
-    }, 50);
 }
 
 /* ==========================================
-   FORUM LOGIK (LÄDT DATEN AUS AZURE)
+   FORUM NAVIGATOR (Level 1 -> 2 -> 3)
    ========================================== */
+
+let allForumData = []; // Zwischenspeicher
 
 async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
-
-    // Lade-Spinner anzeigen
-    container.innerHTML = `
-        <div class="text-center p-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 small text-muted">Lade Community aus Azure...</p>
-        </div>
-    `;
+    
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
     try {
-        // Wir rufen deinen "Kellner" (API)
         const response = await fetch(`${API_URL}/forum`);
-        
         if (!response.ok) throw new Error("API Fehler");
+        allForumData = await response.json();
         
-        const categories = await response.json();
-        
-        // Menü bauen
-        renderForum(categories);
+        // Startseite anzeigen (Level 1)
+        renderForumHome();
 
     } catch (error) {
         console.error(error);
-        container.innerHTML = `
-            <div class="alert alert-warning text-center m-3">
-                Keine Verbindung zur Datenbank.<br>
-                <small>${error.message}</small>
-            </div>`;
+        container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden.</div>';
     }
 }
 
-function renderForum(categories) {
+// LEVEL 1: Die Hauptübersicht
+window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
-    container.innerHTML = ''; // Spinner weg
+    const title = document.getElementById('forum-title');
+    const subtitle = document.getElementById('forum-subtitle');
+    const backBtn = document.getElementById('forum-back-btn');
+    const newThreadBtn = document.getElementById('new-thread-btn');
 
-    categories.forEach((cat, catIndex) => {
-        // HTML für eine Kategorie bauen
-        const itemHtml = `
-            <div class="accordion-item border-0 border-bottom">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${cat.id}">
-                        ${cat.title}
-                    </button>
-                </h2>
-                <div id="collapse-${cat.id}" class="accordion-collapse collapse" data-bs-parent="#forum-container">
-                    <div class="accordion-body p-0">
-                        <div class="list-group list-group-flush">
-                            ${cat.topics.map((topic, topicIndex) => {
-                                // Eindeutige ID für das Untermenü generieren
-                                const subId = `sub-${cat.id}-${topicIndex}`;
-                                
-                                // FALL A: Es gibt Unterkategorien (z.B. BMW, KTM...)
-                                if (topic.subtopics && topic.subtopics.length > 0) {
-                                    return `
-                                        <div class="list-group-item py-3">
-                                            <div class="d-flex justify-content-between align-items-center" 
-                                                 style="cursor:pointer" 
-                                                 data-bs-toggle="collapse" 
-                                                 data-bs-target="#${subId}">
-                                                <div>
-                                                    <h6 class="mb-1 fw-semibold text-primary">${topic.title}</h6>
-                                                    <small class="text-muted">${topic.desc}</small>
-                                                </div>
-                                                <small>▼</small>
-                                            </div>
-                                            <div class="collapse mt-2 ps-3 border-start" id="${subId}">
-                                                ${topic.subtopics.map(sub => `
-                                                    <a href="#" class="d-block py-1 text-decoration-none text-secondary" onclick="alert('Gehe zu: ${sub.title}')">
-                                                        • ${sub.title}
-                                                    </a>
-                                                `).join('')}
-                                            </div>
-                                        </div>
-                                    `;
-                                } 
-                                // FALL B: Ganz normales Thema ohne Untermenü
-                                else {
-                                    return `
-                                        <a href="#" class="list-group-item list-group-item-action py-3" onclick="alert('Öffne Thema: ${topic.title}')">
-                                            <h6 class="mb-1 fw-semibold">${topic.title}</h6>
-                                            <small class="text-muted">${topic.desc || ''}</small>
-                                        </a>
-                                    `;
-                                }
-                            }).join('')}
-                        </div>
-                    </div>
-                </div>
+    if(!title) return; // Falls User noch nicht auf Forum war
+
+    title.innerText = "Community Forum";
+    subtitle.innerText = "Wähle einen Bereich.";
+    backBtn.style.display = 'none';
+    newThreadBtn.style.display = 'none';
+    container.innerHTML = '';
+
+    allForumData.forEach(cat => {
+        const item = document.createElement('a');
+        item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
+        item.style.cursor = 'pointer';
+        item.innerHTML = `
+            <div>
+                <h5 class="mb-1 fw-bold">${cat.title}</h5>
+                <small class="text-muted">Kategorien anzeigen</small>
             </div>
+            <span class="text-muted">❯</span>
         `;
-        container.innerHTML += itemHtml;
+        item.onclick = () => renderForumSubCategory(cat.id);
+        container.appendChild(item);
     });
-}
+};
+
+// LEVEL 2: Unterkategorien
+window.renderForumSubCategory = function(catId) {
+    const category = allForumData.find(c => c.id === catId);
+    if (!category) return;
+
+    const container = document.getElementById('forum-container');
+    const title = document.getElementById('forum-title');
+    const subtitle = document.getElementById('forum-subtitle');
+    const backBtn = document.getElementById('forum-back-btn');
+    const newThreadBtn = document.getElementById('new-thread-btn');
+
+    title.innerText = category.title;
+    subtitle.innerText = "Wähle ein Thema.";
+    backBtn.style.display = 'inline-block';
+    backBtn.onclick = renderForumHome;
+    newThreadBtn.style.display = 'none';
+    container.innerHTML = '';
+
+    if (category.topics) {
+        category.topics.forEach(topic => {
+            const item = document.createElement('a');
+            item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
+            item.style.cursor = 'pointer';
+            item.innerHTML = `
+                <div>
+                    <h6 class="mb-1 fw-bold text-primary">${topic.title}</h6>
+                    <small class="text-muted">${topic.desc}</small>
+                </div>
+                <span class="text-muted">❯</span>
+            `;
+            item.onclick = () => renderForumThreads(topic.title);
+            container.appendChild(item);
+        });
+    }
+};
+
+// LEVEL 3: Threads (Diskussionen)
+window.renderForumThreads = function(topicName) {
+    const container = document.getElementById('forum-container');
+    const title = document.getElementById('forum-title');
+    const subtitle = document.getElementById('forum-subtitle');
+    const backBtn = document.getElementById('forum-back-btn');
+    const newThreadBtn = document.getElementById('new-thread-btn');
+
+    title.innerText = topicName;
+    subtitle.innerText = "Aktuelle Diskussionen";
+    
+    backBtn.style.display = 'inline-block';
+    backBtn.onclick = renderForumHome; 
+    
+    newThreadBtn.style.display = 'inline-block';
+    
+    container.innerHTML = '';
+
+    // DEMO DATEN (Später aus Datenbank)
+    const fakeThreads = [
+        { title: "Welches Öl für die " + topicName + "?", user: "BikerMax", replies: 12 },
+        { title: "Treffen am Wochenende?", user: "GhostRider", replies: 5 }
+    ];
+
+    fakeThreads.forEach(thread => {
+        const item = document.createElement('div');
+        item.className = 'list-group-item py-3';
+        item.innerHTML = `
+            <div class="d-flex justify-content-between">
+                <h6 class="mb-1 fw-bold"><a href="#" class="text-decoration-none text-dark">${thread.title}</a></h6>
+                <small class="text-muted">${thread.replies} Antworten</small>
+            </div>
+            <small class="text-muted">Erstellt von ${thread.user}</small>
+        `;
+        container.appendChild(item);
+    });
+
+    if (fakeThreads.length === 0) {
+        container.innerHTML = '<div class="p-4 text-center text-muted">Noch keine Beiträge. Sei der Erste!</div>';
+    }
+};
 
 // GLOBAL EXPORTS
 window.deleteTour = async (id, event) => {
