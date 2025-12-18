@@ -527,7 +527,7 @@ function renderForum(categories) {
     const container = document.getElementById('forum-container');
     container.innerHTML = ''; // Spinner weg
 
-    categories.forEach(cat => {
+    categories.forEach((cat, catIndex) => {
         // HTML für eine Kategorie bauen
         const itemHtml = `
             <div class="accordion-item border-0 border-bottom">
@@ -539,12 +539,44 @@ function renderForum(categories) {
                 <div id="collapse-${cat.id}" class="accordion-collapse collapse" data-bs-parent="#forum-container">
                     <div class="accordion-body p-0">
                         <div class="list-group list-group-flush">
-                            ${cat.topics.map(topic => `
-                                <a href="#" class="list-group-item list-group-item-action py-3" onclick="alert('Öffne Thema: ${topic.title}')">
-                                    <h6 class="mb-1 fw-semibold">${topic.title}</h6>
-                                    <small class="text-muted">${topic.desc}</small>
-                                </a>
-                            `).join('')}
+                            ${cat.topics.map((topic, topicIndex) => {
+                                // Eindeutige ID für das Untermenü generieren
+                                const subId = `sub-${cat.id}-${topicIndex}`;
+                                
+                                // FALL A: Es gibt Unterkategorien (z.B. BMW, KTM...)
+                                if (topic.subtopics && topic.subtopics.length > 0) {
+                                    return `
+                                        <div class="list-group-item py-3">
+                                            <div class="d-flex justify-content-between align-items-center" 
+                                                 style="cursor:pointer" 
+                                                 data-bs-toggle="collapse" 
+                                                 data-bs-target="#${subId}">
+                                                <div>
+                                                    <h6 class="mb-1 fw-semibold text-primary">${topic.title}</h6>
+                                                    <small class="text-muted">${topic.desc}</small>
+                                                </div>
+                                                <small>▼</small>
+                                            </div>
+                                            <div class="collapse mt-2 ps-3 border-start" id="${subId}">
+                                                ${topic.subtopics.map(sub => `
+                                                    <a href="#" class="d-block py-1 text-decoration-none text-secondary" onclick="alert('Gehe zu: ${sub.title}')">
+                                                        • ${sub.title}
+                                                    </a>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    `;
+                                } 
+                                // FALL B: Ganz normales Thema ohne Untermenü
+                                else {
+                                    return `
+                                        <a href="#" class="list-group-item list-group-item-action py-3" onclick="alert('Öffne Thema: ${topic.title}')">
+                                            <h6 class="mb-1 fw-semibold">${topic.title}</h6>
+                                            <small class="text-muted">${topic.desc || ''}</small>
+                                        </a>
+                                    `;
+                                }
+                            }).join('')}
                         </div>
                     </div>
                 </div>
