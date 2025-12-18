@@ -514,8 +514,8 @@ window.insertEmoji = function(emoji) {
    ========================================== */
 
 let allForumData = []; 
-let allThreadsCache = []; // Wir speichern alle Threads, um "Letzte Beiträge" anzuzeigen
-let currentCategoryId = null; // Merkt sich Level 2 für den Zurück-Button
+let allThreadsCache = []; 
+let currentCategoryId = null; 
 
 async function loadForumData() {
     const container = document.getElementById('forum-container');
@@ -529,8 +529,7 @@ async function loadForumData() {
         if (!catResponse.ok) throw new Error("Kategorie-Fehler");
         allForumData = await catResponse.json();
 
-        // 2. ALLE Threads laden (für die Vorschau auf der Startseite)
-        // Wir holen einfach alle (ohne ?topic=...), damit wir suchen können
+        // 2. ALLE Threads laden (für die Vorschau)
         const threadResponse = await fetch(`${API_URL}/threads`); 
         if (threadResponse.ok) {
             allThreadsCache = await threadResponse.json();
@@ -543,7 +542,51 @@ async function loadForumData() {
     }
 }
 
-// LEVEL 1: Hauptübersicht (Mit Vorschau des letzten Posts)
+// HELPER: Neuesten Thread finden & HTML bauen
+function getLatestPostHtml(filterFn, showTopicName = false) {
+    // Filtern
+    const relevantThreads = allThreadsCache.filter(filterFn);
+    // Sortieren (Neueste zuerst)
+    relevantThreads.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (relevantThreads.length === 0) {
+        return '<div class="mt-2 p-2 bg-light rounded text-muted small">Noch keine Beiträge</div>';
+    }
+
+    const last = relevantThreads[0];
+    
+    // Text-Vorschau (max 50 Zeichen)
+    let snippet = last.text ? last.text.substring(0, 50) : "";
+    if (last.text && last.text.length > 50) snippet += "...";
+    if (!snippet) snippet = "Kein Text";
+
+    // Klick auf den Teaser öffnet direkt den Thread (Level 4)
+    // Wir nutzen event.stopPropagation(), damit nicht die Kategorie aufgeht
+    return `
+        <div class="mt-2 p-2 bg-light rounded border start-0 border-start-3 border-primary" 
+             style="cursor: pointer;"
+             onclick="event.stopPropagation(); renderThreadDetail('${last.id}', '${last.topic}')">
+            
+            <div class="fw-bold text-dark text-truncate" style="font-size: 0.9rem;">
+                ${last.title}
+            </div>
+            
+            <div class="small text-muted mt-1">
+                "${snippet}"
+            </div>
+            
+            <div class="small text-primary mt-1 d-flex justify-content-between">
+                <span>
+                    Von <b>${last.user}</b> 
+                    ${showTopicName ? ` in <em>${last.topic}</em>` : ''}
+                </span>
+                <span>${last.date || ''}</span>
+            </div>
+        </div>
+    `;
+}
+
+// LEVEL 1: Hauptübersicht
 window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
@@ -556,53 +599,44 @@ window.renderForumHome = function() {
     title.innerText = "Community Forum";
     subtitle.innerText = "Wähle einen Bereich.";
     
-    // Auf Level 1 gibt es keine Zurück-Buttons
     backBtn.style.display = 'none';
-    backBtn.innerText = "⬅ Übersicht"; 
-    backBtn.onclick = null;
-
     newThreadBtn.style.display = 'none';
     container.innerHTML = '';
 
     allForumData.forEach(cat => {
-        // Suche den allerneuesten Thread für diese Kategorie
-        let latestThreadInfo = '<small class="text-muted">Noch keine Beiträge</small>';
-        
-        // Wir suchen Threads, deren Topic in dieser Kategorie vorkommt
-        // Dazu sammeln wir alle Topic-Namen dieser Kategorie
+        // Logik: Finde Threads, deren Topic zu dieser Kategorie gehört
         const catTopicNames = cat.topics.map(t => t.title);
         
-        // Filtern: Threads die zu dieser Kategorie gehören
-        const catThreads = allThreadsCache.filter(t => catTopicNames.includes(t.topic));
-        
-        // Sortieren: Neueste zuerst (wir nehmen an, das Datum ist YYYY-MM-DD, das lässt sich gut sortieren)
-        catThreads.sort((a, b) => new Date(b.date) - new Date(a.date));
+        // HTML für den neuesten Beitrag generieren
+        const latestHtml = getLatestPostHtml(
+            (t) => catTopicNames.includes(t.topic), 
+            true // Zeige auch den Topic-Namen an (z.B. "in BMW")
+        );
 
-        if (catThreads.length > 0) {
-            const last = catThreads[0];
-            // Text kürzen, falls zu lang
-            const shortTitle = last.title.length > 30 ? last.title.substring(0, 30) + "..." : last.title;
-            latestThreadInfo = `<small class="text-primary fw-bold">Neu: ${shortTitle}</small> <small class="text-muted">(${last.date})</small>`;
-        }
-
-        const item = document.createElement('a');
-        item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
+        // WICHTIG: Wir nutzen <div> statt <a>, damit wir innen drin nochmal klicken können
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-group-item-action py-3';
         item.style.cursor = 'pointer';
-        item.innerHTML = `
-            <div>
-                <h5 class="mb-1 fw-bold">${cat.title}</h5>
-                ${latestThreadInfo}
-            </div>
-            <span class="text-muted">❯</span>
-        `;
+        
+        // Klick auf die große Box -> Gehe zu Level 2 (Subkategorie)
         item.onclick = () => renderForumSubCategory(cat.id);
+
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-1 fw-bold text-dark">${cat.title}</h5>
+                <span class="text-muted">❯</span>
+            </div>
+            <p class="mb-2 text-secondary small">${cat.desc || "Alle Themenbereiche"}</p>
+            
+            ${latestHtml}
+        `;
         container.appendChild(item);
     });
 };
 
-// LEVEL 2: Unterkategorien (z.B. Liste der Marken)
+// LEVEL 2: Unterkategorien
 window.renderForumSubCategory = function(catId) {
-    currentCategoryId = catId; // Merken für später!
+    currentCategoryId = catId;
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
 
@@ -615,7 +649,6 @@ window.renderForumSubCategory = function(catId) {
     title.innerText = category.title;
     subtitle.innerText = "Wähle ein Thema.";
     
-    // Button: Zurück zur Übersicht
     backBtn.style.display = 'inline-block';
     backBtn.innerText = "⬅ Übersicht";
     backBtn.onclick = renderForumHome;
@@ -625,29 +658,34 @@ window.renderForumSubCategory = function(catId) {
 
     if (category.topics) {
         category.topics.forEach(topic => {
-            // Zählen wie viele Beiträge es gibt (aus dem Cache)
-            const count = allThreadsCache.filter(t => t.topic === topic.title).length;
-            
-            const item = document.createElement('a');
-            item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
+            // HTML für den neuesten Beitrag in DIESEM Thema
+            const latestHtml = getLatestPostHtml(
+                (t) => t.topic === topic.title, 
+                false // Hier brauchen wir den Topic-Namen nicht, wir sind ja schon da
+            );
+
+            const item = document.createElement('div');
+            item.className = 'list-group-item list-group-item-action py-3';
             item.style.cursor = 'pointer';
-            item.innerHTML = `
-                <div>
-                    <h6 class="mb-1 fw-bold text-primary">${topic.title}</h6>
-                    <small class="text-muted">${topic.desc}</small>
-                </div>
-                <div class="text-end">
-                    <span class="badge bg-light text-dark border">${count} Beiträge</span>
-                    <span class="text-muted ms-2">❯</span>
-                </div>
-            `;
+            
+            // Klick auf die große Box -> Gehe zu Level 3 (Thread Liste)
             item.onclick = () => renderForumThreads(topic.title);
+
+            item.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-1 fw-bold text-primary">${topic.title}</h6>
+                    <span class="text-muted">❯</span>
+                </div>
+                <p class="mb-2 text-muted small">${topic.desc}</p>
+                
+                ${latestHtml}
+            `;
             container.appendChild(item);
         });
     }
 };
 
-// LEVEL 3: Liste der Threads (Diskussionen)
+// LEVEL 3: Liste der Threads
 window.renderForumThreads = async function(topicName) {
     currentForumTopic = topicName; 
     const container = document.getElementById('forum-container');
@@ -659,8 +697,6 @@ window.renderForumThreads = async function(topicName) {
     title.innerText = topicName;
     subtitle.innerText = "Lade Diskussionen...";
     
-    // Button: Zurück zur Kategorie (Level 2)
-    // Wir schauen in allForumData, wie die Kategorie hieß, zu der wir gehören
     let parentCatName = "Zurück";
     if (currentCategoryId) {
         const parentCat = allForumData.find(c => c.id === currentCategoryId);
@@ -668,7 +704,7 @@ window.renderForumThreads = async function(topicName) {
     }
 
     backBtn.style.display = 'inline-block';
-    backBtn.innerText = parentCatName; // Dynamischer Text (z.B. "Zurück zu Bikes")
+    backBtn.innerText = parentCatName;
     backBtn.onclick = () => {
         if(currentCategoryId) renderForumSubCategory(currentCategoryId);
         else renderForumHome();
@@ -685,13 +721,9 @@ window.renderForumThreads = async function(topicName) {
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
     try {
-        // Daten neu laden (damit wir auch ganz frische sehen)
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
         if (!response.ok) throw new Error("Netzwerk Fehler");
         const threads = await response.json();
-
-        // Update Cache
-        // (Optional: Wir könnten den Cache hier aktualisieren, ist aber nicht zwingend)
 
         container.innerHTML = ''; 
         if (threads.length === 0) {
@@ -705,19 +737,25 @@ window.renderForumThreads = async function(topicName) {
         }
 
         subtitle.innerText = `${threads.length} Diskussionen gefunden`;
+        
+        // Sortieren: Neueste zuerst
+        threads.sort((a, b) => new Date(b.date) - new Date(a.date));
+
         threads.forEach(thread => {
             const item = document.createElement('div');
-            item.className = 'list-group-item py-3';
+            item.className = 'list-group-item py-3 list-group-item-action';
+            item.style.cursor = 'pointer';
+            
+            // Klick auf den Thread -> Öffnet Detail
+            item.onclick = () => renderThreadDetail(thread.id, thread.topic);
+
             item.innerHTML = `
                 <div class="d-flex justify-content-between">
-                    <h6 class="mb-1 fw-bold">
-                        <a href="#" class="text-decoration-none text-dark" onclick="renderThreadDetail('${thread.id}', '${thread.topic}')">
-                            ${thread.title}
-                        </a>
-                    </h6>
+                    <h6 class="mb-1 fw-bold text-dark">${thread.title}</h6>
                     <span class="badge bg-light text-dark border">${thread.replies || 0} Antw.</span>
                 </div>
                 <small class="text-muted">Erstellt von <b>${thread.user}</b> • ${thread.date || 'Heute'}</small>
+                <p class="text-secondary small mt-1 mb-0 text-truncate">${thread.text || ''}</p>
             `;
             container.appendChild(item);
         });
@@ -738,7 +776,6 @@ window.renderThreadDetail = async function(threadId, topicName) {
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
     newThreadBtn.style.display = 'none'; 
     
-    // Zurück-Button Logik: Zurück zur Liste der Threads (Level 3)
     backBtn.style.display = 'inline-block';
     backBtn.innerText = "⬅ Zurück zum Thema";
     backBtn.onclick = () => renderForumThreads(topicName);
