@@ -13,7 +13,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const API_URL = "/api"; 
-// const API_URL = "http://localhost:7071/api"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -241,9 +240,7 @@ function setupEventListeners() {
                     bootstrap.Modal.getInstance(modalEl).hide();
                     e.target.reset();
                     
-                    // WICHTIG: Daten neu laden, damit der "neueste Thread" Cache aktualisiert wird
                     await loadForumData(); 
-                    
                     renderForumThreads(currentForumTopic);
                 } else {
                     throw new Error("Fehler beim Speichern");
@@ -503,7 +500,7 @@ function selectTourCard(tour) {
 }
 
 /* ==========================================
-   HELPER: EMOJIS EINFÜGEN (Neu: Mit Ziel-ID)
+   HELPER: EMOJIS EINFÜGEN
    ========================================== */
 window.insertEmoji = function(emoji, targetId = 'threadText') {
     const textarea = document.getElementById(targetId);
@@ -514,7 +511,7 @@ window.insertEmoji = function(emoji, targetId = 'threadText') {
 };
 
 /* ==========================================
-   FORUM LOGIK (Level 1 -> 2 -> 3 -> 4)
+   FORUM LOGIK
    ========================================== */
 
 let allForumData = []; 
@@ -539,9 +536,7 @@ async function loadForumData() {
             allThreadsCache = await threadResponse.json();
         }
 
-        // Falls wir gerade auf der Home-Seite sind (kein Zurück-Button aktiv), neu malen
-        const backBtn = document.getElementById('forum-back-btn');
-        if (!backBtn || backBtn.style.display === 'none') {
+        if (!currentCategoryId && !currentForumTopic) {
             renderForumHome();
         }
     } catch (error) {
@@ -553,14 +548,14 @@ async function loadForumData() {
 }
 
 // HELPER: Neuesten Thread Vorschau-Box bauen
-function getLatestPostHtml(filterFn) {
+// NEU: showTopicName Parameter für die "in Kategorie"-Anzeige
+function getLatestPostHtml(filterFn, showTopicName = false) {
     const relevantThreads = allThreadsCache.filter(filterFn);
     
-    // Sortieren: Nutze createdAt (genau) falls vorhanden, sonst date (Tag)
     relevantThreads.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
         const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
-        return timeB - timeA; // Neueste zuerst
+        return timeB - timeA; 
     });
 
     if (relevantThreads.length === 0) {
@@ -572,7 +567,7 @@ function getLatestPostHtml(filterFn) {
 
     const last = relevantThreads[0];
     
-    // Design der "Letzter Beitrag" Box
+    // HIER IST DIE ÄNDERUNG (Kursiv, klein, darunter):
     return `
         <div class="p-3 bg-light rounded border start-0 border-start-3 border-primary position-relative hover-bg-gray" 
              style="cursor: pointer; transition: background 0.2s;"
@@ -589,12 +584,13 @@ function getLatestPostHtml(filterFn) {
             
             <div class="small text-muted">
                 von <span class="fw-semibold text-dark">${last.user}</span>
+                ${showTopicName ? `<div class="fst-italic text-secondary mt-1" style="font-size: 0.85em;">in ${last.topic}</div>` : ''}
             </div>
         </div>
     `;
 }
 
-// LEVEL 1: Hauptübersicht (KARTEN DESIGN)
+// LEVEL 1: Hauptübersicht
 window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
@@ -613,11 +609,11 @@ window.renderForumHome = function() {
 
     allForumData.forEach(cat => {
         const catTopicNames = cat.topics.map(t => t.title);
-        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic));
+        // HIER: true übergeben, damit "in Kategorie" angezeigt wird
+        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic), true);
 
-        // CARD DESIGN: Auf Desktop nebeneinander (Row/Col), auf Handy untereinander
         const item = document.createElement('div');
-        item.className = 'card mb-3 shadow-sm border-0 forum-card'; // CSS Klasse für Hover Effekte
+        item.className = 'card mb-3 shadow-sm border-0 forum-card';
         item.style.cursor = 'pointer';
         item.onclick = () => renderForumSubCategory(cat.id);
 
@@ -626,9 +622,9 @@ window.renderForumHome = function() {
                 <div class="row align-items-center">
                     <div class="col-md-7 mb-3 mb-md-0">
                         <div class="d-flex align-items-center mb-2">
-                            <h4 class="fw-bold text-primary mb-0 me-2">${cat.title}</h4>
+                            <h2 class="fw-bold text-primary mb-0 me-2 fs-2">${cat.title}</h2>
                         </div>
-                        <p class="text-secondary mb-0">
+                        <p class="text-secondary mb-0 small">
                             ${cat.desc || "Allgemeine Diskussionen und Themen."}
                         </p>
                     </div>
@@ -643,7 +639,7 @@ window.renderForumHome = function() {
     });
 };
 
-// LEVEL 2: Unterkategorien (KARTEN DESIGN)
+// LEVEL 2: Unterkategorien
 window.renderForumSubCategory = function(catId) {
     currentCategoryId = catId;
     const category = allForumData.find(c => c.id === catId);
@@ -660,7 +656,7 @@ window.renderForumSubCategory = function(catId) {
     
     backBtn.style.display = 'inline-block';
     backBtn.innerText = "⬅ Übersicht";
-    backBtn.className = "btn btn-outline-secondary btn-sm mb-2"; // Styling sicherstellen
+    backBtn.className = "btn btn-outline-secondary btn-sm mb-2"; 
     backBtn.onclick = renderForumHome;
     
     newThreadBtn.style.display = 'none';
@@ -668,7 +664,8 @@ window.renderForumSubCategory = function(catId) {
 
     if (category.topics) {
         category.topics.forEach(topic => {
-            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title);
+            // HIER: false übergeben, wir sind ja schon im Thema
+            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title, false);
 
             const item = document.createElement('div');
             item.className = 'card mb-3 shadow-sm border-0 forum-card';
@@ -747,7 +744,6 @@ window.renderForumThreads = async function(topicName) {
 
         subtitle.innerText = `${threads.length} Diskussionen gefunden`;
         
-        // Sortieren nach createdAt (genau) oder date (Tag)
         threads.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
             const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
@@ -826,7 +822,7 @@ window.renderThreadDetail = async function(threadId, topicName) {
         `;
         container.innerHTML += originalPost;
 
-        // B) Antworten Überschrift
+        // B) Antworten
         if (currentThread.repliesList && currentThread.repliesList.length > 0) {
             container.innerHTML += `<h6 class="text-muted mb-3 ms-2">Antworten (${currentThread.repliesList.length})</h6>`;
             
@@ -880,6 +876,39 @@ window.renderThreadDetail = async function(threadId, topicName) {
     } catch (error) {
         console.error(error);
         container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden des Beitrags.</div>';
+    }
+};
+
+// HELPER: Antwort absenden
+window.sendReply = async function(threadId, topic) {
+    const text = document.getElementById('replyText').value;
+    if (!text.trim()) return alert("Bitte Text eingeben!");
+
+    const btn = document.querySelector('button[onclick^="sendReply"]');
+    if(btn) { btn.disabled = true; btn.innerText = "Sende..."; }
+
+    try {
+        const replyData = {
+            id: threadId,
+            topic: topic,
+            text: text,
+            user: currentUser.displayName || "Unbekannt"
+        };
+
+        const response = await fetch(`${API_URL}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(replyData)
+        });
+
+        if (response.ok) {
+            renderThreadDetail(threadId, topic);
+        } else {
+            throw new Error("Fehler beim Senden");
+        }
+    } catch (err) {
+        alert(err.message);
+        if(btn) { btn.disabled = false; btn.innerText = "Senden ✈️"; }
     }
 };
 
