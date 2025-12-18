@@ -23,6 +23,8 @@ let currentRole = "guest";
 let map = null;
 let markers = []; 
 let currentForumTopic = null; 
+// Welche Haupt-Kategorien dürfen von Usern erweitert werden?
+const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
 /* ==========================================
    APP START
@@ -663,7 +665,7 @@ window.renderForumHome = function() {
     });
 };
 
-// LEVEL 2: Unterkategorien (TABLE LAYOUT)
+// LEVEL 2: Unterkategorien (z.B. BMW, Honda, Touren-Vorschläge)
 window.renderForumSubCategory = function(catId) {
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
@@ -671,8 +673,21 @@ window.renderForumSubCategory = function(catId) {
     renderBreadcrumbs([{ label: category.title, onclick: null }]); 
 
     const container = document.getElementById('forum-container');
+    
+    // PRÜFUNG: Darf der User hier eine neue Kategorie (z.B. neue Marke) anlegen?
+    let addCatBtn = "";
+    const isAllowed = USER_EDITABLE_CATEGORIES.includes(catId);
+    const isAdmin = (currentRole === 'admin');
+
+    if (currentUser && (isAllowed || isAdmin)) {
+        addCatBtn = `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>`;
+    }
+
     container.innerHTML = `
-        <h2 class="fw-bold mb-3">${category.title}</h2>
+        <div class="clearfix mb-3">
+            <h2 class="fw-bold float-start">${category.title}</h2>
+            ${addCatBtn}
+        </div>
         <div class="d-none d-md-flex forum-header-row">
             <div style="flex-grow:1;">Thema</div>
             <div style="width:100px; text-align:center;">Themen</div>
@@ -684,18 +699,12 @@ window.renderForumSubCategory = function(catId) {
     if (category.topics) {
         category.topics.forEach(topic => {
             const stats = getForumStats(t => t.topic === topic.title);
-            
-            let lastPostHtml = `<small class="text-muted">Leer</small>`;
-            if (stats.lastPost) {
-                lastPostHtml = `
-                    <div class="mt-1 small text-muted">
-                        Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
-                        <span class="text-secondary">(${stats.lastPost.date})</span>
-                    </div>
-                `;
-            }
+            let lastPostHtml = stats.lastPost ? `
+                <div class="mt-1 small text-muted">
+                    Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
+                    <span class="text-secondary">(${stats.lastPost.date})</span>
+                </div>` : `<small class="text-muted">Leer</small>`;
 
-            // HIER WAR DER FEHLER: '${category.id}' statt '${cat.id}'
             container.innerHTML += `
                 <div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')">
                     <div class="forum-icon">🔧</div>
@@ -704,24 +713,18 @@ window.renderForumSubCategory = function(catId) {
                         <p class="text-muted small mb-0">${topic.desc || ""}</p>
                         ${lastPostHtml}
                     </div>
-                    <div class="forum-stats d-none d-md-block">
-                        <div class="fw-bold">${stats.threadCount}</div>
-                    </div>
-                    <div class="forum-stats d-none d-md-block">
-                        <div class="fw-bold">${stats.postCount}</div>
-                    </div>
+                    <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div>
+                    <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div>
                     <div class="forum-arrow">❯</div>
-                </div>
-            `;
+                </div>`;
         });
     }
 };
 
-// LEVEL 3: Liste der Threads (TABLE LAYOUT)
+// LEVEL 3: Liste der Threads
 window.renderForumThreads = async function(topicName, catId) {
     currentForumTopic = topicName;
     
-    // Breadcrumb bauen
     let breadcrumbs = [];
     if(catId) {
         const cat = allForumData.find(c => c.id === catId);
@@ -732,35 +735,27 @@ window.renderForumThreads = async function(topicName, catId) {
 
     const container = document.getElementById('forum-container');
     
-    // Button "Neuer Beitrag" wieder sichtbar machen (aber an neuer Position oder oben)
-    const newBtn = document.getElementById('new-thread-btn');
-    if(newBtn) {
-        newBtn.style.display = 'block';
-        newBtn.className = "btn btn-danger float-end mb-3"; // Roter Button rechts
-        newBtn.innerHTML = "Neues Thema +";
-        newBtn.onclick = () => {
-            const topicInput = document.getElementById('threadTopicDisplay');
-            if(topicInput) topicInput.value = currentForumTopic;
-            const modalEl = document.getElementById('createThreadModal');
-            if(modalEl) new bootstrap.Modal(modalEl).show();
-        };
+    // BUTTON FIX: Der Button wird hier JEDES MAL neu erzeugt, nicht versteckt.
+    let newThreadBtn = "";
+    if (currentUser) {
+        newThreadBtn = `
+            <button class="btn btn-danger float-end" onclick="openNewThreadModal()">
+                Neues Thema +
+            </button>`;
     }
 
     container.innerHTML = `
-        <div class="clearfix">
+        <div class="clearfix mb-3">
             <h3 class="fw-bold float-start">${topicName}</h3>
-            </div>
-        <div class="forum-header-row mt-3 d-flex">
+            ${newThreadBtn}
+        </div>
+        <div class="forum-header-row d-flex">
             <div style="flex-grow:1;">Thema / Ersteller</div>
             <div style="width:100px; text-align:center;">Antworten</div>
             <div style="width:150px; text-align:right;">Letzter Beitrag</div>
         </div>
+        <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>
     `;
-    
-    // Button in Container einfügen (Hack, damit er oben ist)
-    if(newBtn) container.querySelector('.clearfix').appendChild(newBtn);
-
-    container.innerHTML += '<div id="thread-list-area" class="position-relative" style="min-height:100px;"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>';
 
     try {
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
@@ -769,39 +764,26 @@ window.renderForumThreads = async function(topicName, catId) {
         listArea.innerHTML = '';
 
         if (threads.length === 0) {
-            listArea.innerHTML = `<div class="p-4 text-center text-muted">Noch keine Themen in diesem Bereich.</div>`;
+            listArea.innerHTML = `<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>`;
             return;
         }
 
-        // Sortieren nach Datum
-        threads.sort((a, b) => {
-            const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
-            const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
-            return timeB - timeA;
-        });
+        threads.sort((a, b) => (b.createdAt || b.date) - (a.createdAt || a.date));
 
         threads.forEach(thread => {
             listArea.innerHTML += `
                 <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}')">
-                    <div class="forum-icon" style="font-size:1.2rem; width:30px;">📄</div>
+                    <div class="forum-icon">📄</div>
                     <div class="forum-main">
-                        <div class="fw-bold text-dark" style="font-size:1rem;">${thread.title}</div>
+                        <div class="fw-bold text-dark">${thread.title}</div>
                         <div class="small text-muted">von ${thread.user} • ${thread.date}</div>
                     </div>
                     <div class="forum-stats fw-bold">${thread.replies || 0}</div>
-                    <div class="text-end text-muted small" style="width:150px;">
-                        ${thread.date}<br>
-                        by ${thread.user}
-                    </div>
-                </div>
-            `;
+                    <div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div>
+                </div>`;
         });
-
-    } catch (error) {
-        console.error(error);
-    }
+    } catch (error) { console.error(error); }
 };
-
 // LEVEL 4: Thread Detail (Chat Ansicht) - Bleibt ähnlich, nur Breadcrumb dazu
 window.renderThreadDetail = async function(threadId, topicName) {
     // Breadcrumbs suchen (etwas tricky rückwärts zu finden ohne ID, aber wir versuchen es)
@@ -866,14 +848,21 @@ window.renderThreadDetail = async function(threadId, topicName) {
             });
         }
 
-        // C) Antwort Formular
+ // C) Antwort Formular
         if (currentUser) {
             container.innerHTML += `
                 <div class="card mt-4 bg-light border-0">
                     <div class="card-body">
                         <h6 class="fw-bold mb-2">Antworten</h6>
-                        <textarea id="replyText" class="form-control mb-2" rows="3"></textarea>
-                        <div class="d-flex justify-content-end">
+                        <textarea id="replyText" class="form-control mb-2" rows="3" placeholder="Schreibe eine Antwort..."></textarea>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😂', 'replyText')">😂</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
+                            </div>
                             <button class="btn btn-danger" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">Antworten</button>
                         </div>
                     </div>
@@ -885,7 +874,7 @@ window.renderThreadDetail = async function(threadId, topicName) {
 
     } catch (error) {
         console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Fehler.</div>';
+        container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden des Beitrags.</div>';
     }
 };
 
@@ -898,6 +887,24 @@ window.deleteTour = async (id, event) => {
     if(!confirm("Löschen?")) return;
     alert("Gelöscht: " + id);
 };
+
+window.openNewThreadModal = function() {
+    const topicInput = document.getElementById('threadTopicDisplay');
+    if(topicInput) topicInput.value = currentForumTopic;
+    const modalEl = document.getElementById('createThreadModal');
+    if(modalEl) new bootstrap.Modal(modalEl).show();
+};
+
+window.openAddCategoryModal = function(catId) {
+    // Hier kannst du ein neues Modal für "Kategorie hinzufügen" öffnen
+    // Vorübergehend nutzen wir einen Prompt zum Testen:
+    const newCatName = prompt("Name der neuen Kategorie (z.B. Ducati):");
+    if(newCatName) {
+        alert("Sende an Backend: Neue Kategorie '" + newCatName + "' für Haupt-ID: " + catId);
+        // Hier käme später der fetch-Aufruf zum Backend
+    }
+};
+
 
 window.filterTours = filterTours;
 window.onCategoryChange = onCategoryChange;
