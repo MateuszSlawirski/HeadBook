@@ -668,7 +668,7 @@ window.renderForumSubCategory = function(catId) {
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
 
-    renderBreadcrumbs([{ label: category.title, onclick: null }]); // Breadcrumb update
+    renderBreadcrumbs([{ label: category.title, onclick: null }]); 
 
     const container = document.getElementById('forum-container');
     container.innerHTML = `
@@ -695,8 +695,9 @@ window.renderForumSubCategory = function(catId) {
                 `;
             }
 
+            // HIER WAR DER FEHLER: '${category.id}' statt '${cat.id}'
             container.innerHTML += `
-                <div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${cat.id}')">
+                <div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')">
                     <div class="forum-icon">🔧</div>
                     <div class="forum-main">
                         <h5 class="fw-bold text-primary mb-0">${topic.title}</h5>
