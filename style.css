@@ -13,31 +13,32 @@ body {
     background-color: var(--bg-body); 
     color: var(--text-main);
     margin: 0; 
-    padding-top: 120px; 
+    padding-top: 100px; /* Angepasst, falls Navbar flacher ist, sonst 120px lassen */
 }
 
 a { text-decoration: none; }
 
 /* --- NAVBAR --- */
-.navbar { background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-.nav-logo-img { height: 65px; width: auto; transition: transform 0.3s ease; filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); }
-.nav-link { color: #444; font-size: 0.9rem; font-weight: 500; transition: all 0.3s ease; }
-.nav-link:hover, .nav-link.active { color: var(--accent); }
+.navbar { 
+    background-color: #fff; 
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    position: fixed; /* WICHTIG: Damit padding-top Sinn macht */
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+}
 
-/* Das Logo Bild (Die Maske) */
+/* Das Logo Bild */
 .nav-logo-img {
-    /* Hier den Wert erhöhen, z.B. auf 65px oder 70px */
     height: 65px; 
     width: auto;
     cursor: default;
     transition: transform 0.3s ease;
-    /* Der Schatten hilft, dass es sich auch ohne Hintergrund gut abhebt */
     filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); 
 }
 
-
-
-/* Links Styling */
+/* Navbar Links (Zusammengefasst) */
 .nav-link {
     color: #444;
     font-size: 0.9rem;
@@ -46,11 +47,11 @@ a { text-decoration: none; }
 }
 
 .navbar .nav-link.active {
-    color: var(--accent); /* Textfarbe für aktiven Reiter */
-    font-weight: 600; /* Etwas fetterer Text */
-    background-color: rgba(135, 132, 132, 0.1); /* Leichter Hintergrund für den aktiven Reiter */
-    border-radius: 5px; /* Optionale Abrundung der Ecken für den aktiven Link */
-    padding: 10px 15px; /* Etwas mehr Padding für bessere Klickfläche */
+    color: var(--accent); 
+    font-weight: 600; 
+    background-color: rgba(135, 132, 132, 0.1); 
+    border-radius: 5px; 
+    padding: 10px 15px; 
 }
 
 .nav-link:hover, .nav-link.active {
@@ -62,33 +63,76 @@ a { text-decoration: none; }
     transition: stroke 0.3s ease;
 }
 
-/* --- 2. LAYOUT & GRID (Für den Inhalt unter der Navbar) --- */
-/* --- GLOBAL LAYOUT (HOME & PROFIL) - WIEDER HINZUGEFÜGT --- */
+/* Breadcrumb Navigation */
+.custom-breadcrumb {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+.custom-breadcrumb a {
+    text-decoration: none;
+    color: #dc3545; 
+    font-weight: 500;
+    cursor: pointer;
+}
+.custom-breadcrumb a:hover { text-decoration: underline; }
+.custom-breadcrumb span { margin: 0 5px; color: #adb5bd; }
+.custom-breadcrumb .active { color: #212529; font-weight: bold; }
+
+/* --- FORUM TABELLE STYLE (BMW Look) --- */
+.forum-header-row {
+    background-color: #f8f9fa;
+    border-top: 2px solid #dc3545; 
+    border-bottom: 1px solid #dee2e6;
+    padding: 10px 15px;
+    font-weight: bold;
+    color: #495057;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.forum-row {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.2s;
+    background: white;
+}
+.forum-row:hover { background-color: #fcfcfc; }
+
+.forum-icon {
+    font-size: 2rem;
+    margin-right: 20px;
+    color: #6c757d;
+    width: 50px;
+    text-align: center;
+}
+
+.forum-main { flex-grow: 1; }
+.forum-stats { width: 100px; text-align: center; font-size: 0.9rem; color: #495057; }
+.forum-arrow { width: 30px; text-align: right; color: #adb5bd; }
+
+/* --- 2. LAYOUT & GRID --- */
 .container { max-width: 1000px; margin: 0 auto; padding: 0 15px; }
 
-/* Das ist die Klasse, die Profil.html und Index.html brauchen */
+/* Profil & Feed Grid */
 .content-grid { 
     display: flex; 
     gap: 20px; 
     align-items: flex-start; 
 }
+.sidebar { width: 360px; flex-shrink: 0; }
+.feed { flex-grow: 1; }
 
-.sidebar { 
-    width: 360px; 
-    flex-shrink: 0; 
-}
-
-.feed { 
-    flex-grow: 1; 
-}
-
-/* Responsive Verhalten für Home/Profil */
 @media (max-width: 992px) {
     .content-grid { flex-direction: column; }
-    .sidebar { width: 100%; display: none; } /* Sidebar mobil ausblenden */
+    .sidebar { width: 100%; display: none; } 
 }
 
-/* --- TOUREN PAGE LAYOUT (Bleibt separat, damit Map funktioniert) --- */
+/* Touren Page Layout */
 .tours-layout {
     display: flex;
     flex-direction: column;
@@ -97,7 +141,7 @@ a { text-decoration: none; }
 }
 .map-card {
     width: 100%;
-    height: 500px; /* Wichtig für Sichtbarkeit */
+    height: 500px; 
     border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--border-color);
@@ -107,7 +151,7 @@ a { text-decoration: none; }
 }
 .tours-list { width: 100%; }
 
-/* --- KARTEN STYLING (Allgemein) --- */
+/* --- KARTEN STYLING --- */
 .card { background: var(--bg-card); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 15px; padding: 15px; border: none; }
 .card-header { font-size: 20px; font-weight: bold; margin-bottom: 15px; padding: 0; background: none; border-bottom: none; }
 
@@ -116,7 +160,7 @@ a { text-decoration: none; }
 .bike-img { width: 100%; height: 150px; object-fit: cover; }
 .bike-info { padding: 10px; }
 
-/* Mini Tour Card (für Liste) */
+/* Mini Tour Card */
 .mini-tour-card {
     background: white;
     margin-bottom: 15px;
@@ -139,7 +183,7 @@ a { text-decoration: none; }
     .mini-tour-card p { display: none; }
 }
 
-/* --- SIDEBAR FILTER (Touren) --- */
+/* Sidebar Filter */
 .sidebar-filter-card {
     background: white;
     padding: 20px;
@@ -151,10 +195,16 @@ a { text-decoration: none; }
 .filter-title { font-size: 0.85rem; text-transform: uppercase; color: #888; font-weight: 700; margin-bottom: 10px; }
 .filter-divider { margin: 15px 0; color: #eee; }
 
-/* Profil Header */
-.profile-header { background: white; box-shadow: 0 1px 2px rgba(199, 93, 93, 0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
-/* --- PROFIL HEADER & ELEMENTS --- */
-.profile-header { background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); padding-bottom: 15px; margin-bottom: 20px; border-radius: 8px; position: relative; overflow: hidden; }
+/* --- PROFIL HEADER (Zusammengefasst) --- */
+.profile-header { 
+    background: white; 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+    padding-bottom: 15px; 
+    margin-bottom: 20px; 
+    border-radius: 8px; 
+    position: relative; 
+    overflow: hidden; 
+}
 .cover-photo { height: 250px; background: url('https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80') center/cover; }
 .profile-nav { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; padding: 0 30px; margin-top: -50px; position: relative; z-index: 2; }
 .profile-pic { width: 140px; height: 140px; border-radius: 50%; border: 4px solid white; background: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=300&q=80') center/cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -163,7 +213,13 @@ a { text-decoration: none; }
 .user-tag { color: var(--text-muted); font-size: 0.95rem; }
 .action-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
 
-/* Posts */
+@media (max-width: 768px) {
+    .profile-nav { flex-direction: column; align-items: center; text-align: center; margin-top: -70px; }
+    .user-details { margin-left: 0; padding-top: 10px; }
+    .action-buttons { width: 100%; justify-content: center; padding-bottom: 15px; }
+}
+
+/* Posts Styles */
 .post-header { display: flex; align-items: center; margin-bottom: 10px; }
 .post-avatar, .new-post-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; background-color: #ddd; background-size: cover; }
 .new-post-input { width: 100%; border-radius: 20px; border: 1px solid #ddd; padding: 10px; background: #f0f2f5; }
@@ -182,34 +238,12 @@ a { text-decoration: none; }
 .btn-secondary { background: #e4e6eb; color: rgb(0, 0, 0); }
 .btn-secondary:hover { background: #d8dadf; color: black; }
 
-@media (max-width: 768px) {
-    .profile-nav { flex-direction: column; align-items: center; text-align: center; margin-top: -70px; }
-    .user-details { margin-left: 0; padding-top: 10px; }
-    .action-buttons { width: 100%; justify-content: center; padding-bottom: 15px; }
-}
-
-/* =========================
-   FORUM – ANGLEICHUNG
-   ========================= */
-
-   .accordion-button:not(.collapsed) {
+/* Forum - Bootstrap Anpassungen */
+.accordion-button:not(.collapsed) {
     background-color: rgba(211, 47, 47, 0.08);
     color: var(--accent);
 }
-
-.accordion-button:focus {
-    box-shadow: none;
-}
-
-.accordion-item {
-    border-radius: 8px;
-}
-
-.list-group-item {
-    border: none;
-    font-weight: 500;
-}
-
-.list-group-item:hover {
-    background-color: rgba(211, 47, 47, 0.05);
-}
+.accordion-button:focus { box-shadow: none; }
+.accordion-item { border-radius: 8px; }
+.list-group-item { border: none; font-weight: 500; }
+.list-group-item:hover { background-color: rgba(211, 47, 47, 0.05); }

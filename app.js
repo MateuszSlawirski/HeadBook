@@ -511,7 +511,7 @@ window.insertEmoji = function(emoji, targetId = 'threadText') {
 };
 
 /* ==========================================
-   FORUM LOGIK
+   FORUM LOGIK (Classic Forum Style)
    ========================================== */
 
 let allForumData = []; 
@@ -523,7 +523,7 @@ async function loadForumData() {
     if(!container) return;
     
     if(allForumData.length === 0) {
-        container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+        container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
     
     try {
@@ -536,7 +536,8 @@ async function loadForumData() {
             allThreadsCache = await threadResponse.json();
         }
 
-        if (!currentCategoryId && !currentForumTopic) {
+        // Wenn keine Navigation aktiv ist, Startseite laden
+        if (!document.querySelector('.custom-breadcrumb')) {
             renderForumHome();
         }
     } catch (error) {
@@ -547,203 +548,231 @@ async function loadForumData() {
     }
 }
 
-// HELPER: Neuesten Thread Vorschau-Box bauen
-// NEU: showTopicName Parameter für die "in Kategorie"-Anzeige
-function getLatestPostHtml(filterFn, showTopicName = false) {
-    const relevantThreads = allThreadsCache.filter(filterFn);
+// HELPER: Breadcrumbs rendern
+function renderBreadcrumbs(pathArray) {
+    const container = document.getElementById('forum-title-area');
+    // Wir nutzen den Bereich über dem Container für die Breadcrumbs
+    // Falls er noch nicht existiert, erstellen wir ihn
+    let breadcrumbEl = document.getElementById('custom-breadcrumbs');
     
-    relevantThreads.sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
-        const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
-        return timeB - timeA; 
-    });
-
-    if (relevantThreads.length === 0) {
-        return `
-            <div class="p-3 bg-light rounded text-center text-muted border border-dashed">
-                <small>Noch keine Beiträge</small>
-            </div>`;
+    if (!breadcrumbEl) {
+        const parent = document.getElementById('forum-container').parentNode;
+        breadcrumbEl = document.createElement('div');
+        breadcrumbEl.id = 'custom-breadcrumbs';
+        breadcrumbEl.className = 'custom-breadcrumb container-xl';
+        parent.insertBefore(breadcrumbEl, document.getElementById('forum-container'));
     }
 
-    const last = relevantThreads[0];
+    // HTML bauen
+    let html = `<a onclick="navigateTo('home')">Startseite</a> <span>›</span> <a onclick="renderForumHome()">Forum</a>`;
     
-    // HIER IST DIE ÄNDERUNG (Kursiv, klein, darunter):
-    return `
-        <div class="p-3 bg-light rounded border start-0 border-start-3 border-primary position-relative hover-bg-gray" 
-             style="cursor: pointer; transition: background 0.2s;"
-             onclick="event.stopPropagation(); renderThreadDetail('${last.id}', '${last.topic}')">
-            
-            <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="badge bg-primary bg-opacity-10 text-primary" style="font-size: 0.7em;">NEU</span>
-                <small class="text-muted" style="font-size: 0.75em;">${last.date}</small>
-            </div>
-            
-            <div class="fw-bold text-dark text-truncate mb-1" style="max-width: 100%;">
-                ${last.title}
-            </div>
-            
-            <div class="small text-muted">
-                von <span class="fw-semibold text-dark">${last.user}</span>
-                ${showTopicName ? `<div class="fst-italic text-secondary mt-1" style="font-size: 0.85em;">in ${last.topic}</div>` : ''}
-            </div>
-        </div>
-    `;
+    pathArray.forEach((item, index) => {
+        html += ` <span>›</span> `;
+        if (item.onclick) {
+            html += `<a onclick="${item.onclick}">${item.label}</a>`;
+        } else {
+            html += `<span class="active">${item.label}</span>`;
+        }
+    });
+
+    breadcrumbEl.innerHTML = html;
+    breadcrumbEl.style.display = 'block';
 }
 
-// LEVEL 1: Hauptübersicht
-window.renderForumHome = function() {
-    const container = document.getElementById('forum-container');
-    const title = document.getElementById('forum-title');
-    const subtitle = document.getElementById('forum-subtitle');
-    const backBtn = document.getElementById('forum-back-btn');
-    const newThreadBtn = document.getElementById('new-thread-btn');
-
-    if(!title) return;
-
-    title.innerText = "Community Forum";
-    subtitle.innerText = "Wähle einen Bereich.";
+// HELPER: Statistiken & Letzter Beitrag berechnen
+function getForumStats(filterFn) {
+    const threads = allThreadsCache.filter(filterFn);
+    const threadCount = threads.length;
+    // Beiträge = Anzahl Threads + Anzahl aller Antworten in diesen Threads
+    const postCount = threads.reduce((acc, t) => acc + 1 + (t.replies || 0), 0);
     
-    backBtn.style.display = 'none';
-    newThreadBtn.style.display = 'none';
-    container.innerHTML = '';
+    // Neuesten Beitrag finden
+    threads.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
+        const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
+        return timeB - timeA;
+    });
+
+    const lastPost = threads.length > 0 ? threads[0] : null;
+
+    return { threadCount, postCount, lastPost };
+}
+
+// LEVEL 1: Hauptübersicht (TABLE LAYOUT)
+window.renderForumHome = function() {
+    renderBreadcrumbs([]); // Leeres Array = Nur "Startseite > Forum"
+    
+    const container = document.getElementById('forum-container');
+    
+    // Wir verstecken die alten Header-Elemente, da wir eigene bauen
+    const titleEl = document.getElementById('forum-title');
+    if(titleEl) titleEl.style.display = 'none';
+    const subEl = document.getElementById('forum-subtitle');
+    if(subEl) subEl.style.display = 'none';
+    const backBtn = document.getElementById('forum-back-btn');
+    if(backBtn) backBtn.style.display = 'none';
+    const newBtn = document.getElementById('new-thread-btn');
+    if(newBtn) newBtn.style.display = 'none';
+
+    container.innerHTML = `
+        <h2 class="fw-bold mb-3">Community Übersicht</h2>
+        <div class="d-none d-md-flex forum-header-row">
+            <div style="flex-grow:1;">Forum</div>
+            <div style="width:100px; text-align:center;">Themen</div>
+            <div style="width:100px; text-align:center;">Beiträge</div>
+            <div style="width:30px;"></div>
+        </div>
+    `;
 
     allForumData.forEach(cat => {
+        // Stats berechnen (Alle Topics dieser Kategorie sammeln)
         const catTopicNames = cat.topics.map(t => t.title);
-        // HIER: true übergeben, damit "in Kategorie" angezeigt wird
-        const latestHtml = getLatestPostHtml((t) => catTopicNames.includes(t.topic), true);
-
-        const item = document.createElement('div');
-        item.className = 'card mb-3 shadow-sm border-0 forum-card';
-        item.style.cursor = 'pointer';
-        item.onclick = () => renderForumSubCategory(cat.id);
-
-        item.innerHTML = `
-            <div class="card-body p-4">
-                <div class="row align-items-center">
-                    <div class="col-md-7 mb-3 mb-md-0">
-                        <div class="d-flex align-items-center mb-2">
-                            <h2 class="fw-bold text-primary mb-0 me-2 fs-2">${cat.title}</h2>
-                        </div>
-                        <p class="text-secondary mb-0 small">
-                            ${cat.desc || "Allgemeine Diskussionen und Themen."}
-                        </p>
-                    </div>
-
-                    <div class="col-md-5">
-                        ${latestHtml}
-                    </div>
+        const stats = getForumStats(t => catTopicNames.includes(t.topic));
+        
+        let lastPostHtml = `<small class="text-muted">Keine Beiträge</small>`;
+        if (stats.lastPost) {
+            // DAS IST DER BMW STYLE: Titel und User untereinander
+            lastPostHtml = `
+                <div class="mt-1 small text-muted">
+                    Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
+                    <span class="text-secondary">(${stats.lastPost.date})</span>
                 </div>
+            `;
+        }
+
+        // Icon Logik (Falls du keine echten Icons hast, nehmen wir generische)
+        const icon = "🏍️"; // Oder ein <img> Tag
+
+        container.innerHTML += `
+            <div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')">
+                <div class="forum-icon">${icon}</div>
+                <div class="forum-main">
+                    <h5 class="fw-bold text-dark mb-0">${cat.title}</h5>
+                    <p class="text-muted small mb-0">${cat.desc || ""}</p>
+                    ${lastPostHtml}
+                </div>
+                <div class="forum-stats d-none d-md-block">
+                    <div class="fw-bold">${stats.threadCount}</div>
+                </div>
+                <div class="forum-stats d-none d-md-block">
+                    <div class="fw-bold">${stats.postCount}</div>
+                </div>
+                <div class="forum-arrow">❯</div>
             </div>
         `;
-        container.appendChild(item);
     });
 };
 
-// LEVEL 2: Unterkategorien
+// LEVEL 2: Unterkategorien (TABLE LAYOUT)
 window.renderForumSubCategory = function(catId) {
-    currentCategoryId = catId;
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
 
-    const container = document.getElementById('forum-container');
-    const title = document.getElementById('forum-title');
-    const subtitle = document.getElementById('forum-subtitle');
-    const backBtn = document.getElementById('forum-back-btn');
-    const newThreadBtn = document.getElementById('new-thread-btn');
+    renderBreadcrumbs([{ label: category.title, onclick: null }]); // Breadcrumb update
 
-    title.innerText = category.title;
-    subtitle.innerText = "Wähle ein Thema.";
-    
-    backBtn.style.display = 'inline-block';
-    backBtn.innerText = "⬅ Übersicht";
-    backBtn.className = "btn btn-outline-secondary btn-sm mb-2"; 
-    backBtn.onclick = renderForumHome;
-    
-    newThreadBtn.style.display = 'none';
-    container.innerHTML = '';
+    const container = document.getElementById('forum-container');
+    container.innerHTML = `
+        <h2 class="fw-bold mb-3">${category.title}</h2>
+        <div class="d-none d-md-flex forum-header-row">
+            <div style="flex-grow:1;">Thema</div>
+            <div style="width:100px; text-align:center;">Themen</div>
+            <div style="width:100px; text-align:center;">Beiträge</div>
+            <div style="width:30px;"></div>
+        </div>
+    `;
 
     if (category.topics) {
         category.topics.forEach(topic => {
-            // HIER: false übergeben, wir sind ja schon im Thema
-            const latestHtml = getLatestPostHtml((t) => t.topic === topic.title, false);
-
-            const item = document.createElement('div');
-            item.className = 'card mb-3 shadow-sm border-0 forum-card';
-            item.style.cursor = 'pointer';
-            item.onclick = () => renderForumThreads(topic.title);
-
-            item.innerHTML = `
-                <div class="card-body p-3">
-                    <div class="row align-items-center">
-                        <div class="col-md-7 mb-3 mb-md-0">
-                            <h5 class="fw-bold text-dark mb-1">${topic.title}</h5>
-                            <p class="text-muted small mb-0">${topic.desc || ""}</p>
-                        </div>
-                        <div class="col-md-5">
-                            ${latestHtml}
-                        </div>
+            const stats = getForumStats(t => t.topic === topic.title);
+            
+            let lastPostHtml = `<small class="text-muted">Leer</small>`;
+            if (stats.lastPost) {
+                lastPostHtml = `
+                    <div class="mt-1 small text-muted">
+                        Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
+                        <span class="text-secondary">(${stats.lastPost.date})</span>
                     </div>
+                `;
+            }
+
+            container.innerHTML += `
+                <div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${cat.id}')">
+                    <div class="forum-icon">🔧</div>
+                    <div class="forum-main">
+                        <h5 class="fw-bold text-primary mb-0">${topic.title}</h5>
+                        <p class="text-muted small mb-0">${topic.desc || ""}</p>
+                        ${lastPostHtml}
+                    </div>
+                    <div class="forum-stats d-none d-md-block">
+                        <div class="fw-bold">${stats.threadCount}</div>
+                    </div>
+                    <div class="forum-stats d-none d-md-block">
+                        <div class="fw-bold">${stats.postCount}</div>
+                    </div>
+                    <div class="forum-arrow">❯</div>
                 </div>
             `;
-            container.appendChild(item);
         });
     }
 };
 
-// LEVEL 3: Liste der Threads
-window.renderForumThreads = async function(topicName) {
-    currentForumTopic = topicName; 
-    const container = document.getElementById('forum-container');
-    const title = document.getElementById('forum-title');
-    const subtitle = document.getElementById('forum-subtitle');
-    const backBtn = document.getElementById('forum-back-btn');
-    const newThreadBtn = document.getElementById('new-thread-btn');
-
-    title.innerText = topicName;
-    subtitle.innerText = "Lade Diskussionen...";
+// LEVEL 3: Liste der Threads (TABLE LAYOUT)
+window.renderForumThreads = async function(topicName, catId) {
+    currentForumTopic = topicName;
     
-    let parentCatName = "Zurück";
-    if (currentCategoryId) {
-        const parentCat = allForumData.find(c => c.id === currentCategoryId);
-        if(parentCat) parentCatName = "⬅ " + parentCat.title;
+    // Breadcrumb bauen
+    let breadcrumbs = [];
+    if(catId) {
+        const cat = allForumData.find(c => c.id === catId);
+        if(cat) breadcrumbs.push({ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` });
+    }
+    breadcrumbs.push({ label: topicName, onclick: null });
+    renderBreadcrumbs(breadcrumbs);
+
+    const container = document.getElementById('forum-container');
+    
+    // Button "Neuer Beitrag" wieder sichtbar machen (aber an neuer Position oder oben)
+    const newBtn = document.getElementById('new-thread-btn');
+    if(newBtn) {
+        newBtn.style.display = 'block';
+        newBtn.className = "btn btn-danger float-end mb-3"; // Roter Button rechts
+        newBtn.innerHTML = "Neues Thema +";
+        newBtn.onclick = () => {
+            const topicInput = document.getElementById('threadTopicDisplay');
+            if(topicInput) topicInput.value = currentForumTopic;
+            const modalEl = document.getElementById('createThreadModal');
+            if(modalEl) new bootstrap.Modal(modalEl).show();
+        };
     }
 
-    backBtn.style.display = 'inline-block';
-    backBtn.innerText = parentCatName;
-    backBtn.onclick = () => {
-        if(currentCategoryId) renderForumSubCategory(currentCategoryId);
-        else renderForumHome();
-    };
+    container.innerHTML = `
+        <div class="clearfix">
+            <h3 class="fw-bold float-start">${topicName}</h3>
+            </div>
+        <div class="forum-header-row mt-3 d-flex">
+            <div style="flex-grow:1;">Thema / Ersteller</div>
+            <div style="width:100px; text-align:center;">Antworten</div>
+            <div style="width:150px; text-align:right;">Letzter Beitrag</div>
+        </div>
+    `;
     
-    newThreadBtn.style.display = 'inline-block';
-    newThreadBtn.onclick = () => {
-        const topicInput = document.getElementById('threadTopicDisplay');
-        if(topicInput) topicInput.value = currentForumTopic;
-        const modalEl = document.getElementById('createThreadModal');
-        if(modalEl) new bootstrap.Modal(modalEl).show();
-    };
-    
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+    // Button in Container einfügen (Hack, damit er oben ist)
+    if(newBtn) container.querySelector('.clearfix').appendChild(newBtn);
+
+    container.innerHTML += '<div id="thread-list-area" class="position-relative" style="min-height:100px;"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>';
 
     try {
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-        if (!response.ok) throw new Error("Netzwerk Fehler");
         const threads = await response.json();
+        const listArea = document.getElementById('thread-list-area');
+        listArea.innerHTML = '';
 
-        container.innerHTML = ''; 
         if (threads.length === 0) {
-            container.innerHTML = `
-                <div class="p-5 text-center text-muted bg-light rounded">
-                    <h3>📭</h3>
-                    <h5>Noch nichts los hier.</h5>
-                    <p>Sei der Erste, der etwas zu <b>${topicName}</b> schreibt!</p>
-                </div>`;
-            subtitle.innerText = "Keine Beiträge";
+            listArea.innerHTML = `<div class="p-4 text-center text-muted">Noch keine Themen in diesem Bereich.</div>`;
             return;
         }
 
-        subtitle.innerText = `${threads.length} Diskussionen gefunden`;
-        
+        // Sortieren nach Datum
         threads.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
             const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
@@ -751,42 +780,41 @@ window.renderForumThreads = async function(topicName) {
         });
 
         threads.forEach(thread => {
-            const item = document.createElement('div');
-            item.className = 'list-group-item py-3 list-group-item-action border-start-0 border-end-0';
-            item.style.cursor = 'pointer';
-            item.onclick = () => renderThreadDetail(thread.id, thread.topic);
-
-            item.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="mb-1 fw-bold text-dark fs-5">${thread.title}</h6>
-                    <span class="badge bg-secondary rounded-pill">${thread.replies || 0}</span>
-                </div>
-                <div class="small text-muted mt-1">
-                    Gestartet von <b class="text-primary">${thread.user}</b> • ${thread.date || 'Heute'}
+            listArea.innerHTML += `
+                <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}')">
+                    <div class="forum-icon" style="font-size:1.2rem; width:30px;">📄</div>
+                    <div class="forum-main">
+                        <div class="fw-bold text-dark" style="font-size:1rem;">${thread.title}</div>
+                        <div class="small text-muted">von ${thread.user} • ${thread.date}</div>
+                    </div>
+                    <div class="forum-stats fw-bold">${thread.replies || 0}</div>
+                    <div class="text-end text-muted small" style="width:150px;">
+                        ${thread.date}<br>
+                        by ${thread.user}
+                    </div>
                 </div>
             `;
-            container.appendChild(item);
         });
+
     } catch (error) {
         console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Konnte Beiträge nicht laden.</div>';
     }
 };
 
-// LEVEL 4: Thread Detail (Beitrag lesen & antworten)
+// LEVEL 4: Thread Detail (Chat Ansicht) - Bleibt ähnlich, nur Breadcrumb dazu
 window.renderThreadDetail = async function(threadId, topicName) {
-    const container = document.getElementById('forum-container');
-    const title = document.getElementById('forum-title');
-    const subtitle = document.getElementById('forum-subtitle');
-    const backBtn = document.getElementById('forum-back-btn');
-    const newThreadBtn = document.getElementById('new-thread-btn');
+    // Breadcrumbs suchen (etwas tricky rückwärts zu finden ohne ID, aber wir versuchen es)
+    // Wir bauen einfach einen generischen Pfad
+    renderBreadcrumbs([
+        { label: topicName, onclick: `renderForumThreads('${topicName}')` },
+        { label: "Beitrag lesen", onclick: null }
+    ]);
 
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
-    newThreadBtn.style.display = 'none'; 
-    
-    backBtn.style.display = 'inline-block';
-    backBtn.innerText = "⬅ Zurück zum Thema";
-    backBtn.onclick = () => renderForumThreads(topicName);
+    const container = document.getElementById('forum-container');
+    const newBtn = document.getElementById('new-thread-btn');
+    if(newBtn) newBtn.style.display = 'none';
+
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
 
     try {
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
@@ -795,28 +823,22 @@ window.renderThreadDetail = async function(threadId, topicName) {
 
         if (!currentThread) throw new Error("Beitrag nicht gefunden");
 
-        title.innerText = currentThread.title;
-        subtitle.innerText = `Gestartet von ${currentThread.user}`;
-
-        container.innerHTML = '';
+        container.innerHTML = `
+            <h3 class="fw-bold mb-4">${currentThread.title}</h3>
+        `;
 
         // A) Original Post
         const originalPost = `
-            <div class="card mb-4 border-0 shadow-sm">
-                <div class="card-header bg-white border-bottom-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center">
-                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 40px; height: 40px; font-weight:bold;">
-                            ${currentThread.user.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark">${currentThread.user}</h6>
-                            <small class="text-muted">Themenstarter</small>
-                        </div>
+            <div class="card mb-3 border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between">
+                    <div>
+                        <span class="fw-bold text-danger">${currentThread.user}</span> 
+                        <span class="text-muted small">schrieb am ${currentThread.date}:</span>
                     </div>
-                    <small class="text-muted">${currentThread.date}</small>
+                    <div class="text-muted small">#1</div>
                 </div>
                 <div class="card-body">
-                    <p class="card-text fs-5" style="white-space: pre-wrap; line-height: 1.6;">${currentThread.text}</p>
+                    <p class="card-text fs-5" style="white-space: pre-wrap;">${currentThread.text}</p>
                 </div>
             </div>
         `;
@@ -824,16 +846,17 @@ window.renderThreadDetail = async function(threadId, topicName) {
 
         // B) Antworten
         if (currentThread.repliesList && currentThread.repliesList.length > 0) {
-            container.innerHTML += `<h6 class="text-muted mb-3 ms-2">Antworten (${currentThread.repliesList.length})</h6>`;
-            
-            currentThread.repliesList.forEach(reply => {
+            currentThread.repliesList.forEach((reply, idx) => {
                 const replyHtml = `
-                    <div class="card mb-3 border-0 shadow-sm ms-md-4" style="background-color: #fcfcfc;">
-                        <div class="card-body py-3">
-                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                <strong class="text-dark">↪ ${reply.user}</strong>
-                                <small class="text-muted">${reply.date}</small>
+                    <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
+                        <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between">
+                            <div>
+                                <span class="fw-bold text-dark">${reply.user}</span> 
+                                <span class="text-muted small">antwortete am ${reply.date}:</span>
                             </div>
+                            <div class="text-muted small">#${idx + 2}</div>
+                        </div>
+                        <div class="card-body pt-0">
                             <p class="mb-0" style="white-space: pre-wrap;">${reply.text}</p>
                         </div>
                     </div>
@@ -842,75 +865,29 @@ window.renderThreadDetail = async function(threadId, topicName) {
             });
         }
 
-        // C) Antwort-Formular
+        // C) Antwort Formular
         if (currentUser) {
-            const replyForm = `
-                <div class="card mt-4 border-0 shadow-sm bg-light">
+            container.innerHTML += `
+                <div class="card mt-4 bg-light border-0">
                     <div class="card-body">
-                        <h6 class="fw-bold mb-3"><i class="bi bi-reply-fill"></i> Antwort schreiben</h6>
-                        <textarea id="replyText" class="form-control mb-2 border-0 shadow-sm" rows="3" placeholder="Deine Meinung dazu..."></textarea>
-                        
-                        <div class="d-flex justify-content-between align-items-center mt-2">
-                            <div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😂', 'replyText')">😂</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
-                            </div>
-                            <button class="btn btn-primary px-4" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">
-                                Senden ✈️
-                            </button>
+                        <h6 class="fw-bold mb-2">Antworten</h6>
+                        <textarea id="replyText" class="form-control mb-2" rows="3"></textarea>
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-danger" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">Antworten</button>
                         </div>
                     </div>
                 </div>
             `;
-            container.innerHTML += replyForm;
         } else {
-            container.innerHTML += `
-                <div class="alert alert-info mt-4 text-center shadow-sm border-0">
-                    Willst du mitreden? Jetzt <a href="#" class="fw-bold" onclick="document.getElementById('btn-switch-mode').click()" data-bs-toggle="modal" data-bs-target="#authModal">einloggen</a>.
-                </div>
-            `;
+            container.innerHTML += `<div class="alert alert-warning mt-3">Bitte einloggen zum Antworten.</div>`;
         }
 
     } catch (error) {
         console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden des Beitrags.</div>';
+        container.innerHTML = '<div class="alert alert-danger">Fehler.</div>';
     }
 };
 
-// HELPER: Antwort absenden
-window.sendReply = async function(threadId, topic) {
-    const text = document.getElementById('replyText').value;
-    if (!text.trim()) return alert("Bitte Text eingeben!");
-
-    const btn = document.querySelector('button[onclick^="sendReply"]');
-    if(btn) { btn.disabled = true; btn.innerText = "Sende..."; }
-
-    try {
-        const replyData = {
-            id: threadId,
-            topic: topic,
-            text: text,
-            user: currentUser.displayName || "Unbekannt"
-        };
-
-        const response = await fetch(`${API_URL}/reply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(replyData)
-        });
-
-        if (response.ok) {
-            renderThreadDetail(threadId, topic);
-        } else {
-            throw new Error("Fehler beim Senden");
-        }
-    } catch (err) {
-        alert(err.message);
-        if(btn) { btn.disabled = false; btn.innerText = "Senden ✈️"; }
-    }
-};
 
 /* ==========================================
    GLOBAL EXPORTS
