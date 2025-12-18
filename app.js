@@ -23,7 +23,7 @@ let currentUser = null;
 let currentRole = "guest"; 
 let map = null;
 let markers = []; 
-let currentForumTopic = null; // <--- WICHTIG FÜR DAS FORUM
+let currentForumTopic = null; 
 
 /* ==========================================
    APP START
@@ -153,7 +153,7 @@ function showDeleteButtons() {
 }
 
 /* ==========================================
-   BUTTONS & FORMS (HIER WAR DER FEHLER)
+   BUTTONS & FORMS
    ========================================== */
 
 function setupEventListeners() {
@@ -375,7 +375,7 @@ function onCategoryChange() {
     const countrySelect = document.getElementById('filter-country');
     const stateSelect = document.getElementById('filter-state');
     const selectedCat = catSelect.value;
-    const selectedCountry = countrySelect.value; // Fix: Variable fehlte evtl.
+    const selectedCountry = countrySelect.value;
 
     countrySelect.innerHTML = '<option value="all">--</option>';
     stateSelect.innerHTML = '<option value="all">--</option>';
@@ -499,19 +499,43 @@ function selectTourCard(tour) {
 }
 
 /* ==========================================
-   FORUM LOGIK (Level 1 -> 2 -> 3)
+   HELPER: EMOJIS EINFÜGEN
+   ========================================== */
+window.insertEmoji = function(emoji) {
+    const textarea = document.getElementById('threadText');
+    if (textarea) {
+        textarea.value += emoji;
+        textarea.focus();
+    }
+};
+
+/* ==========================================
+   FORUM LOGIK (Level 1 -> 2 -> 3 -> 4)
    ========================================== */
 
 let allForumData = []; 
+let allThreadsCache = []; // Wir speichern alle Threads, um "Letzte Beiträge" anzuzeigen
+let currentCategoryId = null; // Merkt sich Level 2 für den Zurück-Button
 
 async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
+    
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+    
     try {
-        const response = await fetch(`${API_URL}/forum`);
-        if (!response.ok) throw new Error("API Fehler");
-        allForumData = await response.json();
+        // 1. Kategorien laden
+        const catResponse = await fetch(`${API_URL}/forum`);
+        if (!catResponse.ok) throw new Error("Kategorie-Fehler");
+        allForumData = await catResponse.json();
+
+        // 2. ALLE Threads laden (für die Vorschau auf der Startseite)
+        // Wir holen einfach alle (ohne ?topic=...), damit wir suchen können
+        const threadResponse = await fetch(`${API_URL}/threads`); 
+        if (threadResponse.ok) {
+            allThreadsCache = await threadResponse.json();
+        }
+
         renderForumHome();
     } catch (error) {
         console.error(error);
@@ -519,7 +543,7 @@ async function loadForumData() {
     }
 }
 
-// Level 1: Home
+// LEVEL 1: Hauptübersicht (Mit Vorschau des letzten Posts)
 window.renderForumHome = function() {
     const container = document.getElementById('forum-container');
     const title = document.getElementById('forum-title');
@@ -531,18 +555,43 @@ window.renderForumHome = function() {
 
     title.innerText = "Community Forum";
     subtitle.innerText = "Wähle einen Bereich.";
+    
+    // Auf Level 1 gibt es keine Zurück-Buttons
     backBtn.style.display = 'none';
+    backBtn.innerText = "⬅ Übersicht"; 
+    backBtn.onclick = null;
+
     newThreadBtn.style.display = 'none';
     container.innerHTML = '';
 
     allForumData.forEach(cat => {
+        // Suche den allerneuesten Thread für diese Kategorie
+        let latestThreadInfo = '<small class="text-muted">Noch keine Beiträge</small>';
+        
+        // Wir suchen Threads, deren Topic in dieser Kategorie vorkommt
+        // Dazu sammeln wir alle Topic-Namen dieser Kategorie
+        const catTopicNames = cat.topics.map(t => t.title);
+        
+        // Filtern: Threads die zu dieser Kategorie gehören
+        const catThreads = allThreadsCache.filter(t => catTopicNames.includes(t.topic));
+        
+        // Sortieren: Neueste zuerst (wir nehmen an, das Datum ist YYYY-MM-DD, das lässt sich gut sortieren)
+        catThreads.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        if (catThreads.length > 0) {
+            const last = catThreads[0];
+            // Text kürzen, falls zu lang
+            const shortTitle = last.title.length > 30 ? last.title.substring(0, 30) + "..." : last.title;
+            latestThreadInfo = `<small class="text-primary fw-bold">Neu: ${shortTitle}</small> <small class="text-muted">(${last.date})</small>`;
+        }
+
         const item = document.createElement('a');
         item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
         item.style.cursor = 'pointer';
         item.innerHTML = `
             <div>
                 <h5 class="mb-1 fw-bold">${cat.title}</h5>
-                <small class="text-muted">Kategorien anzeigen</small>
+                ${latestThreadInfo}
             </div>
             <span class="text-muted">❯</span>
         `;
@@ -551,8 +600,9 @@ window.renderForumHome = function() {
     });
 };
 
-// Level 2: Subcategories
+// LEVEL 2: Unterkategorien (z.B. Liste der Marken)
 window.renderForumSubCategory = function(catId) {
+    currentCategoryId = catId; // Merken für später!
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
 
@@ -564,13 +614,20 @@ window.renderForumSubCategory = function(catId) {
 
     title.innerText = category.title;
     subtitle.innerText = "Wähle ein Thema.";
+    
+    // Button: Zurück zur Übersicht
     backBtn.style.display = 'inline-block';
+    backBtn.innerText = "⬅ Übersicht";
     backBtn.onclick = renderForumHome;
+    
     newThreadBtn.style.display = 'none';
     container.innerHTML = '';
 
     if (category.topics) {
         category.topics.forEach(topic => {
+            // Zählen wie viele Beiträge es gibt (aus dem Cache)
+            const count = allThreadsCache.filter(t => t.topic === topic.title).length;
+            
             const item = document.createElement('a');
             item.className = 'list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center';
             item.style.cursor = 'pointer';
@@ -579,7 +636,10 @@ window.renderForumSubCategory = function(catId) {
                     <h6 class="mb-1 fw-bold text-primary">${topic.title}</h6>
                     <small class="text-muted">${topic.desc}</small>
                 </div>
-                <span class="text-muted">❯</span>
+                <div class="text-end">
+                    <span class="badge bg-light text-dark border">${count} Beiträge</span>
+                    <span class="text-muted ms-2">❯</span>
+                </div>
             `;
             item.onclick = () => renderForumThreads(topic.title);
             container.appendChild(item);
@@ -587,7 +647,7 @@ window.renderForumSubCategory = function(catId) {
     }
 };
 
-// Level 3: Threads
+// LEVEL 3: Liste der Threads (Diskussionen)
 window.renderForumThreads = async function(topicName) {
     currentForumTopic = topicName; 
     const container = document.getElementById('forum-container');
@@ -599,8 +659,20 @@ window.renderForumThreads = async function(topicName) {
     title.innerText = topicName;
     subtitle.innerText = "Lade Diskussionen...";
     
+    // Button: Zurück zur Kategorie (Level 2)
+    // Wir schauen in allForumData, wie die Kategorie hieß, zu der wir gehören
+    let parentCatName = "Zurück";
+    if (currentCategoryId) {
+        const parentCat = allForumData.find(c => c.id === currentCategoryId);
+        if(parentCat) parentCatName = "⬅ " + parentCat.title;
+    }
+
     backBtn.style.display = 'inline-block';
-    backBtn.onclick = renderForumHome; 
+    backBtn.innerText = parentCatName; // Dynamischer Text (z.B. "Zurück zu Bikes")
+    backBtn.onclick = () => {
+        if(currentCategoryId) renderForumSubCategory(currentCategoryId);
+        else renderForumHome();
+    };
     
     newThreadBtn.style.display = 'inline-block';
     newThreadBtn.onclick = () => {
@@ -613,9 +685,13 @@ window.renderForumThreads = async function(topicName) {
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
     try {
+        // Daten neu laden (damit wir auch ganz frische sehen)
         const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
         if (!response.ok) throw new Error("Netzwerk Fehler");
         const threads = await response.json();
+
+        // Update Cache
+        // (Optional: Wir könnten den Cache hier aktualisieren, ist aber nicht zwingend)
 
         container.innerHTML = ''; 
         if (threads.length === 0) {
@@ -635,7 +711,7 @@ window.renderForumThreads = async function(topicName) {
             item.innerHTML = `
                 <div class="d-flex justify-content-between">
                     <h6 class="mb-1 fw-bold">
-                        <a href="#" class="text-decoration-none text-dark" onclick="alert('Hier geht es später zum Chat!')">
+                        <a href="#" class="text-decoration-none text-dark" onclick="renderThreadDetail('${thread.id}', '${thread.topic}')">
                             ${thread.title}
                         </a>
                     </h6>
@@ -651,8 +727,129 @@ window.renderForumThreads = async function(topicName) {
     }
 };
 
+// LEVEL 4: Thread Detail (Beitrag lesen & antworten)
+window.renderThreadDetail = async function(threadId, topicName) {
+    const container = document.getElementById('forum-container');
+    const title = document.getElementById('forum-title');
+    const subtitle = document.getElementById('forum-subtitle');
+    const backBtn = document.getElementById('forum-back-btn');
+    const newThreadBtn = document.getElementById('new-thread-btn');
+
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
+    newThreadBtn.style.display = 'none'; 
+    
+    // Zurück-Button Logik: Zurück zur Liste der Threads (Level 3)
+    backBtn.style.display = 'inline-block';
+    backBtn.innerText = "⬅ Zurück zum Thema";
+    backBtn.onclick = () => renderForumThreads(topicName);
+
+    try {
+        const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+        const threads = await response.json();
+        const currentThread = threads.find(t => t.id === threadId);
+
+        if (!currentThread) throw new Error("Beitrag nicht gefunden");
+
+        title.innerText = currentThread.title;
+        subtitle.innerText = `Gestartet von ${currentThread.user}`;
+
+        container.innerHTML = '';
+
+        // A) Original Post
+        const originalPost = `
+            <div class="card mb-3 border-primary shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between">
+                    <span>👤 ${currentThread.user}</span>
+                    <small>${currentThread.date}</small>
+                </div>
+                <div class="card-body bg-light">
+                    <p class="card-text fs-5" style="white-space: pre-wrap;">${currentThread.text}</p>
+                </div>
+            </div>
+        `;
+        container.innerHTML += originalPost;
+
+        // B) Antworten
+        if (currentThread.repliesList && currentThread.repliesList.length > 0) {
+            currentThread.repliesList.forEach(reply => {
+                const replyHtml = `
+                    <div class="card mb-3 border-0 ms-5 shadow-sm" style="background-color: #f8f9fa;">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <strong class="small text-primary">↪ ${reply.user}</strong>
+                                <small class="text-muted" style="font-size:0.7em;">${reply.date}</small>
+                            </div>
+                            <p class="mb-0" style="white-space: pre-wrap;">${reply.text}</p>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += replyHtml;
+            });
+        } else {
+            container.innerHTML += `<div class="text-center text-muted small my-4">Noch keine Antworten.</div>`;
+        }
+
+        // C) Antwort-Formular
+        if (currentUser) {
+            const replyForm = `
+                <div class="mt-4 pt-3 border-top">
+                    <h6 class="fw-bold mb-3">Antworten</h6>
+                    <textarea id="replyText" class="form-control mb-2" rows="3" placeholder="Schreibe eine Antwort..."></textarea>
+                    <button class="btn btn-primary btn-sm" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">
+                        Senden ✈️
+                    </button>
+                </div>
+            `;
+            container.innerHTML += replyForm;
+        } else {
+            container.innerHTML += `
+                <div class="alert alert-warning mt-4 text-center">
+                    Bitte <a href="#" onclick="document.getElementById('btn-switch-mode').click()" data-bs-toggle="modal" data-bs-target="#authModal">einloggen</a>, um zu antworten.
+                </div>
+            `;
+        }
+
+    } catch (error) {
+        console.error(error);
+        container.innerHTML = '<div class="alert alert-danger">Fehler beim Laden des Beitrags.</div>';
+    }
+};
+
+// HELPER: Antwort absenden
+window.sendReply = async function(threadId, topic) {
+    const text = document.getElementById('replyText').value;
+    if (!text.trim()) return alert("Bitte Text eingeben!");
+
+    const btn = document.querySelector('button[onclick^="sendReply"]');
+    if(btn) { btn.disabled = true; btn.innerText = "Sende..."; }
+
+    try {
+        const replyData = {
+            id: threadId,
+            topic: topic,
+            text: text,
+            user: currentUser.displayName || "Unbekannt"
+        };
+
+        const response = await fetch(`${API_URL}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(replyData)
+        });
+
+        if (response.ok) {
+            renderThreadDetail(threadId, topic);
+        } else {
+            throw new Error("Fehler beim Senden");
+        }
+    } catch (err) {
+        alert(err.message);
+        if(btn) { btn.disabled = false; btn.innerText = "Senden ✈️"; }
+    }
+};
+
 /* ==========================================
-   GLOBAL EXPORTS
+   GLOBAL EXPORTS (Dies muss am Ende bleiben)
    ========================================== */
 window.deleteTour = async (id, event) => {
     event.stopPropagation();

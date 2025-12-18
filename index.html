@@ -275,9 +275,8 @@
     </div>
 
 
-    <div class="modal fade" id="createThreadModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
+   <div class="modal fade" id="createThreadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered"> <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Neuen Beitrag erstellen</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -290,11 +289,20 @@
                     </div>
                     <div class="mb-3">
                         <label for="threadTitle" class="form-label">Titel / Frage</label>
-                        <input type="text" class="form-control" id="threadTitle" placeholder="z.B. Welches Öl für..." required>
-                    </div>
+                        <input type="text" class="form-control" id="threadTitle" required> </div>
                     <div class="mb-3">
                         <label for="threadText" class="form-label">Deine Nachricht</label>
-                        <textarea class="form-control" id="threadText" rows="4" placeholder="Beschreibe dein Anliegen..." required></textarea>
+                        <textarea class="form-control" id="threadText" rows="6" required></textarea> <div class="mt-2">
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😀')">😀</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😂')">😂</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😍')">😍</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😎')">😎</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🤔')">🤔</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😭')">😭</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('👍')">👍</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🏍️')">🏍️</button>
+                            <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🔧')">🔧</button>
+                        </div>
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary">Veröffentlichen</button>
