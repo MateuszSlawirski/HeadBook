@@ -432,13 +432,86 @@ async function handleAddTour(e) {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     btn.disabled = true;
-    const newTour = { title: document.getElementById('newTitle').value, category: document.getElementById('newRegion').value, country: document.getElementById('newCountry').value, state: document.getElementById('newState').value, km: document.getElementById('newKm').value, time: document.getElementById('newTime').value, desc: document.getElementById('newDesc').value, coords: [48.13, 11.57] };
-    try {
-        const response = await fetch(`${API_URL}/tours`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newTour) });
-        if(response.ok) { toursData.unshift(await response.json()); bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); e.target.reset(); filterTours(); alert("Tour geteilt!"); }
-    } catch (err) { alert(err.message); } finally { btn.disabled = false; }
-}
+    btn.innerText = "Standort wird gesucht...";
 
+    // 1. Daten aus dem Formular holen
+    const title = document.getElementById('newTitle').value;
+    const region = document.getElementById('newRegion').value;
+    const country = document.getElementById('newCountry').value;
+    const state = document.getElementById('newState').value; // Dient hier als Ort/Gebiet
+    const km = document.getElementById('newKm').value;
+    const time = document.getElementById('newTime').value;
+    const desc = document.getElementById('newDesc').value;
+
+    // 2. Geocoding: Adresse in Koordinaten umwandeln (via Nominatim API)
+    // Wir suchen nach "Bundesland/Gebiet, Land"
+    let coords = [48.13, 11.57]; // Fallback: München
+    
+    try {
+        if (state && country) {
+            const query = `${state}, ${country}`;
+            const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+            
+            const geoResponse = await fetch(geoUrl, {
+                headers: { 'User-Agent': 'Riderpoint-App' } // Wichtig für Nominatim!
+            });
+            const geoData = await geoResponse.json();
+
+            if (geoData && geoData.length > 0) {
+                // Wir nehmen das erste Ergebnis
+                coords = [parseFloat(geoData[0].lat), parseFloat(geoData[0].lon)];
+            }
+        }
+    } catch (geoError) {
+        console.warn("Geocoding fehlgeschlagen, nutze Fallback.", geoError);
+    }
+
+    // 3. Das fertige Objekt bauen
+    const newTour = { 
+        title, 
+        category: region, 
+        country, 
+        state, 
+        km, 
+        time, 
+        desc, 
+        coords: coords // Hier stehen jetzt die echten Koordinaten drin
+    };
+
+    // 4. An dein Azure Backend senden
+    try {
+        const response = await fetch(`${API_URL}/tours`, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(newTour) 
+        });
+        
+        if(response.ok) { 
+            const savedTour = await response.json();
+            // Tour vorne an die Liste hängen
+            toursData.unshift(savedTour); 
+            
+            // Modal schließen & Reset
+            bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); 
+            e.target.reset(); 
+            
+            // Ansicht aktualisieren
+            filterTours(); 
+            
+            // Karte auf den neuen Punkt zentrieren
+            if(map) map.flyTo(coords, 10);
+            
+            alert("Tour erfolgreich geteilt!"); 
+        } else {
+            throw new Error("Fehler beim Speichern");
+        }
+    } catch (err) { 
+        alert("Fehler: " + err.message); 
+    } finally { 
+        btn.disabled = false; 
+        btn.innerText = "Veröffentlichen";
+    }
+}
 /* ==========================================
    AUTH HELPER FUNCTIONS
    ========================================== */
