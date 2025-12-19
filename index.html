@@ -1,528 +1,333 @@
-/* ==========================================
-   IMPORTS & KONFIGURATION
-   ========================================== */
-import { firebaseConfig } from './config.js';
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    onAuthStateChanged, 
-    signOut,
-    updateProfile 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-const API_URL = "/api"; 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
-// Globale Variablen
-let toursData = []; 
-let currentUser = null;
-let currentRole = "guest"; 
-let map = null;
-let markers = []; 
-let currentForumTopic = null; 
-let currentCategoryId = null; 
-let allForumData = []; 
-let allThreadsCache = []; 
-
-const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
-
-/* ==========================================
-   APP START
-   ========================================== */
-
-document.addEventListener('DOMContentLoaded', () => {
-    initMap();
-    onAuthStateChanged(auth, async (user) => {
-        currentUser = user; 
-        if (user) {
-            updateUI(); 
-            await syncUserWithBackend(user); 
-            loadFeedPosts(); // Für die Profilseite
-        } else {
-            currentRole = "guest";
-            if (getActivePage() === 'profile') navigateTo('home');
-            updateUI();
-        }
-    });
-
-    loadToursFromServer();
-    loadForumData(); 
-    setupEventListeners();
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riderpoint</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Damit die Sections sauber umschalten */
+        .page-section { display: none; }
+        .page-section.active { display: block; }
+        /* Cursor für Links */
+        .nav-link { cursor: pointer; }
+    </style>
+</head>
+<body>
     
-    const startPage = window.location.hash.replace('#', '') || 'home';
-    navigateTo(startPage);
-});
+    <nav class="navbar navbar-expand-lg fixed-top py-2">
+        <div class="container">
+            <a onclick="navigateTo('home')" class="navbar-brand d-flex align-items-center" style="cursor:pointer;">
+                <img src="logo-maske.png" alt="Riderpoint" class="nav-logo-img">
+            </a>
+            <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar">
+                <div class="offcanvas-header">
+                    <h5 class="offcanvas-title">Menu</h5>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <ul class="navbar-nav justify-content-center flex-grow-1 pe-3">
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center active" id="nav-home" onclick="navigateTo('home')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                Home
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center" id="nav-tours" onclick="navigateTo('tours')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                                Touren
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center" id="nav-forum" onclick="navigateTo('forum')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                Community
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3 auth-required d-none">
+                             <a class="nav-link d-flex flex-column align-items-center notification-link" id="nav-notify" href="#">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                Benachrichtigung
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="d-flex justify-content-center align-items-center mt-3 mt-lg-0">
+                        <a class="nav-link d-flex flex-column align-items-center auth-required d-none" id="nav-profile" onclick="navigateTo('profile')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Profil
+                        </a>
+                        <div class="d-flex align-items-center mt-3 mt-lg-0 ms-lg-3">
+                             <div id="user-info" class="me-2 small fw-bold text-secondary" style="display:none;"></div>
+                             <button id="auth-btn" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Login</button>
+                             <button id="logout-btn" class="btn btn-danger btn-sm" style="display:none;">Logout</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
 
-/* ==========================================
-   ROUTER & NAVIGATION
-   ========================================== */
+    <div class="container-xl" style="margin-top: 100px;"> 
+        
+        <section id="page-home" class="page-section active">
+            <div class="content-grid">
+                <div class="sidebar">
+                    <div class="card">
+                        <div class="card-header">Willkommen</div>
+                        <p>Finde neue Touren, Freunde und Events.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">Bike der Woche</div>
+                        <div class="bike-card">
+                            <img src="https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=500&q=60" alt="Bike" class="bike-img">
+                            <div class="bike-info">
+                                <div class="bike-model">Yamaha MT-09</div>
+                                <div class="bike-specs">2023 • 119 PS</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="feed">
+                    <div class="card">
+                        <div style="display:flex; gap:10px;">
+                            <div class="new-post-avatar"></div>
+                            <input type="text" class="new-post-input" placeholder="Was gibt's Neues? (Enter zum Senden)">
+                        </div>
+                    </div>
+                    <div id="feed-posts"></div>
+                </div>
+            </div>
+        </section>
 
-function navigateTo(pageId) {
-    document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+        <section id="page-tours" class="page-section">
+            <div class="row">
+                <div class="col-md-3 mb-4">
+                    <div class="sidebar-filter-card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="m-0 fw-bold">Filter</h5>
+                            <small style="cursor:pointer; color:var(--accent);" onclick="resetFilters()">Zurücksetzen</small>
+                        </div>
+                        <div class="mb-3">
+                            <input type="text" id="search-input" class="form-control form-control-sm" placeholder="🔍 Suchen..." onkeyup="filterTours()">
+                        </div>
+                        <hr class="filter-divider">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">1. Kontinent / Region</label>
+                            <select id="filter-category" class="form-select form-select-sm" onchange="onCategoryChange()">
+                                <option value="all">Bitte wählen...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">2. Land</label>
+                            <select id="filter-country" class="form-select form-select-sm" onchange="onCountryChange()" disabled>
+                                <option value="all">--</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">3. Bundesland</label>
+                            <select id="filter-state" class="form-select form-select-sm" onchange="filterTours()" disabled>
+                                <option value="all">--</option>
+                            </select>
+                        </div>
+                    </div>
+                </div> 
+                <div class="col-md-9">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="m-0 fw-bold">Verfügbare Routen</h4>
+                        <button id="add-tour-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTourModal" style="display:none;">
+                            + Eigene Route teilen
+                        </button>
+                    </div>
+                    <div class="tours-layout">
+                        <div id="tours-container" class="tours-list">
+                            <p class="text-center text-muted mt-4">Bitte wähle links eine Region, um Touren zu laden.</p>
+                        </div>
+                        <div class="map-card" id="map" style="height: 500px; width: 100%;"></div>
+                    </div>
+                </div>
+            </div> 
+        </section>
 
-    const target = document.getElementById(`page-${pageId}`);
-    if (target) {
-        target.classList.add('active');
-        const navLink = document.getElementById(`nav-${pageId}`);
-        if(navLink) navLink.classList.add('active');
-        window.location.hash = pageId;
+        <section id="page-forum" class="page-section">
+            <div id="forum-container">
+                <div class="text-center p-5">
+                    <div class="spinner-border text-danger"></div>
+                </div>
+            </div>
+        </section>
 
-        // Reset Forum auf Startseite bei Reiterwechsel
-        if (pageId === 'forum') {
-            renderForumHome();
-        }
+        <section id="page-profile" class="page-section">
+            <div class="profile-header">
+                <div class="cover-photo"></div>
+                <div class="profile-nav">
+                    <div class="profile-pic"></div>
+                    <div class="user-details">
+                        <h1 class="user-name" id="profile-display-name">Lade Profil...</h1>
+                        <div class="user-tag" id="profile-email-display">user@example.com</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary">Story +</button>
+                        <button class="btn btn-secondary">Bearbeiten</button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-grid mt-3">
+                <div class="sidebar">
+                    <div class="card">
+                        <div class="card-header">Steckbrief</div>
+                        <div class="info-item">📍 München, Bayern</div>
+                        <div class="info-item">🎂 34 Jahre</div>
+                        <div class="info-item">🏍️ 34 Touren</div>
+                    </div>
+                </div>
+                <div class="feed">
+                    <div class="card">
+                        <div class="post-header">
+                            <div class="post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
+                            <div>
+                                <div style="font-weight:bold;">Max Mustermann</div>
+                                <div style="font-size:12px;color:gray;">Gestern</div>
+                            </div>
+                        </div>
+                        <div class="post-content">War heute eine geniale Runde am Kesselberg!</div>
+                        <div class="post-actions">
+                            <span>👍 14 Likes</span>
+                            <span>💬 2 Kommentare</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
 
-        if (pageId === 'tours' && map) {
-            setTimeout(() => { map.invalidateSize(); }, 100);
-        }
-    }
-}
-window.navigateTo = navigateTo;
+    <div class="modal fade" id="authModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Anmelden</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="authForm">
+                        <div class="mb-3" id="authNameContainer" style="display:none;">
+                            <label for="authName" class="form-label">Nickname</label>
+                            <input type="text" class="form-control" id="authName">
+                        </div>
+                        <div class="mb-3">
+                            <label>Email</label>
+                            <input type="email" id="authEmail" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Passwort</label>
+                            <input type="password" id="authPass" class="form-control" required>
+                        </div>
+                        <div id="auth-message" class="mb-3 small text-center"></div>
+                        <button type="submit" class="btn btn-primary w-100 mb-2" id="btn-submit-auth">Einloggen</button>
+                        <div class="text-center mt-2">
+                             <small>Noch kein Konto? <a href="#" id="btn-switch-mode">Hier registrieren</a></small>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
-function getActivePage() {
-    return window.location.hash.replace('#', '') || 'home';
-}
+    <div class="modal fade" id="addTourModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Neue Route teilen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addTourForm">
+                        <div class="mb-2"><label>Name der Tour</label><input type="text" class="form-control" id="newTitle" required></div>
+                        <div class="row mb-2">
+                            <div class="col"><label>Region</label><select class="form-select" id="newRegion"><option value="Europa">Europa</option><option value="Welt">Welt</option></select></div>
+                            <div class="col"><label>Land</label><select class="form-select" id="newCountry"><option value="Deutschland">Deutschland</option><option value="Österreich">Österreich</option><option value="Schweiz">Schweiz</option></select></div>
+                        </div>
+                        <div class="mb-2"><label>Bundesland / Gebiet</label><input type="text" class="form-control" id="newState"></div>
+                        <div class="row mb-2">
+                            <div class="col"><label>Länge (km)</label><input type="number" class="form-control" id="newKm" required></div>
+                            <div class="col"><label>Dauer (h)</label><input type="text" class="form-control" id="newTime"></div>
+                        </div>
+                        <div class="mb-3"><label>Beschreibung</label><textarea class="form-control" id="newDesc" rows="2"></textarea></div>
+                        <button type="submit" class="btn btn-primary w-100">Veröffentlichen</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
-/* ==========================================
-   AUTH & UI LOGIK
-   ========================================== */
+    <div class="modal fade" id="createThreadModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Neues Thema erstellen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createThreadForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">Thema</label>
+                            <input type="text" id="threadTopicDisplay" class="form-control-plaintext fw-bold" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="threadTitle" class="form-label">Titel / Frage</label>
+                            <input type="text" class="form-control" id="threadTitle" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="threadText" class="form-label">Deine Nachricht</label>
+                            <textarea class="form-control" id="threadText" rows="6" required></textarea>
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😀')">😀</button>
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🏍️')">🏍️</button>
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('👍')">👍</button>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Veröffentlichen</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
-async function syncUserWithBackend(firebaseUser) {
-    try {
-        const response = await fetch(`${API_URL}/user-sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: firebaseUser.uid, email: firebaseUser.email })
-        });
-        if(response.ok) {
-            const dbUser = await response.json();
-            currentRole = dbUser.role || "user"; 
-            updateUI(); 
-        }
-    } catch (err) { console.warn("Backend Sync übersprungen"); }
-}
+    <div class="modal fade" id="addCategoryModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Neue Kategorie hinzufügen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCategoryForm">
+                        <input type="hidden" id="mainCatIdInput">
+                        <div class="mb-3">
+                            <label for="newCatTitle" class="form-label">Name der Kategorie</label>
+                            <input type="text" class="form-control" id="newCatTitle" placeholder="z.B. Ducati" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newCatDesc" class="form-label">Beschreibung</label>
+                            <textarea class="form-control" id="newCatDesc" rows="2" placeholder="Worum geht es hier?"></textarea>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-danger">Kategorie erstellen</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
-function updateUI() {
-    const authBtn = document.getElementById('auth-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const userInfo = document.getElementById('user-info');
-    const secureLinks = document.querySelectorAll('.auth-required');
-    const addTourBtn = document.querySelector('#add-tour-btn');
-
-    if (currentUser) {
-        if(authBtn) authBtn.style.display = 'none'; 
-        if(logoutBtn) logoutBtn.style.display = 'block';
-        secureLinks.forEach(link => {
-            link.classList.remove('d-none');
-            link.style.display = ''; 
-        });
-        if(userInfo) {
-            userInfo.style.display = 'block';
-            const displayName = currentUser.displayName || currentUser.email.split('@')[0];
-            let roleBadge = (currentRole === 'admin') ? '<span class="badge bg-danger">ADMIN</span>' : '<span class="badge bg-secondary">USER</span>';
-            userInfo.innerHTML = `Hallo, <b>${displayName}</b> ${roleBadge}`;
-        }
-        if(addTourBtn) addTourBtn.style.display = 'block';
-        fillProfilePageData();
-    } else {
-        if(authBtn) authBtn.style.display = 'block';     
-        if(logoutBtn) logoutBtn.style.display = 'none';  
-        if(userInfo) userInfo.style.display = 'none';    
-        secureLinks.forEach(link => link.classList.add('d-none'));
-        if(addTourBtn) addTourBtn.style.display = 'none';
-    }
-}
-
-function fillProfilePageData() {
-    const nameDisplay = document.getElementById('profile-display-name');
-    const emailDisplay = document.getElementById('profile-email-display');
-    if(currentUser) {
-        if(nameDisplay) nameDisplay.innerText = currentUser.displayName || "Biker";
-        if(emailDisplay) emailDisplay.innerText = currentUser.email;
-    }
-}
-
-/* ==========================================
-   EVENT LISTENERS & FORMS
-   ========================================== */
-
-function setupEventListeners() {
-    // Logout
-    const btnLogout = document.getElementById('logout-btn');
-    if(btnLogout) btnLogout.addEventListener('click', async () => { await signOut(auth); navigateTo('home'); });
-
-    // Auth Modal Switch
-    const btnSwitch = document.getElementById('btn-switch-mode');
-    if(btnSwitch) {
-        btnSwitch.addEventListener('click', (e) => {
-            e.preventDefault();
-            const container = document.getElementById('authNameContainer');
-            const submitBtn = document.getElementById('btn-submit-auth');
-            const isReg = container.style.display === 'none';
-            container.style.display = isReg ? 'block' : 'none';
-            submitBtn.innerText = isReg ? 'Registrieren' : 'Einloggen';
-        });
-    }
-
-    // Auth Form
-    const authForm = document.getElementById('authForm');
-    if(authForm) authForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const isReg = document.getElementById('authNameContainer').style.display === 'block';
-        if (isReg) handleRegister(); else handleLogin(e);
-    });
-
-    // Neuer Thread (Live-Update Fix)
-    const createThreadForm = document.getElementById('createThreadForm');
-    if (createThreadForm) {
-        createThreadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!currentUser) return alert("Logge dich erst ein!");
-            const title = document.getElementById('threadTitle').value;
-            const text = document.getElementById('threadText').value;
-            const btn = e.target.querySelector('button[type="submit"]');
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`${API_URL}/threads`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic: currentForumTopic, title, text, user: currentUser.displayName || "Unbekannt" })
-                });
-
-                if (response.ok) {
-                    bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
-                    e.target.reset();
-                    await loadForumData(); // Daten im Cache aktualisieren
-                    await renderForumThreads(currentForumTopic, currentCategoryId); // Liste sofort neu zeichnen
-                }
-            } catch (err) { alert(err.message); } finally { btn.disabled = false; }
-        });
-    }
-
-    // Neue Kategorie
-    const addCategoryForm = document.getElementById('addCategoryForm');
-    if (addCategoryForm) {
-        addCategoryForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const mainCatId = document.getElementById('mainCatIdInput').value;
-            const title = document.getElementById('newCatTitle').value;
-            const desc = document.getElementById('newCatDesc').value;
-            try {
-                const response = await fetch(`${API_URL}/forum/category`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mainCatId, title, desc })
-                });
-                if (response.ok) {
-                    bootstrap.Modal.getInstance(document.getElementById('addCategoryModal')).hide();
-                    e.target.reset();
-                    await loadForumData();
-                    renderForumSubCategory(mainCatId);
-                }
-            } catch (err) { alert(err.message); }
-        });
-    }
-
-    // Touren Form
-    const addTourForm = document.getElementById('addTourForm');
-    if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
-}
-
-/* ==========================================
-   FORUM LOGIK (BMW STYLE & NAVIGATION)
-   ========================================== */
-
-async function loadForumData() {
-    const container = document.getElementById('forum-container');
-    if(!container) return;
-    try {
-        const catResponse = await fetch(`${API_URL}/forum`);
-        allForumData = await catResponse.json();
-        const threadResponse = await fetch(`${API_URL}/threads`); 
-        if (threadResponse.ok) allThreadsCache = await threadResponse.json();
-        if (!currentCategoryId && !currentForumTopic) renderForumHome();
-    } catch (error) { console.error("Forum-Fehler:", error); }
-}
-
-function renderBreadcrumbs(pathArray) {
-    let breadcrumbEl = document.getElementById('custom-breadcrumbs');
-    if (!breadcrumbEl) {
-        breadcrumbEl = document.createElement('div');
-        breadcrumbEl.id = 'custom-breadcrumbs';
-        breadcrumbEl.className = 'custom-breadcrumb container-xl';
-        const forumPage = document.getElementById('page-forum');
-        forumPage.insertBefore(breadcrumbEl, forumPage.firstChild);
-    }
-    let html = `<a onclick="navigateTo('home')">Startseite</a> <span>›</span> <a onclick="renderForumHome()">Forum</a>`;
-    pathArray.forEach(item => {
-        html += ` <span>›</span> `;
-        html += item.onclick ? `<a onclick="${item.onclick}">${item.label}</a>` : `<span class="active">${item.label}</span>`;
-    });
-    breadcrumbEl.innerHTML = html;
-}
-
-function getForumStats(filterFn) {
-    const threads = allThreadsCache.filter(filterFn);
-    const postCount = threads.reduce((acc, t) => acc + 1 + (t.replies || 0), 0);
-    threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-    return { threadCount: threads.length, postCount, lastPost: threads[0] || null };
-}
-
-window.renderForumHome = function() {
-    currentCategoryId = null; currentForumTopic = null;
-    renderBreadcrumbs([]); 
-    const container = document.getElementById('forum-container');
-    container.innerHTML = `<h2 class="fw-bold mb-3">Community Übersicht</h2>
-        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Forum</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
-
-    allForumData.forEach(cat => {
-        const stats = getForumStats(t => cat.topics.map(topic => topic.title).includes(t.topic));
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Keine Beiträge</small>`;
-        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')">
-            <div class="forum-icon">🏍️</div>
-            <div class="forum-main"><h5 class="fw-bold text-dark mb-0">${cat.title}</h5><p class="text-muted small mb-0">${cat.desc || ""}</p>${lastPostHtml}</div>
-            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div>
-            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div>
-            <div class="forum-arrow">❯</div>
-        </div>`;
-    });
-};
-
-window.renderForumSubCategory = function(catId) {
-    currentCategoryId = catId; currentForumTopic = null;
-    const category = allForumData.find(c => c.id === catId);
-    if (!category) return;
-    renderBreadcrumbs([{ label: category.title, onclick: null }]); 
-    const container = document.getElementById('forum-container');
-    const isAllowed = USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin';
-
-    container.innerHTML = `<div class="clearfix mb-3"><h2 class="fw-bold float-start">${category.title}</h2>${currentUser && isAllowed ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}</div>
-        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
-
-    category.topics.forEach(topic => {
-        const stats = getForumStats(t => t.topic === topic.title);
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Leer</small>`;
-        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')">
-            <div class="forum-icon">🔧</div>
-            <div class="forum-main"><h5 class="fw-bold text-primary mb-0">${topic.title}</h5><p class="text-muted small mb-0">${topic.desc || ""}</p>${lastPostHtml}</div>
-            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div>
-            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div>
-            <div class="forum-arrow">❯</div>
-        </div>`;
-    });
-};
-
-window.renderForumThreads = async function(topicName, catId) {
-    currentForumTopic = topicName;
-    const cat = allForumData.find(c => c.id === catId);
-    renderBreadcrumbs([{ label: cat ? cat.title : "Zurück", onclick: cat ? `renderForumSubCategory('${cat.id}')` : `renderForumHome()` }, { label: topicName, onclick: null }]);
-    
-    const container = document.getElementById('forum-container');
-    container.innerHTML = `<div class="clearfix mb-3"><h3 class="fw-bold float-start">${topicName}</h3>${currentUser ? `<button class="btn btn-danger float-end" onclick="openNewThreadModal()">Neues Thema +</button>` : ""}</div>
-        <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
-        <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>`;
-
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-    const threads = await response.json();
-    const listArea = document.getElementById('thread-list-area');
-    listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
-    threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-    threads.forEach(thread => {
-        listArea.innerHTML += `<div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
-            <div class="forum-icon" style="font-size:1.2rem; width:30px;">📄</div>
-            <div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div>
-            <div class="forum-stats fw-bold">${thread.replies || 0}</div>
-            <div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div>
-        </div>`;
-    });
-};
-
-window.renderThreadDetail = async function(threadId, topicName, catId) {
-    let breadcrumbs = [];
-    if (catId) {
-        const cat = allForumData.find(c => c.id === catId);
-        if (cat) breadcrumbs.push({ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` });
-    }
-    breadcrumbs.push({ label: topicName, onclick: `renderForumThreads('${topicName}', '${catId}')` }); // Zurück-Link fix
-    breadcrumbs.push({ label: "Beitrag lesen", onclick: null });
-    renderBreadcrumbs(breadcrumbs);
-
-    const container = document.getElementById('forum-container');
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-    const threads = await response.json();
-    const t = threads.find(thread => thread.id === threadId);
-    if (!t) return;
-
-    container.innerHTML = `<h3 class="fw-bold mb-4">${t.title}</h3>
-        <div class="card mb-3 border-0 shadow-sm"><div class="card-header bg-light border-bottom py-2 d-flex justify-content-between"><div><span class="fw-bold text-danger">${t.user}</span> <span class="text-muted small">schrieb am ${t.date}:</span></div><div class="text-muted small">#1</div></div><div class="card-body"><p class="card-text fs-5" style="white-space: pre-wrap;">${t.text}</p></div></div>`;
-
-    if (t.repliesList) {
-        t.repliesList.forEach((r, idx) => {
-            container.innerHTML += `<div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white"><div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between"><div><span class="fw-bold text-dark">${r.user}</span> <span class="text-muted small">antwortete am ${r.date}:</span></div><div class="text-muted small">#${idx + 2}</div></div><div class="card-body pt-0"><p class="mb-0" style="white-space: pre-wrap;">${r.text}</p></div></div>`;
-        });
-    }
-
-    if (currentUser) {
-        container.innerHTML += `<div class="card mt-4 bg-light border-0"><div class="card-body"><h6 class="fw-bold mb-2">Antworten</h6><textarea id="replyText" class="form-control mb-2" rows="3"></textarea><div class="d-flex justify-content-between"><div><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button></div><button class="btn btn-danger" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Antworten</button></div></div></div>`;
-    }
-};
-
-window.sendReply = async function(threadId, topic, catId) {
-    const text = document.getElementById('replyText').value;
-    if (!text.trim()) return alert("Text eingeben!");
-    try {
-        const response = await fetch(`${API_URL}/reply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: threadId, topic, text, user: currentUser.displayName || "Unbekannt" })
-        });
-        if (response.ok) renderThreadDetail(threadId, topic, catId);
-    } catch (err) { alert(err.message); }
-};
-
-/* ==========================================
-   TOUREN & FEED LOGIK (Wiederhergestellt)
-   ========================================== */
-
-async function loadToursFromServer() {
-    try {
-        const response = await fetch(`${API_URL}/tours`);
-        if (response.ok) toursData = await response.json();
-    } catch (err) { console.warn("Touren Offline"); } finally { initFilters(); filterTours(); }
-}
-
-function initMap() {
-    if (map || !document.getElementById('map')) return; 
-    map = L.map('map').setView([51.16, 10.45], 6); 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-}
-
-function initFilters() {
-    const catSelect = document.getElementById('filter-category');
-    if(!catSelect) return;
-    catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
-    [...new Set(toursData.map(t => t.category))].sort().forEach(c => {
-        const opt = document.createElement('option'); opt.value = c; opt.innerText = c; catSelect.appendChild(opt);
-    });
-}
-
-window.onCategoryChange = () => {
-    const sel = document.getElementById('filter-category').value;
-    const country = document.getElementById('filter-country');
-    country.innerHTML = '<option value="all">Länder laden...</option>';
-    country.disabled = (sel === 'all');
-    if (!country.disabled) {
-        [...new Set(toursData.filter(t => t.category === sel).map(t => t.country))].sort().forEach(c => {
-            const opt = document.createElement('option'); opt.value = c; opt.innerText = c; country.appendChild(opt);
-        });
-    }
-    filterTours();
-};
-
-window.onCountryChange = () => {
-    const selCat = document.getElementById('filter-category').value;
-    const selCou = document.getElementById('filter-country').value;
-    const state = document.getElementById('filter-state');
-    state.innerHTML = '<option value="all">Gebiete...</option>';
-    state.disabled = (selCou === 'all');
-    if (!state.disabled) {
-        [...new Set(toursData.filter(t => t.category === selCat && t.country === selCou).map(t => t.state))].sort().forEach(s => {
-            const opt = document.createElement('option'); opt.value = s; opt.innerText = s; state.appendChild(opt);
-        });
-    }
-    filterTours();
-};
-
-window.filterTours = () => {
-    const c = document.getElementById('filter-category')?.value;
-    const co = document.getElementById('filter-country')?.value;
-    const s = document.getElementById('filter-state')?.value;
-    const q = document.getElementById('search-input')?.value.toLowerCase();
-    let f = toursData;
-    if(c && c !== 'all') f = f.filter(t => t.category === c);
-    if(co && co !== 'all') f = f.filter(t => t.country === co);
-    if(s && s !== 'all') f = f.filter(t => t.state === s);
-    if(q) f = f.filter(t => t.title.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q));
-    renderTours(f);
-};
-
-function renderTours(data) {
-    const list = document.getElementById('tours-container');
-    if(!list) return;
-    list.innerHTML = '';
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-    data.forEach(t => {
-        if(t.coords) {
-            const m = L.marker(t.coords).addTo(map).bindPopup(`<b>${t.title}</b>`);
-            markers.push(m);
-        }
-        const card = document.createElement('div');
-        card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
-        card.innerHTML = `<h5 class="fw-bold m-0">${t.title}</h5><div class="small text-muted">${t.category} • ${t.country}</div><p class="small mb-0 text-secondary">${t.desc || ""}</p>`;
-        card.onclick = () => { if(t.coords) map.flyTo(t.coords, 10); };
-        list.appendChild(card);
-    });
-}
-
-async function handleAddTour(e) {
-    e.preventDefault();
-    const btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    const newT = { title: document.getElementById('newTitle').value, category: document.getElementById('newRegion').value, country: document.getElementById('newCountry').value, state: document.getElementById('newState').value, km: document.getElementById('newKm').value, time: document.getElementById('newTime').value, desc: document.getElementById('newDesc').value, coords: [48.13, 11.57] };
-    try {
-        const res = await fetch(`${API_URL}/tours`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newT) });
-        if(res.ok) { toursData.unshift(await res.json()); bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); e.target.reset(); filterTours(); alert("Tour geteilt!"); }
-    } catch (err) { alert(err.message); } finally { btn.disabled = false; }
-}
-
-/* ==========================================
-   FEED & AUTH HELPERS
-   ========================================== */
-
-async function loadFeedPosts() {
-    const container = document.getElementById('feed-posts');
-    if (!container) return;
-    container.innerHTML = '<div class="card p-3 mb-3 text-center text-muted small">Lade Feed...</div>';
-    try {
-        const res = await fetch(`${API_URL}/posts`);
-        const posts = await res.json();
-        container.innerHTML = posts.length ? '' : '<div class="card p-3 mb-3 text-center text-muted">Noch keine Posts.</div>';
-        posts.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(p => {
-            container.innerHTML += `<div class="card mb-3"><div class="post-header p-3 border-bottom d-flex align-items-center"><div class="post-avatar me-2" style="background-image:url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div><div><div class="fw-bold">${p.user}</div><div class="small text-muted">${p.date}</div></div></div><div class="p-3">${p.text}</div></div>`;
-        });
-    } catch (err) { console.error("Feed-Fehler:", err); }
-}
-
-async function handleRegister() {
-    const e = document.getElementById('authEmail').value, p = document.getElementById('authPass').value, n = document.getElementById('authName').value, m = document.getElementById('auth-message');
-    if (!n) return m.innerHTML = `<span class="text-danger">Nickname fehlt!</span>`;
-    try {
-        const c = await createUserWithEmailAndPassword(auth, e, p);
-        await updateProfile(c.user, { displayName: n });
-        m.innerHTML = `<span class="text-success">Willkommen ${n}!</span>`;
-        setTimeout(() => window.location.reload(), 1000);
-    } catch (err) { m.innerHTML = `<span class="text-danger">${err.message}</span>`; }
-}
-
-async function handleLogin(e) {
-    const em = document.getElementById('authEmail').value, ps = document.getElementById('authPass').value, ms = document.getElementById('auth-message');
-    try {
-        await signInWithEmailAndPassword(auth, em, ps);
-        bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
-    } catch (err) { ms.innerHTML = `<span class="text-danger">${err.message}</span>`; }
-}
-
-/* ==========================================
-   GLOBAL EXPORTS
-   ========================================== */
-window.openNewThreadModal = () => { document.getElementById('threadTopicDisplay').value = currentForumTopic; new bootstrap.Modal(document.getElementById('createThreadModal')).show(); };
-window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput').value = id; new bootstrap.Modal(document.getElementById('addCategoryModal')).show(); };
-window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
-window.resetFilters = () => { document.getElementById('search-input').value = ""; document.getElementById('filter-category').value = "all"; window.onCategoryChange(); };
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
