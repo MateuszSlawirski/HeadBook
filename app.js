@@ -600,7 +600,16 @@ window.renderForumHome = function() {
 
     allForumData.forEach(cat => {
         const stats = getForumStats(t => cat.topics.map(topic => topic.title).includes(t.topic));
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> (${stats.lastPost.date})</div>` : `<small class="text-muted">Keine Beiträge</small>`;
+        
+        let lastPostHtml = `<small class="text-muted">Keine Beiträge</small>`;
+        if (stats.lastPost) {
+            lastPostHtml = `
+                <div class="mt-1 small text-muted">
+                    Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> 
+                    von <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
+                    <span class="text-secondary">am ${stats.lastPost.date}</span>
+                </div>`;
+        }
 
         container.innerHTML += `
             <div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')">
@@ -636,7 +645,16 @@ window.renderForumSubCategory = function(catId) {
 
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Letzter: <span class="text-dark fw-bold">${stats.lastPost.user}</span> (${stats.lastPost.date})</div>` : `<small class="text-muted">Leer</small>`;
+        
+        let lastPostHtml = `<small class="text-muted">Leer</small>`;
+        if (stats.lastPost) {
+            lastPostHtml = `
+                <div class="mt-1 small text-muted">
+                    Neuer Beitrag von <span class="text-dark fw-bold">${stats.lastPost.user}</span> 
+                    <span class="text-secondary">am ${stats.lastPost.date}</span>
+                </div>`;
+        }
+
         container.innerHTML += `
             <div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')">
                 <div class="forum-icon">🔧</div>
@@ -675,7 +693,7 @@ window.renderForumThreads = async function(topicName, catId) {
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     threads.forEach(thread => {
         listArea.innerHTML += `
-            <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}')">
+            <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
                 <div class="forum-icon" style="font-size:1.2rem; width:30px;">📄</div>
                 <div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div>
                 <div class="forum-stats fw-bold">${thread.replies || 0}</div>
@@ -684,8 +702,19 @@ window.renderForumThreads = async function(topicName, catId) {
     });
 };
 
-window.renderThreadDetail = async function(threadId, topicName) {
-    renderBreadcrumbs([{ label: topicName, onclick: `renderForumThreads('${topicName}')` }, { label: "Beitrag lesen", onclick: null }]);
+window.renderThreadDetail = async function(threadId, topicName, catId) {
+    let breadcrumbs = [];
+    if (catId) {
+        const cat = allForumData.find(c => c.id === catId);
+        if (cat) {
+            breadcrumbs.push({ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` });
+        }
+    }
+    breadcrumbs.push({ label: topicName, onclick: `renderForumThreads('${topicName}', '${catId}')` });
+    breadcrumbs.push({ label: "Beitrag lesen", onclick: null });
+    
+    renderBreadcrumbs(breadcrumbs);
+
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
 
@@ -728,7 +757,7 @@ window.renderThreadDetail = async function(threadId, topicName) {
                         <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('🏍️', 'replyText')">🏍️</button>
                     </div>
-                    <button class="btn btn-danger" onclick="sendReply('${currentThread.id}', '${currentThread.topic}')">Antworten</button>
+                    <button class="btn btn-danger" onclick="sendReply('${currentThread.id}', '${currentThread.topic}', '${catId}')">Antworten</button>
                 </div>
             </div></div>`;
     } else {
@@ -736,7 +765,7 @@ window.renderThreadDetail = async function(threadId, topicName) {
     }
 };
 
-window.sendReply = async function(threadId, topic) {
+window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
     if (!text.trim()) return alert("Bitte Text eingeben!");
     try {
@@ -745,7 +774,7 @@ window.sendReply = async function(threadId, topic) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: threadId, topic: topic, text: text, user: currentUser.displayName || "Unbekannt" })
         });
-        if (response.ok) renderThreadDetail(threadId, topic);
+        if (response.ok) renderThreadDetail(threadId, topic, catId);
     } catch (err) { alert(err.message); }
 };
 
