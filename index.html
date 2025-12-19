@@ -8,8 +8,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="style.css">
     <style>
+        /* Damit die Sections sauber umschalten */
         .page-section { display: none; }
         .page-section.active { display: block; }
+        /* Cursor für Links */
         .nav-link { cursor: pointer; }
     </style>
 </head>
@@ -30,32 +32,74 @@
                 </div>
                 <div class="offcanvas-body">
                     <ul class="navbar-nav justify-content-center flex-grow-1 pe-3">
-                        <li class="nav-item mx-3"><a class="nav-link active" id="nav-home" onclick="navigateTo('home')">Home</a></li>
-                        <li class="nav-item mx-3"><a class="nav-link" id="nav-tours" onclick="navigateTo('tours')">Touren</a></li>
-                        <li class="nav-item mx-3"><a class="nav-link" id="nav-forum" onclick="navigateTo('forum')">Community</a></li>
-                        <li class="nav-item mx-3 auth-required d-none"><a class="nav-link" id="nav-notify" href="#">Benachrichtigung</a></li>
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center active" id="nav-home" onclick="navigateTo('home')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                Home
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center" id="nav-tours" onclick="navigateTo('tours')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                                Touren
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3">
+                            <a class="nav-link d-flex flex-column align-items-center" id="nav-forum" onclick="navigateTo('forum')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                Community
+                            </a>
+                        </li>
+                        <li class="nav-item mx-3 auth-required d-none">
+                             <a class="nav-link d-flex flex-column align-items-center notification-link" id="nav-notify" href="#">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                Benachrichtigung
+                            </a>
+                        </li>
                     </ul>
-                    <div class="d-flex align-items-center">
-                        <div id="user-info" class="me-2 small fw-bold text-secondary" style="display:none;"></div>
-                        <button id="auth-btn" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Login</button>
-                        <button id="logout-btn" class="btn btn-danger btn-sm" style="display:none;">Logout</button>
+                    <div class="d-flex justify-content-center align-items-center mt-3 mt-lg-0">
+                        <a class="nav-link d-flex flex-column align-items-center auth-required d-none" id="nav-profile" onclick="navigateTo('profile')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Profil
+                        </a>
+                        <div class="d-flex align-items-center mt-3 mt-lg-0 ms-lg-3">
+                             <div id="user-info" class="me-2 small fw-bold text-secondary" style="display:none;"></div>
+                             <button id="auth-btn" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Login</button>
+                             <button id="logout-btn" class="btn btn-danger btn-sm" style="display:none;">Logout</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </nav>
 
-    <div class="container-xl" style="margin-top: 100px;">
+    <div class="container-xl" style="margin-top: 100px;"> 
         
         <section id="page-home" class="page-section active">
             <div class="content-grid">
                 <div class="sidebar">
                     <div class="card">
                         <div class="card-header">Willkommen</div>
-                        <p class="p-2">Finde neue Touren, Freunde und Events.</p>
+                        <p>Finde neue Touren, Freunde und Events.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">Bike der Woche</div>
+                        <div class="bike-card">
+                            <img src="https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=500&q=60" alt="Bike" class="bike-img">
+                            <div class="bike-info">
+                                <div class="bike-model">Yamaha MT-09</div>
+                                <div class="bike-specs">2023 • 119 PS</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="feed">
+                    <div class="card">
+                        <div style="display:flex; gap:10px;">
+                            <div class="new-post-avatar"></div>
+                            <input type="text" class="new-post-input" placeholder="Was gibt's Neues? (Enter zum Senden)">
+                        </div>
+                    </div>
                     <div id="feed-posts"></div>
                 </div>
             </div>
@@ -63,29 +107,101 @@
 
         <section id="page-tours" class="page-section">
             <div class="row">
-                <div class="col-md-3">
+                <div class="col-md-3 mb-4">
                     <div class="sidebar-filter-card">
-                        <h5>Filter</h5>
-                        <select id="filter-category" class="form-select mb-2" onchange="onCategoryChange()"><option value="all">Region wählen...</option></select>
-                        <button id="add-tour-btn" class="btn btn-primary w-100 mt-2" data-bs-toggle="modal" data-bs-target="#addTourModal" style="display:none;">+ Route teilen</button>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="m-0 fw-bold">Filter</h5>
+                            <small style="cursor:pointer; color:var(--accent);" onclick="resetFilters()">Zurücksetzen</small>
+                        </div>
+                        <div class="mb-3">
+                            <input type="text" id="search-input" class="form-control form-control-sm" placeholder="🔍 Suchen..." onkeyup="filterTours()">
+                        </div>
+                        <hr class="filter-divider">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">1. Kontinent / Region</label>
+                            <select id="filter-category" class="form-select form-select-sm" onchange="onCategoryChange()">
+                                <option value="all">Bitte wählen...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">2. Land</label>
+                            <select id="filter-country" class="form-select form-select-sm" onchange="onCountryChange()" disabled>
+                                <option value="all">--</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted text-uppercase">3. Bundesland</label>
+                            <select id="filter-state" class="form-select form-select-sm" onchange="filterTours()" disabled>
+                                <option value="all">--</option>
+                            </select>
+                        </div>
+                    </div>
+                </div> 
+                <div class="col-md-9">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="m-0 fw-bold">Verfügbare Routen</h4>
+                        <button id="add-tour-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTourModal" style="display:none;">
+                            + Eigene Route teilen
+                        </button>
+                    </div>
+                    <div class="tours-layout">
+                        <div id="tours-container" class="tours-list">
+                            <p class="text-center text-muted mt-4">Bitte wähle links eine Region, um Touren zu laden.</p>
+                        </div>
+                        <div class="map-card" id="map" style="height: 500px; width: 100%;"></div>
                     </div>
                 </div>
-                <div class="col-md-9">
-                    <div id="tours-container"></div>
-                    <div id="map" style="height: 500px; border-radius: 10px;"></div>
+            </div> 
+        </section>
+
+        <section id="page-forum" class="page-section">
+            <div id="forum-container">
+                <div class="text-center p-5">
+                    <div class="spinner-border text-danger"></div>
                 </div>
             </div>
         </section>
 
-        <section id="page-forum" class="page-section">
-            <div id="forum-container" class="container-xl">
-                </div>
-        </section>
-
         <section id="page-profile" class="page-section">
-            <div class="profile-header text-center">
-                <h1 id="profile-display-name">Profil</h1>
-                <p id="profile-email-display"></p>
+            <div class="profile-header">
+                <div class="cover-photo"></div>
+                <div class="profile-nav">
+                    <div class="profile-pic"></div>
+                    <div class="user-details">
+                        <h1 class="user-name" id="profile-display-name">Lade Profil...</h1>
+                        <div class="user-tag" id="profile-email-display">user@example.com</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary">Story +</button>
+                        <button class="btn btn-secondary">Bearbeiten</button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-grid mt-3">
+                <div class="sidebar">
+                    <div class="card">
+                        <div class="card-header">Steckbrief</div>
+                        <div class="info-item">📍 München, Bayern</div>
+                        <div class="info-item">🎂 34 Jahre</div>
+                        <div class="info-item">🏍️ 34 Touren</div>
+                    </div>
+                </div>
+                <div class="feed">
+                    <div class="card">
+                        <div class="post-header">
+                            <div class="post-avatar" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=100&q=60');"></div>
+                            <div>
+                                <div style="font-weight:bold;">Max Mustermann</div>
+                                <div style="font-size:12px;color:gray;">Gestern</div>
+                            </div>
+                        </div>
+                        <div class="post-content">War heute eine geniale Runde am Kesselberg!</div>
+                        <div class="post-actions">
+                            <span>👍 14 Likes</span>
+                            <span>💬 2 Kommentare</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
     </div>
@@ -93,35 +209,55 @@
     <div class="modal fade" id="authModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title">Anmelden</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header">
+                    <h5 class="modal-title">Anmelden</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
                 <div class="modal-body">
                     <form id="authForm">
-                        <div id="authNameContainer" class="mb-3" style="display:none;"><label>Nickname</label><input type="text" id="authName" class="form-control"></div>
-                        <div class="mb-3"><label>Email</label><input type="email" id="authEmail" class="form-control" required></div>
-                        <div class="mb-3"><label>Passwort</label><input type="password" id="authPass" class="form-control" required></div>
-                        <button type="submit" id="btn-submit-auth" class="btn btn-primary w-100">Einloggen</button>
-                        <div class="text-center mt-2"><small><a href="#" id="btn-switch-mode">Hier registrieren</a></small></div>
+                        <div class="mb-3" id="authNameContainer" style="display:none;">
+                            <label for="authName" class="form-label">Nickname</label>
+                            <input type="text" class="form-control" id="authName">
+                        </div>
+                        <div class="mb-3">
+                            <label>Email</label>
+                            <input type="email" id="authEmail" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Passwort</label>
+                            <input type="password" id="authPass" class="form-control" required>
+                        </div>
+                        <div id="auth-message" class="mb-3 small text-center"></div>
+                        <button type="submit" class="btn btn-primary w-100 mb-2" id="btn-submit-auth">Einloggen</button>
+                        <div class="text-center mt-2">
+                             <small>Noch kein Konto? <a href="#" id="btn-switch-mode">Hier registrieren</a></small>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="createThreadModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+    <div class="modal fade" id="addTourModal" tabindex="-1">
+        <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title">Neues Thema erstellen</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header">
+                    <h5 class="modal-title">Neue Route teilen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
                 <div class="modal-body">
-                    <form id="createThreadForm">
-                        <div class="mb-2"><label>Thema</label><input type="text" id="threadTopicDisplay" class="form-control-plaintext fw-bold" readonly></div>
-                        <div class="mb-3"><label>Titel</label><input type="text" id="threadTitle" class="form-control" required></div>
-                        <div class="mb-3"><label>Nachricht</label><textarea id="threadText" class="form-control" rows="5" required></textarea>
-                            <div class="mt-2">
-                                <button type="button" class="btn btn-light btn-sm" onclick="insertEmoji('😀')">😀</button>
-                                <button type="button" class="btn btn-light btn-sm" onclick="insertEmoji('🏍️')">🏍️</button>
-                                <button type="button" class="btn btn-light btn-sm" onclick="insertEmoji('👍')">👍</button>
-                            </div>
+                    <form id="addTourForm">
+                        <div class="mb-2"><label>Name der Tour</label><input type="text" class="form-control" id="newTitle" required></div>
+                        <div class="row mb-2">
+                            <div class="col"><label>Region</label><select class="form-select" id="newRegion"><option value="Europa">Europa</option><option value="Welt">Welt</option></select></div>
+                            <div class="col"><label>Land</label><select class="form-select" id="newCountry"><option value="Deutschland">Deutschland</option><option value="Österreich">Österreich</option><option value="Schweiz">Schweiz</option></select></div>
                         </div>
+                        <div class="mb-2"><label>Bundesland / Gebiet</label><input type="text" class="form-control" id="newState"></div>
+                        <div class="row mb-2">
+                            <div class="col"><label>Länge (km)</label><input type="number" class="form-control" id="newKm" required></div>
+                            <div class="col"><label>Dauer (h)</label><input type="text" class="form-control" id="newTime"></div>
+                        </div>
+                        <div class="mb-3"><label>Beschreibung</label><textarea class="form-control" id="newDesc" rows="2"></textarea></div>
                         <button type="submit" class="btn btn-primary w-100">Veröffentlichen</button>
                     </form>
                 </div>
@@ -129,16 +265,62 @@
         </div>
     </div>
 
-    <div class="modal fade" id="addCategoryModal" tabindex="-1">
-        <div class="modal-dialog">
+    <div class="modal fade" id="createThreadModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title">Neue Kategorie hinzufügen</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header">
+                    <h5 class="modal-title">Neues Thema erstellen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createThreadForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">Thema</label>
+                            <input type="text" id="threadTopicDisplay" class="form-control-plaintext fw-bold" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="threadTitle" class="form-label">Titel / Frage</label>
+                            <input type="text" class="form-control" id="threadTitle" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="threadText" class="form-label">Deine Nachricht</label>
+                            <textarea class="form-control" id="threadText" rows="6" required></textarea>
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('😀')">😀</button>
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('🏍️')">🏍️</button>
+                                <button type="button" class="btn btn-light btn-sm me-1" onclick="insertEmoji('👍')">👍</button>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Veröffentlichen</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addCategoryModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Neue Kategorie hinzufügen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
                 <div class="modal-body">
                     <form id="addCategoryForm">
                         <input type="hidden" id="mainCatIdInput">
-                        <div class="mb-3"><label>Name (z.B. Marke)</label><input type="text" id="newCatTitle" class="form-control" required></div>
-                        <div class="mb-3"><label>Beschreibung</label><textarea id="newCatDesc" class="form-control" rows="2"></textarea></div>
-                        <button type="submit" class="btn btn-danger w-100">Kategorie erstellen</button>
+                        <div class="mb-3">
+                            <label for="newCatTitle" class="form-label">Name der Kategorie</label>
+                            <input type="text" class="form-control" id="newCatTitle" placeholder="z.B. Ducati" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newCatDesc" class="form-label">Beschreibung</label>
+                            <textarea class="form-control" id="newCatDesc" rows="2" placeholder="Worum geht es hier?"></textarea>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-danger">Kategorie erstellen</button>
+                        </div>
                     </form>
                 </div>
             </div>
