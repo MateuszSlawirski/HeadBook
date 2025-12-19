@@ -430,43 +430,59 @@ function renderTours(data) {
 
 async function handleAddTour(e) {
     e.preventDefault();
-    const btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.innerText = "Standort wird gesucht...";
+    
+    // 1. Prüfen, ob User eingeloggt ist
+    if (!currentUser) {
+        alert("Bitte logge dich ein, um eine Route zu teilen.");
+        return;
+    }
 
-    // 1. Daten aus dem Formular holen
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "🔍 Suche Standort...";
+
+    // 2. Daten aus dem Formular holen
     const title = document.getElementById('newTitle').value;
     const region = document.getElementById('newRegion').value;
     const country = document.getElementById('newCountry').value;
-    const state = document.getElementById('newState').value; // Dient hier als Ort/Gebiet
+    const state = document.getElementById('newState').value; // Das ist der Ort/Gebiet
     const km = document.getElementById('newKm').value;
     const time = document.getElementById('newTime').value;
     const desc = document.getElementById('newDesc').value;
 
-    // 2. Geocoding: Adresse in Koordinaten umwandeln (via Nominatim API)
-    // Wir suchen nach "Bundesland/Gebiet, Land"
-    let coords = [48.13, 11.57]; // Fallback: München
+    // 3. Geocoding: Wir fragen OpenStreetMap nach den Koordinaten
+    // Wir bauen eine Suchanfrage: "Gebiet, Land" (z.B. "Schwarzwald, Deutschland")
+    let coords = null; 
     
     try {
-        if (state && country) {
-            const query = `${state}, ${country}`;
-            const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
-            
-            const geoResponse = await fetch(geoUrl, {
-                headers: { 'User-Agent': 'Riderpoint-App' } // Wichtig für Nominatim!
-            });
-            const geoData = await geoResponse.json();
+        // Wir kombinieren Bundesland/Gebiet und Land für bessere Genauigkeit
+        const query = `${state}, ${country}`;
+        
+        // Aufruf der kostenlosen Nominatim API
+        const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+        
+        const geoResponse = await fetch(geoUrl, {
+            headers: { 'User-Agent': 'Riderpoint-Community-App' } // Wichtig: Ein User-Agent ist Pflicht
+        });
+        const geoData = await geoResponse.json();
 
-            if (geoData && geoData.length > 0) {
-                // Wir nehmen das erste Ergebnis
-                coords = [parseFloat(geoData[0].lat), parseFloat(geoData[0].lon)];
-            }
+        if (geoData && geoData.length > 0) {
+            // Treffer! Wir nehmen das erste Ergebnis
+            coords = [parseFloat(geoData[0].lat), parseFloat(geoData[0].lon)];
+            console.log("Koordinaten gefunden:", coords);
+        } else {
+            console.warn("Keine Koordinaten gefunden, nehme Fallback.");
+            // Fallback: Wenn nichts gefunden wird, nehmen wir die Mitte von Deutschland oder 0,0
+            // Besser wäre hier eine Fehlermeldung an den User, aber wir wollen es simpel halten.
+            coords = [51.16, 10.45]; 
         }
     } catch (geoError) {
-        console.warn("Geocoding fehlgeschlagen, nutze Fallback.", geoError);
+        console.error("Geocoding Fehler:", geoError);
+        coords = [51.16, 10.45]; // Fallback bei Internetfehler
     }
 
-    // 3. Das fertige Objekt bauen
+    // 4. Das fertige Objekt bauen
     const newTour = { 
         title, 
         category: region, 
@@ -475,11 +491,13 @@ async function handleAddTour(e) {
         km, 
         time, 
         desc, 
-        coords: coords // Hier stehen jetzt die echten Koordinaten drin
+        user: currentUser.displayName || "Unbekannt", // Wir speichern wer es war
+        coords: coords // Hier sind jetzt die echten Koordinaten!
     };
 
-    // 4. An dein Azure Backend senden
+    // 5. An dein Azure Backend senden
     try {
+        btn.innerText = "Speichere...";
         const response = await fetch(`${API_URL}/tours`, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -488,28 +506,35 @@ async function handleAddTour(e) {
         
         if(response.ok) { 
             const savedTour = await response.json();
-            // Tour vorne an die Liste hängen
+            
+            // Tour lokal in die Liste laden (damit man nicht neu laden muss)
             toursData.unshift(savedTour); 
             
-            // Modal schließen & Reset
-            bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); 
+            // Modal schließen & Formular leeren
+            const modalEl = document.getElementById('addTourModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
             e.target.reset(); 
             
-            // Ansicht aktualisieren
+            // Liste neu rendern
             filterTours(); 
             
-            // Karte auf den neuen Punkt zentrieren
-            if(map) map.flyTo(coords, 10);
+            // Karte sofort auf den neuen Punkt fliegen lassen
+            if(map && savedTour.coords) {
+                map.flyTo(savedTour.coords, 10);
+                // Optional: Sofort einen Marker setzen, falls filterTours das nicht schnell genug macht
+                L.marker(savedTour.coords).addTo(map).bindPopup(`<b>${savedTour.title}</b><br>Neu erstellt!`).openPopup();
+            }
             
-            alert("Tour erfolgreich geteilt!"); 
+            alert("Deine Tour wurde veröffentlicht!"); 
         } else {
-            throw new Error("Fehler beim Speichern");
+            throw new Error("Server Fehler beim Speichern");
         }
     } catch (err) { 
         alert("Fehler: " + err.message); 
     } finally { 
         btn.disabled = false; 
-        btn.innerText = "Veröffentlichen";
+        btn.innerText = originalBtnText;
     }
 }
 /* ==========================================
