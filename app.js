@@ -237,7 +237,7 @@ function renderBreadcrumbs(pathArray) {
 
 function getForumStats(filterFn) {
     const threads = allThreadsCache.filter(filterFn);
-    const postCount = threads.reduce((acc, t) => acc + 1 + (t.replies || 0), 0);
+    const postCount = threads.reduce((acc, t) => acc +  (t.replies || 0), 0);
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     return { threadCount: threads.length, postCount, lastPost: threads[0] || null };
 }
