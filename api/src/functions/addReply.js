@@ -36,18 +36,21 @@ app.http('addReply', {
             }
             const thread = items[0];
 
-            // 2. Antwort vorbereiten
-            const newReply = {
-                user: data.user,
-                text: data.text,
-                date: new Date().toISOString().split('T')[0] // Heute
-            };
+            // Änderungsvorschlag für addReply.js (Ausschnitt)
+const newReply = {
+    user: data.user,
+    text: data.text,
+    date: new Date().toISOString().split('T')[0], // Für die Anzeige (YYYY-MM-DD)
+    createdAt: new Date().toISOString()           // Für exakte Sortierung
+};
 
             // 3. Antwort hinzufügen (Array erstellen, falls noch nicht da)
             if (!thread.repliesList) {
                 thread.repliesList = [];
             }
             thread.repliesList.push(newReply);
+
+            
             
             // Counter hochzählen
             thread.replies = thread.repliesList.length;

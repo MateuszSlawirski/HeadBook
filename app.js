@@ -453,18 +453,41 @@ function renderTours(data) {
         const card = document.createElement('div');
         card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
         
-        const gpxBtn = tour.routeGeometry 
-            ? `<button class="btn btn-sm btn-outline-success mt-2" onclick="downloadGPX('${tour.id}')">💾 GPX Download</button>` 
-            : `<small class="text-muted d-block mt-2">ℹ️ Keine Routendaten (Altbestand)</small>`;
+        let actionBtn = "";
 
-        // FEATURE: Sterne Anzeige generieren
-        const starRating = tour.rating || 0;
-        const votes = tour.votes || 0;
-        let starHtml = "";
-        for(let i=1; i<=5; i++) {
-            starHtml += i <= starRating ? "★" : "☆";
-        }
+if (tour.routeGeometry) {
+    actionBtn = `<button class="btn btn-sm btn-outline-success mt-2" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
+} else {
+    // Falls keine Route da ist -> Upload Button zeigen
+    // HINWEIS: Wir brauchen ein unsichtbares file input feld für den Upload
+    actionBtn = `
+        <label class="btn btn-sm btn-outline-warning mt-2" onclick="event.stopPropagation();">
+            📂 Route hochladen
+            <input type="file" style="display:none" onchange="handleGpxUpload(event, '${tour.id}')" accept=".gpx">
+        </label>
+    `;
+}
 
+     // --- IN renderTours(data) ---
+
+// Helper funktion für klickbare Sterne
+const generateStars = (currentRating, tourId) => {
+    let html = '<div class="star-rating">';
+    for (let i = 1; i <= 5; i++) {
+        // Entscheiden, ob Stern voll (★) oder leer (☆)
+        const char = i <= Math.round(currentRating) ? '★' : '☆';
+        // Jeder Stern ruft beim Klick 'submitVote' auf
+        html += `<span style="cursor:pointer; font-size:1.2rem;" 
+                  onclick="event.stopPropagation(); submitVote('${tourId}', ${i})" 
+                  title="${i} Sterne geben">${char}</span>`;
+    }
+    html += `</div>`;
+    return html;
+};
+
+// ... inside the loop ...
+const starHtml = generateStars(tour.rating || 0, tour.id);
+// ...
         card.innerHTML = `
             <div onclick="window.showTourOnMap('${tour.id}')" style="cursor:pointer;">
                 <div class="d-flex justify-content-between align-items-start">
@@ -479,6 +502,32 @@ function renderTours(data) {
         listContainer.appendChild(card);
     });
 }
+
+
+window.submitVote = async (tourId, rating) => {
+    if (!confirm(`Möchtest du dieser Tour ${rating} Sterne geben?`)) return;
+
+    try {
+        const response = await fetch(`${API_URL}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: tourId, rating: rating })
+        });
+
+        if (response.ok) {
+            const updatedTour = await response.json();
+            // Lokales Array updaten, damit wir nicht neu laden müssen
+            const index = toursData.findIndex(t => t.id === tourId);
+            if (index !== -1) toursData[index] = updatedTour;
+            
+            filterTours(); // Liste neu rendern
+        } else {
+            alert("Fehler beim Bewerten.");
+        }
+    } catch (e) {
+        console.error(e);
+    }
+};
 
 window.showTourOnMap = (tourId) => {
     const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId;
@@ -520,6 +569,51 @@ window.downloadGPX = (tourId) => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+};
+
+window.handleGpxUpload = (event, tourId) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        
+        // Simpler GPX Parser (sucht nach <trkpt>)
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, "text/xml");
+        const points = xmlDoc.getElementsByTagName("trkpt");
+        
+        let coords = [];
+        for (let i = 0; i < points.length; i++) {
+            const lat = parseFloat(points[i].getAttribute("lat"));
+            const lon = parseFloat(points[i].getAttribute("lon"));
+            coords.push([lat, lon]);
+        }
+
+        if (coords.length === 0) return alert("Keine Wegpunkte im GPX gefunden.");
+
+        // An Backend senden
+        try {
+            const res = await fetch(`${API_URL}/tours/update-route`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    id: tourId, 
+                    routeGeometry: coords,
+                    km: (coords.length * 0.05).toFixed(1) // Sehr grobe Schätzung, besser wäre Berechnung
+                }) 
+            });
+
+            if (res.ok) {
+                alert("Route erfolgreich hinzugefügt!");
+                loadToursFromServer(); // Neu laden
+            }
+        } catch (err) {
+            alert("Fehler beim Upload: " + err.message);
+        }
+    };
+    reader.readAsText(file);
 };
 
 /* ==========================================

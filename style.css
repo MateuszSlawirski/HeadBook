@@ -247,3 +247,32 @@ a { text-decoration: none; }
 .accordion-item { border-radius: 8px; }
 .list-group-item { border: none; font-weight: 500; }
 .list-group-item:hover { background-color: rgba(211, 47, 47, 0.05); }
+
+/* --- SPLIT VIEW FÜR TOUREN (Desktop) --- */
+@media (min-width: 992px) {
+    /* Container wird zur Flexbox, items nebeneinander */
+    .tours-layout {
+        flex-direction: row !important; /* Überschreibt das 'column' von oben */
+        align-items: flex-start;
+    }
+
+    /* Die Liste links bekommt 50% Platz und ist scrollbar */
+    .tours-list {
+        width: 50%;
+        padding-right: 15px;
+    }
+
+    /* Der Karten-Container rechts */
+    .map-wrapper {
+        width: 50%;
+        /* Sticky Magic: */
+        position: sticky;
+        top: 110px; /* Abstand zur Navbar, damit sie nicht verdeckt wird */
+        height: calc(100vh - 130px); /* Füllt den Bildschirm minus Header */
+    }
+
+    /* Damit die Karte im Wrapper auch wirklich 100% Höhe hat */
+    #map {
+        height: 100% !important;
+    }
+}
