@@ -17,11 +17,20 @@ const API_URL = "/api";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
+// STATE VARIABLES
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
+
+// MAP STATE
 let map = null;
 let markers = []; 
+let currentRouteLayer = null; // Zeigt die aktive Route an
+let tempStartMarker = null;   // Für das Erstellen: Startpunkt
+let tempEndMarker = null;     // Für das Erstellen: Zielpunkt
+let pickingMode = null;       // 'start' oder 'end'
+
+// FORUM STATE
 let currentForumTopic = null; 
 let currentCategoryId = null; 
 let allForumData = []; 
@@ -133,7 +142,7 @@ function updateUI() {
 }
 
 /* ==========================================
-   EVENT LISTENERS & FORMS
+   EVENT LISTENERS
    ========================================== */
 
 function setupEventListeners() {
@@ -147,7 +156,7 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // NEUER BEITRAG SPEICHERN (Live-Update Fix)
+    // Forum Events
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -155,9 +164,7 @@ function setupEventListeners() {
             if (!currentUser) return alert("Bitte logge dich erst ein!");
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
-            const btn = e.target.querySelector('button[type="submit"]');
-            btn.disabled = true;
-
+            
             try {
                 const response = await fetch(`${API_URL}/threads`, {
                     method: 'POST',
@@ -171,10 +178,11 @@ function setupEventListeners() {
                     await loadForumData(); 
                     await renderForumThreads(currentForumTopic, currentCategoryId); 
                 }
-            } catch (err) { alert(err.message); } finally { btn.disabled = false; }
+            } catch (err) { alert(err.message); }
         });
     }
 
+    // Kategorien hinzufügen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -203,9 +211,433 @@ function setupEventListeners() {
 }
 
 /* ==========================================
-   FORUM LOGIK (BMW STYLE & NAVIGATION)
+   TOUREN & KARTEN LOGIK (NEU & VERBESSERT)
    ========================================== */
 
+async function loadToursFromServer() {
+    try {
+        const response = await fetch(`${API_URL}/tours`);
+        if (response.ok) toursData = await response.json();
+    } catch (error) { console.warn("Tours offline"); } finally { initFilters(); filterTours(); }
+}
+
+function initMap() {
+    if (map) return; 
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) return;
+    
+    // Karte initialisieren (Mitte Deutschland)
+    map = L.map('map').setView([51.16, 10.45], 6); 
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors' 
+    }).addTo(map);
+
+    // Klick-Listener für das Setzen von Punkten
+    map.on('click', onMapClick);
+}
+
+/**
+ * Behandelt Klicks auf die Karte.
+ * Wichtig für das Setzen von Start- und Endpunkten.
+ */
+function onMapClick(e) {
+    if (!pickingMode) return; // Wenn wir nicht im "Auswahl-Modus" sind, passiert nichts
+
+    const latlng = e.latlng;
+
+    if (pickingMode === 'start') {
+        if (tempStartMarker) map.removeLayer(tempStartMarker);
+        tempStartMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Start").openPopup();
+        document.getElementById('btn-pick-start').classList.remove('btn-warning');
+        document.getElementById('btn-pick-start').classList.add('btn-success');
+        document.getElementById('btn-pick-start').innerText = "Start gesetzt ✓";
+        
+        // Modal wieder anzeigen
+        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
+        modal.show();
+        pickingMode = null;
+
+    } else if (pickingMode === 'end') {
+        if (tempEndMarker) map.removeLayer(tempEndMarker);
+        tempEndMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Ziel").openPopup();
+        document.getElementById('btn-pick-end').classList.remove('btn-warning');
+        document.getElementById('btn-pick-end').classList.add('btn-success');
+        document.getElementById('btn-pick-end').innerText = "Ziel gesetzt ✓";
+        
+        // Modal wieder anzeigen
+        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
+        modal.show();
+        pickingMode = null;
+
+        // Wenn beide Punkte da sind -> Route berechnen!
+        if (tempStartMarker && tempEndMarker) {
+            calculateRoutePreview(tempStartMarker.getLatLng(), tempEndMarker.getLatLng());
+        }
+    }
+}
+
+// Funktionen für die UI-Buttons
+window.startPickLocation = (mode) => {
+    pickingMode = mode; // 'start' oder 'end'
+    // Modal verstecken, damit man die Karte sieht
+    const modalEl = document.getElementById('addTourModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    modal.hide();
+    
+    // Hinweis
+    alert(`Klicke jetzt auf die Karte um den ${mode === 'start' ? 'Startpunkt' : 'Zielpunkt'} zu setzen.`);
+};
+
+/**
+ * Berechnet die Route über OSRM (Open Source Routing Machine)
+ */
+async function calculateRoutePreview(start, end) {
+    // Anzeige aktualisieren
+    document.getElementById('newDesc').placeholder = "Berechne Route...";
+    
+    // OSRM erwartet Koordinaten im Format: Lon,Lat;Lon,Lat
+    const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            
+            // 1. Distanz und Dauer ins Formular eintragen
+            const km = (route.distance / 1000).toFixed(1);
+            const hours = Math.floor(route.duration / 3600);
+            const minutes = Math.floor((route.duration % 3600) / 60);
+            
+            document.getElementById('newKm').value = km;
+            document.getElementById('newTime').value = `${hours}h ${minutes}min`;
+            
+            // 2. Route auf der Karte einzeichnen (Preview)
+            if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+            
+            // GeoJSON Linie umdrehen für Leaflet (GeoJSON ist LngLat, Leaflet will LatLng)
+            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+            currentRouteLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
+            map.fitBounds(currentRouteLayer.getBounds());
+
+            // 3. Routen-Geometrie temporär speichern für den Upload
+            window.tempRouteGeometry = coords; 
+
+        }
+    } catch (e) {
+        console.error("Routing Fehler:", e);
+        alert("Konnte Route nicht berechnen. Bitte prüfe deine Internetverbindung.");
+    }
+}
+
+/**
+ * Speichert die neue Tour inkl. Route
+ */
+async function handleAddTour(e) {
+    e.preventDefault();
+    if (!currentUser) return alert("Bitte logge dich ein.");
+
+    const title = document.getElementById('newTitle').value;
+    const region = document.getElementById('newRegion').value;
+    const country = document.getElementById('newCountry').value;
+    const state = document.getElementById('newState').value;
+    const km = document.getElementById('newKm').value;
+    const time = document.getElementById('newTime').value;
+    const desc = document.getElementById('newDesc').value;
+
+    // Koordinaten
+    let coords = [51.16, 10.45]; // Default
+    if (tempStartMarker) {
+        const ll = tempStartMarker.getLatLng();
+        coords = [ll.lat, ll.lng];
+    }
+
+    const newTour = { 
+        title, category: region, country, state, km, time, desc, 
+        user: currentUser.displayName || "Unbekannt",
+        coords: coords,
+        // WICHTIG: Wir speichern jetzt die ganze Route!
+        routeGeometry: window.tempRouteGeometry || null 
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/tours`, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(newTour) 
+        });
+        
+        if(response.ok) { 
+            const savedTour = await response.json();
+            toursData.unshift(savedTour); 
+            
+            // Cleanup UI
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addTourModal'));
+            modal.hide();
+            e.target.reset(); 
+            resetMapMarkers();
+            
+            filterTours(); 
+            alert("Tour veröffentlicht!"); 
+        }
+    } catch (err) { alert("Fehler: " + err.message); }
+}
+
+function resetMapMarkers() {
+    if (tempStartMarker) map.removeLayer(tempStartMarker);
+    if (tempEndMarker) map.removeLayer(tempEndMarker);
+    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+    tempStartMarker = null; tempEndMarker = null; currentRouteLayer = null;
+    window.tempRouteGeometry = null;
+    document.getElementById('btn-pick-start').classList.remove('btn-success');
+    document.getElementById('btn-pick-start').classList.add('btn-warning');
+    document.getElementById('btn-pick-start').innerText = "Startpunkt wählen";
+    document.getElementById('btn-pick-end').classList.remove('btn-success');
+    document.getElementById('btn-pick-end').classList.add('btn-warning');
+    document.getElementById('btn-pick-end').innerText = "Zielpunkt wählen";
+}
+
+/**
+ * Zeigt Touren an und zeichnet die Route beim Klick
+ */
+function renderTours(data) {
+    const listContainer = document.getElementById('tours-container');
+    if(!listContainer) return;
+    listContainer.innerHTML = '';
+    
+    // Alte Marker entfernen
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+
+    data.forEach(tour => {
+        // Marker auf Karte
+        if(tour.coords) {
+            const marker = L.marker(tour.coords).addTo(map);
+            marker.bindPopup(`<b>${tour.title}</b><br>${tour.km} km`);
+            marker.on('click', () => showTourOnMap(tour));
+            markers.push(marker);
+        }
+
+        // Karteikarte in der Liste
+        const card = document.createElement('div');
+        card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
+        
+        // GPX Button Logik
+        const gpxBtn = tour.routeGeometry 
+            ? `<button class="btn btn-sm btn-outline-success mt-2" onclick="downloadGPX('${tour.id}')">💾 GPX Download</button>` 
+            : '';
+
+        card.innerHTML = `
+            <div onclick="window.showTourOnMap('${tour.id}')" style="cursor:pointer;">
+                <h5 class="fw-bold m-0 text-primary">${tour.title}</h5>
+                <div class="small text-muted mb-2">${tour.category} • ${tour.country} • <b>${tour.km} km</b></div>
+                <p class="small mb-0 text-secondary">${tour.desc || ""}</p>
+            </div>
+            ${gpxBtn}
+        `;
+        listContainer.appendChild(card);
+    });
+}
+
+/**
+ * GLOBAL: Zeigt eine spezifische Tour auf der Karte an
+ */
+window.showTourOnMap = (tourId) => {
+    // Tour finden (entweder Objekt oder ID übergeben)
+    const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId;
+    if (!tour) return;
+
+    // Alte Route löschen
+    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+
+    // 1. Marker finden und Popup öffnen
+    if (tour.coords) {
+        map.flyTo(tour.coords, 11);
+    }
+
+    // 2. Route einzeichnen (wenn vorhanden)
+    if (tour.routeGeometry && tour.routeGeometry.length > 0) {
+        currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map);
+        map.fitBounds(currentRouteLayer.getBounds());
+    }
+};
+
+/**
+ * GLOBAL: GPX Datei generieren und herunterladen
+ */
+window.downloadGPX = (tourId) => {
+    const tour = toursData.find(t => t.id === tourId);
+    if (!tour || !tour.routeGeometry) return alert("Keine Routendaten vorhanden.");
+
+    // GPX XML Header
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Riderpoint App">
+  <trk>
+    <name>${tour.title}</name>
+    <trkseg>`;
+
+    // Punkte hinzufügen
+    tour.routeGeometry.forEach(pt => {
+        // Leaflet nutzt [Lat, Lng], GPX will lat="..." lon="..."
+        gpx += `\n      <trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`;
+    });
+
+    gpx += `\n    </trkseg>
+  </trk>
+</gpx>`;
+
+    // Download auslösen
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tour.title.replace(/\s+/g, '_')}.gpx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+};
+
+
+/* ==========================================
+   HELPER FOR FORUM & OTHERS
+   ========================================== */
+function initFilters() {
+    const catSelect = document.getElementById('filter-category');
+    if(!catSelect) return;
+    catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
+    const cats = [...new Set(toursData.map(t => t.category))].sort();
+    cats.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; catSelect.appendChild(opt); });
+}
+window.onCategoryChange = () => {
+    const selectedCat = document.getElementById('filter-category').value;
+    const countrySelect = document.getElementById('filter-country');
+    countrySelect.innerHTML = '<option value="all">Alle Länder</option>';
+    countrySelect.disabled = (selectedCat === 'all');
+    if (!countrySelect.disabled) {
+        const countries = [...new Set(toursData.filter(t => t.category === selectedCat).map(t => t.country))].sort();
+        countries.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; countrySelect.appendChild(opt); });
+    }
+    window.filterTours();
+};
+window.onCountryChange = () => {
+    const selectedCat = document.getElementById('filter-category').value;
+    const selectedCountry = document.getElementById('filter-country').value;
+    const stateSelect = document.getElementById('filter-state');
+    stateSelect.innerHTML = '<option value="all">Alle Gebiete</option>';
+    stateSelect.disabled = (selectedCountry === 'all');
+    if (!stateSelect.disabled) {
+        const states = [...new Set(toursData.filter(t => t.category === selectedCat && t.country === selectedCountry).map(t => t.state))].sort();
+        states.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.innerText = s; stateSelect.appendChild(opt); });
+    }
+    window.filterTours();
+};
+window.filterTours = () => {
+    const cat = document.getElementById('filter-category')?.value;
+    const country = document.getElementById('filter-country')?.value;
+    const state = document.getElementById('filter-state')?.value;
+    const search = document.getElementById('search-input')?.value.toLowerCase();
+    let filtered = toursData;
+    if(cat && cat !== 'all') filtered = filtered.filter(t => t.category === cat);
+    if(country && country !== 'all') filtered = filtered.filter(t => t.country === country);
+    if(state && state !== 'all') filtered = filtered.filter(t => t.state === state);
+    if(search) filtered = filtered.filter(t => t.title.toLowerCase().includes(search) || t.desc.toLowerCase().includes(search));
+    renderTours(filtered);
+};
+window.resetFilters = () => {
+    document.getElementById('search-input').value = "";
+    document.getElementById('filter-category').value = "all";
+    window.onCategoryChange();
+};
+
+/* ==========================================
+   GLOBAL FORUM EXPORTS (Alte Logik beibehalten)
+   ========================================== */
+window.renderForumHome = function() {
+    currentCategoryId = null; currentForumTopic = null;
+    renderBreadcrumbs([]); 
+    const container = document.getElementById('forum-container');
+    container.innerHTML = `<h2 class="fw-bold mb-3">Community Übersicht</h2>
+        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Forum</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
+
+    allForumData.forEach(cat => {
+        const stats = getForumStats(t => cat.topics.map(topic => topic.title).includes(t.topic));
+        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Keine Beiträge</small>`;
+        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')"><div class="forum-icon">🏍️</div><div class="forum-main"><h5 class="fw-bold text-dark mb-0">${cat.title}</h5><p class="text-muted small mb-0">${cat.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
+    });
+};
+window.renderForumSubCategory = function(catId) {
+    currentCategoryId = catId; currentForumTopic = null;
+    const category = allForumData.find(c => c.id === catId);
+    if (!category) return;
+    renderBreadcrumbs([{ label: category.title, onclick: null }]); 
+    const container = document.getElementById('forum-container');
+    const isAllowed = USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin';
+    container.innerHTML = `<div class="clearfix mb-3"><h2 class="fw-bold float-start">${category.title}</h2>${currentUser && isAllowed ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}</div>
+        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
+    category.topics.forEach(topic => {
+        const stats = getForumStats(t => t.topic === topic.title);
+        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Leer</small>`;
+        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')"><div class="forum-icon">🔧</div><div class="forum-main"><h5 class="fw-bold text-primary mb-0">${topic.title}</h5><p class="text-muted small mb-0">${topic.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
+    });
+};
+window.renderForumThreads = async function(topicName, catId) {
+    currentForumTopic = topicName;
+    const cat = allForumData.find(c => c.id === catId);
+    renderBreadcrumbs([{ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` }, { label: topicName, onclick: null }]);
+    const container = document.getElementById('forum-container');
+    container.innerHTML = `<div class="clearfix mb-3"><h3 class="fw-bold float-start">${topicName}</h3>${currentUser ? `<button class="btn btn-danger float-end" onclick="openNewThreadModal()">Neues Thema +</button>` : ""}</div>
+        <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
+        <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>`;
+    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+    const threads = await response.json();
+    const listArea = document.getElementById('thread-list-area');
+    listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
+    threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    threads.forEach(thread => {
+        listArea.innerHTML += `<div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')"><div class="forum-icon">📄</div><div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div><div class="forum-stats fw-bold">${thread.replies || 0}</div><div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div></div>`;
+    });
+};
+window.renderThreadDetail = async function(threadId, topicName, catId) {
+    let breadcrumbs = [];
+    if (catId) {
+        const cat = allForumData.find(c => c.id === catId);
+        if (cat) breadcrumbs.push({ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` });
+    }
+    breadcrumbs.push({ label: topicName, onclick: `renderForumThreads('${topicName}', '${catId}')` }); 
+    breadcrumbs.push({ label: "Beitrag lesen", onclick: null });
+    renderBreadcrumbs(breadcrumbs);
+    const container = document.getElementById('forum-container');
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+    const threads = await response.json();
+    const t = threads.find(thread => thread.id === threadId);
+    if (!t) return;
+    container.innerHTML = `<h3 class="fw-bold mb-4">${t.title}</h3>
+        <div class="card mb-3 border-0 shadow-sm"><div class="card-header bg-light border-bottom py-2 d-flex justify-content-between"><div><span class="fw-bold text-danger">${t.user}</span> <span class="text-muted small">schrieb am ${t.date}:</span></div><div class="text-muted small">#1</div></div><div class="card-body"><p class="card-text fs-5" style="white-space: pre-wrap;">${t.text}</p></div></div>`;
+    if (t.repliesList) {
+        t.repliesList.forEach((r, idx) => {
+            container.innerHTML += `<div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white"><div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between"><div><span class="fw-bold text-dark">${r.user}</span> <span class="text-muted small">antwortete am ${r.date}:</span></div><div class="text-muted small">#${idx + 2}</div></div><div class="card-body pt-0"><p class="mb-0" style="white-space: pre-wrap;">${r.text}</p></div></div>`;
+        });
+    }
+    if (currentUser) {
+        container.innerHTML += `<div class="card mt-4 bg-light border-0"><div class="card-body"><h6 class="fw-bold mb-2">Antworten</h6><textarea id="replyText" class="form-control mb-2" rows="3"></textarea><div class="d-flex justify-content-between"><div><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button></div><button class="btn btn-danger" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Antworten</button></div></div></div>`;
+    }
+};
+window.sendReply = async function(threadId, topic, catId) {
+    const text = document.getElementById('replyText').value;
+    if (!text.trim()) return alert("Bitte Text eingeben!");
+    try {
+        const response = await fetch(`${API_URL}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: threadId, topic, text, user: currentUser.displayName || "Unbekannt" })
+        });
+        if (response.ok) renderThreadDetail(threadId, topic, catId);
+    } catch (err) { alert(err.message); }
+};
 async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
@@ -217,7 +649,6 @@ async function loadForumData() {
         if (!currentCategoryId && !currentForumTopic) renderForumHome();
     } catch (error) { console.error(error); }
 }
-
 function renderBreadcrumbs(pathArray) {
     let breadcrumbEl = document.getElementById('custom-breadcrumbs');
     if (!breadcrumbEl) {
@@ -234,312 +665,12 @@ function renderBreadcrumbs(pathArray) {
     });
     breadcrumbEl.innerHTML = html;
 }
-
 function getForumStats(filterFn) {
     const threads = allThreadsCache.filter(filterFn);
     const postCount = threads.reduce((acc, t) => acc +  (t.replies || 0), 0);
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     return { threadCount: threads.length, postCount, lastPost: threads[0] || null };
 }
-
-window.renderForumHome = function() {
-    currentCategoryId = null; currentForumTopic = null;
-    renderBreadcrumbs([]); 
-    const container = document.getElementById('forum-container');
-    container.innerHTML = `<h2 class="fw-bold mb-3">Community Übersicht</h2>
-        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Forum</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
-
-    allForumData.forEach(cat => {
-        const stats = getForumStats(t => cat.topics.map(topic => topic.title).includes(t.topic));
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Keine Beiträge</small>`;
-        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')"><div class="forum-icon">🏍️</div><div class="forum-main"><h5 class="fw-bold text-dark mb-0">${cat.title}</h5><p class="text-muted small mb-0">${cat.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
-    });
-};
-
-window.renderForumSubCategory = function(catId) {
-    currentCategoryId = catId; currentForumTopic = null;
-    const category = allForumData.find(c => c.id === catId);
-    if (!category) return;
-    renderBreadcrumbs([{ label: category.title, onclick: null }]); 
-    const container = document.getElementById('forum-container');
-    const isAllowed = USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin';
-
-    container.innerHTML = `<div class="clearfix mb-3"><h2 class="fw-bold float-start">${category.title}</h2>${currentUser && isAllowed ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}</div>
-        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
-
-    category.topics.forEach(topic => {
-        const stats = getForumStats(t => t.topic === topic.title);
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Leer</small>`;
-        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')"><div class="forum-icon">🔧</div><div class="forum-main"><h5 class="fw-bold text-primary mb-0">${topic.title}</h5><p class="text-muted small mb-0">${topic.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
-    });
-};
-
-window.renderForumThreads = async function(topicName, catId) {
-    currentForumTopic = topicName;
-    const cat = allForumData.find(c => c.id === catId);
-    renderBreadcrumbs([{ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` }, { label: topicName, onclick: null }]);
-    const container = document.getElementById('forum-container');
-    container.innerHTML = `<div class="clearfix mb-3"><h3 class="fw-bold float-start">${topicName}</h3>${currentUser ? `<button class="btn btn-danger float-end" onclick="openNewThreadModal()">Neues Thema +</button>` : ""}</div>
-        <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
-        <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>`;
-
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-    const threads = await response.json();
-    const listArea = document.getElementById('thread-list-area');
-    listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
-    threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-    threads.forEach(thread => {
-        listArea.innerHTML += `<div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')"><div class="forum-icon">📄</div><div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div><div class="forum-stats fw-bold">${thread.replies || 0}</div><div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div></div>`;
-    });
-};
-
-window.renderThreadDetail = async function(threadId, topicName, catId) {
-    let breadcrumbs = [];
-    if (catId) {
-        const cat = allForumData.find(c => c.id === catId);
-        if (cat) breadcrumbs.push({ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` });
-    }
-    breadcrumbs.push({ label: topicName, onclick: `renderForumThreads('${topicName}', '${catId}')` }); // Zurück-Link fix
-    breadcrumbs.push({ label: "Beitrag lesen", onclick: null });
-    renderBreadcrumbs(breadcrumbs);
-
-    const container = document.getElementById('forum-container');
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
-    const threads = await response.json();
-    const t = threads.find(thread => thread.id === threadId);
-    if (!t) return;
-
-    container.innerHTML = `<h3 class="fw-bold mb-4">${t.title}</h3>
-        <div class="card mb-3 border-0 shadow-sm"><div class="card-header bg-light border-bottom py-2 d-flex justify-content-between"><div><span class="fw-bold text-danger">${t.user}</span> <span class="text-muted small">schrieb am ${t.date}:</span></div><div class="text-muted small">#1</div></div><div class="card-body"><p class="card-text fs-5" style="white-space: pre-wrap;">${t.text}</p></div></div>`;
-
-    if (t.repliesList) {
-        t.repliesList.forEach((r, idx) => {
-            container.innerHTML += `<div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white"><div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between"><div><span class="fw-bold text-dark">${r.user}</span> <span class="text-muted small">antwortete am ${r.date}:</span></div><div class="text-muted small">#${idx + 2}</div></div><div class="card-body pt-0"><p class="mb-0" style="white-space: pre-wrap;">${r.text}</p></div></div>`;
-        });
-    }
-
-    if (currentUser) {
-        container.innerHTML += `<div class="card mt-4 bg-light border-0"><div class="card-body"><h6 class="fw-bold mb-2">Antworten</h6><textarea id="replyText" class="form-control mb-2" rows="3"></textarea><div class="d-flex justify-content-between"><div><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button></div><button class="btn btn-danger" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Antworten</button></div></div></div>`;
-    }
-};
-
-window.sendReply = async function(threadId, topic, catId) {
-    const text = document.getElementById('replyText').value;
-    if (!text.trim()) return alert("Bitte Text eingeben!");
-    try {
-        const response = await fetch(`${API_URL}/reply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: threadId, topic, text, user: currentUser.displayName || "Unbekannt" })
-        });
-        if (response.ok) renderThreadDetail(threadId, topic, catId);
-    } catch (err) { alert(err.message); }
-};
-
-/* ==========================================
-   TOUREN & MAP LOGIK (KOMPLETT)
-   ========================================== */
-
-async function loadToursFromServer() {
-    try {
-        const response = await fetch(`${API_URL}/tours`);
-        if (response.ok) toursData = await response.json();
-    } catch (error) { console.warn("Tours offline"); } finally { initFilters(); filterTours(); }
-}
-
-function initMap() {
-    if (map) return; 
-    const mapContainer = document.getElementById('map');
-    if (!mapContainer) return;
-    map = L.map('map').setView([51.16, 10.45], 6); 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-}
-
-function initFilters() {
-    const catSelect = document.getElementById('filter-category');
-    if(!catSelect) return;
-    catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
-    const cats = [...new Set(toursData.map(t => t.category))].sort();
-    cats.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; catSelect.appendChild(opt); });
-}
-
-window.onCategoryChange = () => {
-    const selectedCat = document.getElementById('filter-category').value;
-    const countrySelect = document.getElementById('filter-country');
-    countrySelect.innerHTML = '<option value="all">Alle Länder</option>';
-    countrySelect.disabled = (selectedCat === 'all');
-    if (!countrySelect.disabled) {
-        const countries = [...new Set(toursData.filter(t => t.category === selectedCat).map(t => t.country))].sort();
-        countries.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; countrySelect.appendChild(opt); });
-    }
-    filterTours();
-};
-
-window.onCountryChange = () => {
-    const selectedCat = document.getElementById('filter-category').value;
-    const selectedCountry = document.getElementById('filter-country').value;
-    const stateSelect = document.getElementById('filter-state');
-    stateSelect.innerHTML = '<option value="all">Alle Gebiete</option>';
-    stateSelect.disabled = (selectedCountry === 'all');
-    if (!stateSelect.disabled) {
-        const states = [...new Set(toursData.filter(t => t.category === selectedCat && t.country === selectedCountry).map(t => t.state))].sort();
-        states.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.innerText = s; stateSelect.appendChild(opt); });
-    }
-    filterTours();
-};
-
-window.filterTours = () => {
-    const cat = document.getElementById('filter-category')?.value;
-    const country = document.getElementById('filter-country')?.value;
-    const state = document.getElementById('filter-state')?.value;
-    const search = document.getElementById('search-input')?.value.toLowerCase();
-    let filtered = toursData;
-    if(cat && cat !== 'all') filtered = filtered.filter(t => t.category === cat);
-    if(country && country !== 'all') filtered = filtered.filter(t => t.country === country);
-    if(state && state !== 'all') filtered = filtered.filter(t => t.state === state);
-    if(search) filtered = filtered.filter(t => t.title.toLowerCase().includes(search) || t.desc.toLowerCase().includes(search));
-    renderTours(filtered);
-};
-
-window.resetFilters = () => {
-    document.getElementById('search-input').value = "";
-    document.getElementById('filter-category').value = "all";
-    window.onCategoryChange();
-};
-
-function renderTours(data) {
-    const listContainer = document.getElementById('tours-container');
-    if(!listContainer) return;
-    listContainer.innerHTML = '';
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-    data.forEach(tour => {
-        if(tour.coords) {
-            const marker = L.marker(tour.coords).addTo(map).bindPopup(`<b>${tour.title}</b>`);
-            marker.on('click', () => navigateTo('tours'));
-            markers.push(marker);
-        }
-        const card = document.createElement('div');
-        card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
-        card.innerHTML = `<h5 class="fw-bold m-0">${tour.title}</h5><div class="small text-muted mb-2">${tour.category} • ${tour.country}</div><p class="small mb-0 text-secondary">${tour.desc || ""}</p>`;
-        card.onclick = () => { if(tour.coords) map.flyTo(tour.coords, 10); };
-        listContainer.appendChild(card);
-    });
-}
-
-async function handleAddTour(e) {
-    e.preventDefault();
-    
-    // 1. Prüfen, ob User eingeloggt ist
-    if (!currentUser) {
-        alert("Bitte logge dich ein, um eine Route zu teilen.");
-        return;
-    }
-
-    const btn = e.target.querySelector('button[type="submit"]');
-    const originalBtnText = btn.innerText;
-    btn.disabled = true;
-    btn.innerText = "🔍 Suche Standort...";
-
-    // 2. Daten aus dem Formular holen
-    const title = document.getElementById('newTitle').value;
-    const region = document.getElementById('newRegion').value;
-    const country = document.getElementById('newCountry').value;
-    const state = document.getElementById('newState').value; // Das ist der Ort/Gebiet
-    const km = document.getElementById('newKm').value;
-    const time = document.getElementById('newTime').value;
-    const desc = document.getElementById('newDesc').value;
-
-    // 3. Geocoding: Wir fragen OpenStreetMap nach den Koordinaten
-    // Wir bauen eine Suchanfrage: "Gebiet, Land" (z.B. "Schwarzwald, Deutschland")
-    let coords = null; 
-    
-    try {
-        // Wir kombinieren Bundesland/Gebiet und Land für bessere Genauigkeit
-        const query = `${state}, ${country}`;
-        
-        // Aufruf der kostenlosen Nominatim API
-        const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
-        
-        const geoResponse = await fetch(geoUrl, {
-            headers: { 'User-Agent': 'Riderpoint-Community-App' } // Wichtig: Ein User-Agent ist Pflicht
-        });
-        const geoData = await geoResponse.json();
-
-        if (geoData && geoData.length > 0) {
-            // Treffer! Wir nehmen das erste Ergebnis
-            coords = [parseFloat(geoData[0].lat), parseFloat(geoData[0].lon)];
-            console.log("Koordinaten gefunden:", coords);
-        } else {
-            console.warn("Keine Koordinaten gefunden, nehme Fallback.");
-            // Fallback: Wenn nichts gefunden wird, nehmen wir die Mitte von Deutschland oder 0,0
-            // Besser wäre hier eine Fehlermeldung an den User, aber wir wollen es simpel halten.
-            coords = [51.16, 10.45]; 
-        }
-    } catch (geoError) {
-        console.error("Geocoding Fehler:", geoError);
-        coords = [51.16, 10.45]; // Fallback bei Internetfehler
-    }
-
-    // 4. Das fertige Objekt bauen
-    const newTour = { 
-        title, 
-        category: region, 
-        country, 
-        state, 
-        km, 
-        time, 
-        desc, 
-        user: currentUser.displayName || "Unbekannt", // Wir speichern wer es war
-        coords: coords // Hier sind jetzt die echten Koordinaten!
-    };
-
-    // 5. An dein Azure Backend senden
-    try {
-        btn.innerText = "Speichere...";
-        const response = await fetch(`${API_URL}/tours`, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify(newTour) 
-        });
-        
-        if(response.ok) { 
-            const savedTour = await response.json();
-            
-            // Tour lokal in die Liste laden (damit man nicht neu laden muss)
-            toursData.unshift(savedTour); 
-            
-            // Modal schließen & Formular leeren
-            const modalEl = document.getElementById('addTourModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            modal.hide();
-            e.target.reset(); 
-            
-            // Liste neu rendern
-            filterTours(); 
-            
-            // Karte sofort auf den neuen Punkt fliegen lassen
-            if(map && savedTour.coords) {
-                map.flyTo(savedTour.coords, 10);
-                // Optional: Sofort einen Marker setzen, falls filterTours das nicht schnell genug macht
-                L.marker(savedTour.coords).addTo(map).bindPopup(`<b>${savedTour.title}</b><br>Neu erstellt!`).openPopup();
-            }
-            
-            alert("Deine Tour wurde veröffentlicht!"); 
-        } else {
-            throw new Error("Server Fehler beim Speichern");
-        }
-    } catch (err) { 
-        alert("Fehler: " + err.message); 
-    } finally { 
-        btn.disabled = false; 
-        btn.innerText = originalBtnText;
-    }
-}
-/* ==========================================
-   AUTH HELPER FUNCTIONS
-   ========================================== */
 
 async function handleRegister() {
     const email = document.getElementById('authEmail').value;
@@ -554,7 +685,6 @@ async function handleRegister() {
         setTimeout(() => window.location.reload(), 1000);
     } catch (error) { msg.innerHTML = `<span class="text-danger">${error.message}</span>`; }
 }
-
 async function handleLogin(e) {
     const email = document.getElementById('authEmail').value;
     const pass = document.getElementById('authPass').value;
@@ -564,10 +694,6 @@ async function handleLogin(e) {
         bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
     } catch (error) { msg.innerHTML = `<span class="text-danger">${error.message}</span>`; }
 }
-
-/* ==========================================
-   GLOBAL EXPORTS
-   ========================================== */
 window.openNewThreadModal = () => { document.getElementById('threadTopicDisplay').value = currentForumTopic; new bootstrap.Modal(document.getElementById('createThreadModal')).show(); };
 window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput').value = id; new bootstrap.Modal(document.getElementById('addCategoryModal')).show(); };
 window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
