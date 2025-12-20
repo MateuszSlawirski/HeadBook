@@ -25,10 +25,10 @@ let currentRole = "guest";
 // MAP STATE
 let map = null;
 let markers = []; 
-let currentRouteLayer = null; // Zeigt die aktive Route an
-let tempStartMarker = null;   // Für das Erstellen: Startpunkt
-let tempEndMarker = null;     // Für das Erstellen: Zielpunkt
-let pickingMode = null;       // 'start' oder 'end'
+let currentRouteLayer = null; 
+let tempStartMarker = null;   
+let tempEndMarker = null;     
+let pickingMode = null;       
 
 // FORUM STATE
 let currentForumTopic = null; 
@@ -79,14 +79,8 @@ function navigateTo(pageId) {
         if(navLink) navLink.classList.add('active');
         window.location.hash = pageId;
 
-        // Reset Forum auf Startseite bei Reiterwechsel
-        if (pageId === 'forum') {
-            renderForumHome();
-        }
-
-        if (pageId === 'tours' && map) {
-            setTimeout(() => { map.invalidateSize(); }, 100);
-        }
+        if (pageId === 'forum') renderForumHome();
+        if (pageId === 'tours' && map) setTimeout(() => { map.invalidateSize(); }, 200);
     }
 }
 window.navigateTo = navigateTo;
@@ -119,7 +113,6 @@ function updateUI() {
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
     const secureLinks = document.querySelectorAll('.auth-required');
-    const addTourBtn = document.querySelector('#add-tour-btn');
 
     if (currentUser) {
         if(authBtn) authBtn.style.display = 'none'; 
@@ -128,18 +121,28 @@ function updateUI() {
         if(userInfo) {
             userInfo.style.display = 'block';
             const displayName = currentUser.displayName || currentUser.email.split('@')[0];
-            let roleBadge = (currentRole === 'admin') ? '<span class="badge bg-danger">ADMIN</span>' : '<span class="badge bg-secondary">USER</span>';
-            userInfo.innerHTML = `Hallo, <b>${displayName}</b> ${roleBadge}`;
+            userInfo.innerHTML = `Hallo, <b>${displayName}</b>`;
         }
-        if(addTourBtn) addTourBtn.style.display = 'block';
     } else {
         if(authBtn) authBtn.style.display = 'block';     
         if(logoutBtn) logoutBtn.style.display = 'none';  
         if(userInfo) userInfo.style.display = 'none';    
         secureLinks.forEach(link => link.classList.add('d-none'));
-        if(addTourBtn) addTourBtn.style.display = 'none';
     }
 }
+
+// NEU: Öffnet das Modal nur, wenn eingeloggt
+window.openAddTourModal = () => {
+    if (!currentUser) {
+        const modal = new bootstrap.Modal(document.getElementById('authModal'));
+        modal.show();
+        // Optional: Nachricht anzeigen
+        document.getElementById('auth-message').innerHTML = '<span class="text-warning">Bitte einloggen, um Touren zu planen.</span>';
+    } else {
+        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
+        modal.show();
+    }
+};
 
 /* ==========================================
    EVENT LISTENERS
@@ -156,7 +159,6 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Forum Events
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -164,14 +166,12 @@ function setupEventListeners() {
             if (!currentUser) return alert("Bitte logge dich erst ein!");
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
-            
             try {
                 const response = await fetch(`${API_URL}/threads`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic: currentForumTopic, title, text, user: currentUser.displayName || "Unbekannt" })
                 });
-
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
                     e.target.reset();
@@ -182,7 +182,6 @@ function setupEventListeners() {
         });
     }
 
-    // Kategorien hinzufügen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -211,7 +210,7 @@ function setupEventListeners() {
 }
 
 /* ==========================================
-   TOUREN & KARTEN LOGIK (NEU & VERBESSERT)
+   TOUREN & KARTEN LOGIK
    ========================================== */
 
 async function loadToursFromServer() {
@@ -226,77 +225,61 @@ function initMap() {
     const mapContainer = document.getElementById('map');
     if (!mapContainer) return;
     
-    // Karte initialisieren (Mitte Deutschland)
     map = L.map('map').setView([51.16, 10.45], 6); 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors' 
     }).addTo(map);
 
-    // Klick-Listener für das Setzen von Punkten
     map.on('click', onMapClick);
 }
 
-/**
- * Behandelt Klicks auf die Karte.
- * Wichtig für das Setzen von Start- und Endpunkten.
- */
 function onMapClick(e) {
-    if (!pickingMode) return; // Wenn wir nicht im "Auswahl-Modus" sind, passiert nichts
-
+    if (!pickingMode) return;
     const latlng = e.latlng;
+    const modalEl = document.getElementById('addTourModal');
 
     if (pickingMode === 'start') {
         if (tempStartMarker) map.removeLayer(tempStartMarker);
         tempStartMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Start").openPopup();
-        document.getElementById('btn-pick-start').classList.remove('btn-warning');
-        document.getElementById('btn-pick-start').classList.add('btn-success');
-        document.getElementById('btn-pick-start').innerText = "Start gesetzt ✓";
         
-        // Modal wieder anzeigen
-        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
+        const btn = document.getElementById('btn-pick-start');
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-success');
+        btn.innerHTML = "Start gesetzt ✓";
+        
+        const modal = new bootstrap.Modal(modalEl);
         modal.show();
         pickingMode = null;
 
     } else if (pickingMode === 'end') {
         if (tempEndMarker) map.removeLayer(tempEndMarker);
         tempEndMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Ziel").openPopup();
-        document.getElementById('btn-pick-end').classList.remove('btn-warning');
-        document.getElementById('btn-pick-end').classList.add('btn-success');
-        document.getElementById('btn-pick-end').innerText = "Ziel gesetzt ✓";
         
-        // Modal wieder anzeigen
-        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
+        const btn = document.getElementById('btn-pick-end');
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-success');
+        btn.innerHTML = "Ziel gesetzt ✓";
+        
+        const modal = new bootstrap.Modal(modalEl);
         modal.show();
         pickingMode = null;
 
-        // Wenn beide Punkte da sind -> Route berechnen!
         if (tempStartMarker && tempEndMarker) {
             calculateRoutePreview(tempStartMarker.getLatLng(), tempEndMarker.getLatLng());
         }
     }
 }
 
-// Funktionen für die UI-Buttons
 window.startPickLocation = (mode) => {
-    pickingMode = mode; // 'start' oder 'end'
-    // Modal verstecken, damit man die Karte sieht
+    pickingMode = mode; 
     const modalEl = document.getElementById('addTourModal');
     const modal = bootstrap.Modal.getInstance(modalEl);
     modal.hide();
-    
-    // Hinweis
-    alert(`Klicke jetzt auf die Karte um den ${mode === 'start' ? 'Startpunkt' : 'Zielpunkt'} zu setzen.`);
 };
 
-/**
- * Berechnet die Route über OSRM (Open Source Routing Machine)
- */
 async function calculateRoutePreview(start, end) {
-    // Anzeige aktualisieren
     document.getElementById('newDesc').placeholder = "Berechne Route...";
-    
-    // OSRM erwartet Koordinaten im Format: Lon,Lat;Lon,Lat
     const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
 
     try {
@@ -305,8 +288,6 @@ async function calculateRoutePreview(start, end) {
 
         if (data.routes && data.routes.length > 0) {
             const route = data.routes[0];
-            
-            // 1. Distanz und Dauer ins Formular eintragen
             const km = (route.distance / 1000).toFixed(1);
             const hours = Math.floor(route.duration / 3600);
             const minutes = Math.floor((route.duration % 3600) / 60);
@@ -314,27 +295,18 @@ async function calculateRoutePreview(start, end) {
             document.getElementById('newKm').value = km;
             document.getElementById('newTime').value = `${hours}h ${minutes}min`;
             
-            // 2. Route auf der Karte einzeichnen (Preview)
             if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-            
-            // GeoJSON Linie umdrehen für Leaflet (GeoJSON ist LngLat, Leaflet will LatLng)
             const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
             currentRouteLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
             map.fitBounds(currentRouteLayer.getBounds());
-
-            // 3. Routen-Geometrie temporär speichern für den Upload
             window.tempRouteGeometry = coords; 
-
         }
     } catch (e) {
         console.error("Routing Fehler:", e);
-        alert("Konnte Route nicht berechnen. Bitte prüfe deine Internetverbindung.");
+        alert("Konnte Route nicht berechnen (Server evtl. ausgelastet).");
     }
 }
 
-/**
- * Speichert die neue Tour inkl. Route
- */
 async function handleAddTour(e) {
     e.preventDefault();
     if (!currentUser) return alert("Bitte logge dich ein.");
@@ -347,8 +319,7 @@ async function handleAddTour(e) {
     const time = document.getElementById('newTime').value;
     const desc = document.getElementById('newDesc').value;
 
-    // Koordinaten
-    let coords = [51.16, 10.45]; // Default
+    let coords = [51.16, 10.45]; 
     if (tempStartMarker) {
         const ll = tempStartMarker.getLatLng();
         coords = [ll.lat, ll.lng];
@@ -358,7 +329,6 @@ async function handleAddTour(e) {
         title, category: region, country, state, km, time, desc, 
         user: currentUser.displayName || "Unbekannt",
         coords: coords,
-        // WICHTIG: Wir speichern jetzt die ganze Route!
         routeGeometry: window.tempRouteGeometry || null 
     };
 
@@ -373,7 +343,6 @@ async function handleAddTour(e) {
             const savedTour = await response.json();
             toursData.unshift(savedTour); 
             
-            // Cleanup UI
             const modal = bootstrap.Modal.getInstance(document.getElementById('addTourModal'));
             modal.hide();
             e.target.reset(); 
@@ -392,28 +361,23 @@ function resetMapMarkers() {
     tempStartMarker = null; tempEndMarker = null; currentRouteLayer = null;
     window.tempRouteGeometry = null;
     document.getElementById('btn-pick-start').classList.remove('btn-success');
-    document.getElementById('btn-pick-start').classList.add('btn-warning');
-    document.getElementById('btn-pick-start').innerText = "Startpunkt wählen";
+    document.getElementById('btn-pick-start').classList.add('btn-outline-warning');
+    document.getElementById('btn-pick-start').innerHTML = "📍 Start wählen";
     document.getElementById('btn-pick-end').classList.remove('btn-success');
-    document.getElementById('btn-pick-end').classList.add('btn-warning');
-    document.getElementById('btn-pick-end').innerText = "Zielpunkt wählen";
+    document.getElementById('btn-pick-end').classList.add('btn-outline-warning');
+    document.getElementById('btn-pick-end').innerHTML = "🏁 Ziel wählen";
 }
 
-/**
- * Zeigt Touren an und zeichnet die Route beim Klick
- */
 function renderTours(data) {
     const listContainer = document.getElementById('tours-container');
     if(!listContainer) return;
     listContainer.innerHTML = '';
     
-    // Alte Marker entfernen
     markers.forEach(m => map.removeLayer(m));
     markers = [];
     if (currentRouteLayer) map.removeLayer(currentRouteLayer);
 
     data.forEach(tour => {
-        // Marker auf Karte
         if(tour.coords) {
             const marker = L.marker(tour.coords).addTo(map);
             marker.bindPopup(`<b>${tour.title}</b><br>${tour.km} km`);
@@ -421,14 +385,13 @@ function renderTours(data) {
             markers.push(marker);
         }
 
-        // Karteikarte in der Liste
         const card = document.createElement('div');
         card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
         
-        // GPX Button Logik
+        // HIER SIEHST DU DEN UNTERSCHIED
         const gpxBtn = tour.routeGeometry 
             ? `<button class="btn btn-sm btn-outline-success mt-2" onclick="downloadGPX('${tour.id}')">💾 GPX Download</button>` 
-            : '';
+            : `<small class="text-muted d-block mt-2">ℹ️ Keine Routendaten (Altbestand)</small>`;
 
         card.innerHTML = `
             <div onclick="window.showTourOnMap('${tour.id}')" style="cursor:pointer;">
@@ -442,54 +405,38 @@ function renderTours(data) {
     });
 }
 
-/**
- * GLOBAL: Zeigt eine spezifische Tour auf der Karte an
- */
 window.showTourOnMap = (tourId) => {
-    // Tour finden (entweder Objekt oder ID übergeben)
     const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId;
     if (!tour) return;
 
-    // Alte Route löschen
     if (currentRouteLayer) map.removeLayer(currentRouteLayer);
 
-    // 1. Marker finden und Popup öffnen
     if (tour.coords) {
         map.flyTo(tour.coords, 11);
     }
 
-    // 2. Route einzeichnen (wenn vorhanden)
     if (tour.routeGeometry && tour.routeGeometry.length > 0) {
         currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map);
         map.fitBounds(currentRouteLayer.getBounds());
     }
 };
 
-/**
- * GLOBAL: GPX Datei generieren und herunterladen
- */
 window.downloadGPX = (tourId) => {
     const tour = toursData.find(t => t.id === tourId);
     if (!tour || !tour.routeGeometry) return alert("Keine Routendaten vorhanden.");
 
-    // GPX XML Header
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Riderpoint App">
   <trk>
     <name>${tour.title}</name>
     <trkseg>`;
-
-    // Punkte hinzufügen
     tour.routeGeometry.forEach(pt => {
-        // Leaflet nutzt [Lat, Lng], GPX will lat="..." lon="..."
         gpx += `\n      <trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`;
     });
-
     gpx += `\n    </trkseg>
   </trk>
 </gpx>`;
 
-    // Download auslösen
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -500,9 +447,8 @@ window.downloadGPX = (tourId) => {
     document.body.removeChild(a);
 };
 
-
 /* ==========================================
-   HELPER FOR FORUM & OTHERS
+   HELPER FOR FORUM & OTHERS (UNVERÄNDERT)
    ========================================== */
 function initFilters() {
     const catSelect = document.getElementById('filter-category');
@@ -551,10 +497,6 @@ window.resetFilters = () => {
     document.getElementById('filter-category').value = "all";
     window.onCategoryChange();
 };
-
-/* ==========================================
-   GLOBAL FORUM EXPORTS (Alte Logik beibehalten)
-   ========================================== */
 window.renderForumHome = function() {
     currentCategoryId = null; currentForumTopic = null;
     renderBreadcrumbs([]); 
