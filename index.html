@@ -8,11 +8,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="style.css">
     <style>
+        /* Damit die Sections sauber umschalten */
         .page-section { display: none; }
         .page-section.active { display: block; }
+        /* Cursor für Links */
         .nav-link { cursor: pointer; }
         
-        /* Neuer Style für den Map-Container */
+        /* Map Container Style */
         .map-wrapper {
             position: relative;
             border-radius: 12px;
@@ -20,7 +22,7 @@
             border: 2px solid #ddd;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        /* Damit du siehst, dass die neue Version geladen ist */
+        /* Update Tag - zeigt dir an, dass v2.2 läuft */
         .version-tag {
             position: fixed;
             bottom: 10px;
@@ -37,8 +39,8 @@
 </head>
 <body>
     
-    <!-- DIESER TAG ZEIGT DIR, DASS DER NEUE CODE LÄUFT -->
-    <div class="version-tag">v2.1 - Routenplaner Aktiv</div>
+    <!-- VERSION INDICATOR -->
+    <div class="version-tag">v2.2 - Ratings & Auto-Country</div>
 
     <nav class="navbar navbar-expand-lg fixed-top py-2">
         <div class="container">
@@ -254,7 +256,7 @@
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info small border-0 bg-light">
-                        <b>So geht's:</b> Wähle Start und Ziel auf der Karte. Die Route & Distanz werden automatisch berechnet.
+                        <b>So geht's:</b> Wähle Start und Ziel auf der Karte. Die Route, Land & Region werden automatisch berechnet.
                     </div>
                     
                     <div class="d-flex gap-2 mb-3">
