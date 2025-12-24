@@ -133,57 +133,32 @@
 
         <!-- TOURS PAGE -->
         <section id="page-tours" class="page-section">
-            <div class="row">
-                <div class="col-md-3 mb-4">
-                    <div class="sidebar-filter-card">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="m-0 fw-bold">Filter</h5>
-                            <small style="cursor:pointer; color:var(--accent);" onclick="resetFilters()">Zurücksetzen</small>
-                        </div>
-                        <div class="mb-3">
-                            <input type="text" id="search-input" class="form-control form-control-sm" placeholder="🔍 Suchen..." onkeyup="filterTours()">
-                        </div>
-                        <hr class="filter-divider">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">1. Kontinent / Region</label>
-                            <select id="filter-category" class="form-select form-select-sm" onchange="onCategoryChange()">
-                                <option value="all">Bitte wählen...</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">2. Land</label>
-                            <select id="filter-country" class="form-select form-select-sm" onchange="onCountryChange()" disabled>
-                                <option value="all">--</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">3. Bundesland</label>
-                            <select id="filter-state" class="form-select form-select-sm" onchange="filterTours()" disabled>
-                                <option value="all">--</option>
-                            </select>
-                        </div>
-                    </div>
-                </div> 
-                <div class="col-md-9">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="m-0 fw-bold">Verfügbare Routen</h4>
-                        
-                        <!-- DIESER BUTTON IST JETZT IMMER SICHTBAR & RUFT DIE NEUE FUNKTION AUF -->
-                        <button id="add-tour-btn" class="btn btn-primary" onclick="openAddTourModal()">
-                            + Neue Route planen
-                        </button>
-                    </div>
-                    <div class="tours-layout">
-                        <div id="tours-container" class="tours-list">
-                            <p class="text-center text-muted mt-4">Bitte wähle links eine Region, um Touren zu laden.</p>
-                        </div>
-                        <div class="map-wrapper">
-                            <div id="map" style="height: 500px; width: 100%;"></div>
-                        </div>
-                    </div>
+    <div class="row g-0" style="height: calc(100vh - 100px);">
+        
+        <div class="col-md-5 col-lg-4 d-flex flex-column border-end" style="background: #f8f9fa; height: 100%;">
+            
+            <div class="p-3 bg-white border-bottom shadow-sm z-1">
+                <button id="add-tour-btn" class="btn btn-primary w-100 fw-bold shadow-sm" onclick="openAddTourModal()">
+                    + GPX Route hochladen
+                </button>
+            </div>
+
+            <div class="flex-grow-1 overflow-auto p-2" id="tours-tree-container">
+                <div class="text-center mt-5 text-muted">
+                    <div class="spinner-border text-primary mb-2"></div><br>Lade Routen...
                 </div>
-            </div> 
-        </section>
+            </div>
+        </div> 
+
+        <div class="col-md-7 col-lg-8 position-relative">
+            <div id="map" style="height: 100%; width: 100%; z-index: 0;"></div>
+            
+            <div class="position-absolute top-0 start-50 translate-middle-x mt-3 bg-white px-3 py-1 rounded-pill shadow-sm border" style="z-index: 999; opacity: 0.9;">
+                <small class="fw-bold text-muted">Wähle links eine Route</small>
+            </div>
+        </div>
+    </div> 
+</section>
 
         <!-- FORUM PAGE -->
         <section id="page-forum" class="page-section">
@@ -246,42 +221,72 @@
         </div>
     </div>
 
-    <!-- UPDATE ADD TOUR MODAL (MIT NEUEN BUTTONS FÜR DIE KARTE) -->
     <div class="modal fade" id="addTourModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Neue Route planen</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info small border-0 bg-light">
-                        <b>So geht's:</b> Wähle Start und Ziel auf der Karte. Die Route, Land & Region werden automatisch berechnet.
-                    </div>
-                    
-                    <div class="d-flex gap-2 mb-3">
-                        <button type="button" class="btn btn-outline-danger flex-grow-1 fw-bold" id="btn-pick-start" onclick="startPickLocation('start')">📍 Start wählen</button>
-                        <button type="button" class="btn btn-outline-danger flex-grow-1 fw-bold" id="btn-pick-end" onclick="startPickLocation('end')">🏁 Ziel wählen</button>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">GPX Route hochladen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTourForm">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">1. GPX Datei wählen</label>
+                        <input type="file" class="form-control" id="gpxInput" accept=".gpx" required onchange="handleGpxFileSelect(event)">
+                        <div class="form-text small">Länge und Vorschau werden automatisch berechnet.</div>
                     </div>
 
-                    <form id="addTourForm">
-                        <div class="mb-2"><label>Name der Tour</label><input type="text" class="form-control" id="newTitle" required></div>
-                        <div class="row mb-2">
-                            <div class="col"><label>Region</label><select class="form-select" id="newRegion"><option value="Europa">Europa</option><option value="Welt">Welt</option></select></div>
-                            <div class="col"><label>Land</label><select class="form-select" id="newCountry"><option value="Deutschland">Deutschland</option><option value="Österreich">Österreich</option><option value="Schweiz">Schweiz</option></select></div>
+                    <div class="row mb-2 bg-light p-2 rounded mx-0 border">
+                        <div class="col-6">
+                            <label class="small text-muted">Länge (km)</label>
+                            <input type="text" class="form-control form-control-sm fw-bold" id="newKm" readonly placeholder="-">
                         </div>
-                        <div class="mb-2"><label>Bundesland / Gebiet</label><input type="text" class="form-control" id="newState"></div>
-                        <div class="row mb-2">
-                            <div class="col"><label>Länge (km)</label><input type="text" class="form-control" id="newKm" readonly placeholder="Auto..."></div>
-                            <div class="col"><label>Dauer (h)</label><input type="text" class="form-control" id="newTime" readonly placeholder="Auto..."></div>
+                        <div class="col-6">
+                            <label class="small text-muted">Dauer (ca.)</label>
+                            <input type="text" class="form-control form-control-sm" id="newTime" placeholder="z.B. 4h 30min">
                         </div>
-                        <div class="mb-3"><label>Beschreibung</label><textarea class="form-control" id="newDesc" rows="2"></textarea></div>
-                        <button type="submit" class="btn btn-primary w-100">Route veröffentlichen</button>
-                    </form>
-                </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Titel der Tour</label>
+                        <input type="text" class="form-control" id="newTitle" placeholder="z.B. Hausstrecke Eifel" required>
+                    </div>
+
+                    <div class="row mb-2">
+                        <div class="col">
+                            <label>Region</label>
+                            <select class="form-select" id="newRegion">
+                                <option value="Europa">Europa</option>
+                                <option value="Welt">Welt</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label>Land</label>
+                            <select class="form-select" id="newCountry">
+                                <option value="Deutschland">Deutschland</option>
+                                <option value="Österreich">Österreich</option>
+                                <option value="Schweiz">Schweiz</option>
+                                <option value="Italien">Italien</option>
+                                <option value="Frankreich">Frankreich</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label>Bundesland / Gebiet</label>
+                        <input type="text" class="form-control" id="newState" placeholder="z.B. Bayern / Tirol">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label>Beschreibung</label>
+                        <textarea class="form-control" id="newDesc" rows="3" placeholder="Wie ist der Asphalt? Viele Blitzer? Gute Aussicht?"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" id="btn-publish-tour" disabled>Route veröffentlichen</button>
+                </form>
             </div>
         </div>
     </div>
+</div>
 
     <!-- THREAD & CATEGORY MODALS (Unverändert) -->
     <div class="modal fade" id="createThreadModal" tabindex="-1">

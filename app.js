@@ -12,7 +12,11 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-const API_URL = "/api"; 
+// ÄNDERN FÜR LOCALHOST:
+//const API_URL = "http://localhost:7071/api"; 
+
+// ORIGINAL (für späteres Deployment wieder zurückändern):
+ const API_URL = "/api"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -26,9 +30,6 @@ let currentRole = "guest";
 let map = null;
 let markers = []; 
 let currentRouteLayer = null; 
-let tempStartMarker = null;   
-let tempEndMarker = null;     
-let pickingMode = null;       
 
 // FORUM STATE
 let currentForumTopic = null; 
@@ -81,16 +82,13 @@ function navigateTo(pageId) {
 
         if (pageId === 'forum') renderForumHome();
         
-        // FEATURE: Refresh bei Klick auf "Touren"
+        // Refresh bei Klick auf "Touren"
         if (pageId === 'tours') {
-            resetFilters();      // Filter zurücksetzen
-            resetMapMarkers();   // Blaue Route entfernen
-            
-            // Karte zurücksetzen
             if (map) {
                 setTimeout(() => { 
                     map.invalidateSize(); 
                     map.setView([51.16, 10.45], 6); // Zurück zur Mitte DE
+                    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
                 }, 200);
             }
         }
@@ -171,6 +169,7 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
+    // Forum Listeners
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -217,19 +216,29 @@ function setupEventListeners() {
         });
     }
 
+    // Tour Listeners
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
 
 /* ==========================================
-   TOUREN & KARTEN LOGIK
+   TOUREN LOGIK (BAUM-STRUKTUR) & MAP
    ========================================== */
 
 async function loadToursFromServer() {
     try {
         const response = await fetch(`${API_URL}/tours`);
-        if (response.ok) toursData = await response.json();
-    } catch (error) { console.warn("Tours offline"); } finally { initFilters(); filterTours(); }
+        if (response.ok) {
+            toursData = await response.json();
+            // Sortieren: Neueste zuerst
+            toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            renderTourTree();
+        }
+    } catch (error) { 
+        console.warn("Tours offline", error); 
+        const container = document.getElementById('tours-tree-container');
+        if(container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
+    }
 }
 
 function initMap() {
@@ -242,290 +251,116 @@ function initMap() {
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors' 
     }).addTo(map);
-
-    map.on('click', onMapClick);
 }
 
-function onMapClick(e) {
-    if (!pickingMode) return;
-    const latlng = e.latlng;
-    const modalEl = document.getElementById('addTourModal');
+// Gruppiert die Daten und baut das Accordion
+function renderTourTree() {
+    const container = document.getElementById('tours-tree-container');
+    if (!container) return;
+    container.innerHTML = '';
 
-    if (pickingMode === 'start') {
-        if (tempStartMarker) map.removeLayer(tempStartMarker);
-        tempStartMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Start").openPopup();
-        
-        const btn = document.getElementById('btn-pick-start');
-        btn.classList.remove('btn-outline-danger');
-        btn.classList.add('btn-success');
-        btn.innerHTML = "Start gesetzt ✓";
-        
-        const modal = new bootstrap.Modal(modalEl);
-        modal.show();
-        pickingMode = null;
-
-    } else if (pickingMode === 'end') {
-        if (tempEndMarker) map.removeLayer(tempEndMarker);
-        tempEndMarker = L.marker(latlng, { draggable: true }).addTo(map).bindPopup("Ziel").openPopup();
-        
-        const btn = document.getElementById('btn-pick-end');
-        btn.classList.remove('btn-outline-danger');
-        btn.classList.add('btn-success');
-        btn.innerHTML = "Ziel gesetzt ✓";
-        
-        const modal = new bootstrap.Modal(modalEl);
-        modal.show();
-        pickingMode = null;
-
-        if (tempStartMarker && tempEndMarker) {
-            calculateRoutePreview(tempStartMarker.getLatLng(), tempEndMarker.getLatLng());
-        }
-    }
-}
-
-window.startPickLocation = (mode) => {
-    pickingMode = mode; 
-    const modalEl = document.getElementById('addTourModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    modal.hide(); 
-};
-
-async function calculateRoutePreview(start, end) {
-    document.getElementById('newDesc').placeholder = "Berechne Route...";
-    const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
-
-    // 1. OSRM Route holen
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.routes && data.routes.length > 0) {
-            const route = data.routes[0];
-            const km = (route.distance / 1000).toFixed(1);
-            const hours = Math.floor(route.duration / 3600);
-            const minutes = Math.floor((route.duration % 3600) / 60);
-            
-            document.getElementById('newKm').value = km;
-            document.getElementById('newTime').value = `${hours}h ${minutes}min`;
-            
-            if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-            currentRouteLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
-            map.fitBounds(currentRouteLayer.getBounds());
-            window.tempRouteGeometry = coords; 
-            
-            // 2. FEATURE: Automatische Ländererkennung (Reverse Geocoding)
-            await detectCountry(start.lat, start.lng);
-        }
-    } catch (e) {
-        console.error("Routing Fehler:", e);
-        alert("Konnte Route nicht berechnen (Server evtl. ausgelastet).");
-    }
-}
-
-// FEATURE: Automatisch Land & Region erkennen
-async function detectCountry(lat, lon) {
-    try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
-        const response = await fetch(url, { headers: { 'User-Agent': 'Riderpoint-App' } });
-        const data = await response.json();
-        
-        if (data && data.address) {
-            const country = data.address.country;
-            const state = data.address.state || data.address.county || "";
-            
-            // Felder füllen
-            const countrySelect = document.getElementById('newCountry');
-            const regionSelect = document.getElementById('newRegion');
-            const stateInput = document.getElementById('newState');
-            
-            // Land setzen (wenn in der Liste, sonst 'Deutschland' als Fallback oder manuell)
-            // Wir prüfen, ob der Text grob passt
-            if (country.includes("Deutschland") || country.includes("Germany")) countrySelect.value = "Deutschland";
-            else if (country.includes("Österreich") || country.includes("Austria")) countrySelect.value = "Österreich";
-            else if (country.includes("Schweiz") || country.includes("Switzerland")) countrySelect.value = "Schweiz";
-            else {
-                // Wenn es ein anderes Land ist, fügen wir es dynamisch hinzu
-                const opt = document.createElement('option');
-                opt.value = country;
-                opt.text = country;
-                opt.selected = true;
-                countrySelect.appendChild(opt);
-            }
-
-            // Region setzen (Logik: Europa vs Welt)
-            // Hier stark vereinfacht: Wir nehmen an alles ist Europa für diesen Test
-            regionSelect.value = "Europa";
-            
-            // Bundesland/Ort
-            stateInput.value = state;
-
-            console.log("Automatisch erkannt:", country, state);
-        }
-    } catch (e) {
-        console.warn("Konnte Land nicht automatisch erkennen:", e);
-    }
-}
-
-async function handleAddTour(e) {
-    e.preventDefault();
-    if (!currentUser) return alert("Bitte logge dich ein.");
-
-    const title = document.getElementById('newTitle').value;
-    const region = document.getElementById('newRegion').value;
-    const country = document.getElementById('newCountry').value;
-    const state = document.getElementById('newState').value;
-    const km = document.getElementById('newKm').value;
-    const time = document.getElementById('newTime').value;
-    const desc = document.getElementById('newDesc').value;
-
-    let coords = [51.16, 10.45]; 
-    if (tempStartMarker) {
-        const ll = tempStartMarker.getLatLng();
-        coords = [ll.lat, ll.lng];
+    if (toursData.length === 0) {
+        container.innerHTML = '<div class="p-4 text-center text-muted">Noch keine Touren vorhanden.</div>';
+        return;
     }
 
-    const newTour = { 
-        title, category: region, country, state, km, time, desc, 
-        user: currentUser.displayName || "Unbekannt",
-        coords: coords,
-        routeGeometry: window.tempRouteGeometry || null,
-        // FEATURE: Initialwerte für Bewertung
-        rating: 0,
-        votes: 0
-    };
+    // 1. Daten gruppieren: Region -> Land -> Array von Touren
+    const groups = {};
+    toursData.forEach(tour => {
+        const region = tour.category || "Sonstiges";
+        const country = tour.country || "Unbekannt";
+        
+        if (!groups[region]) groups[region] = {};
+        if (!groups[region][country]) groups[region][country] = [];
+        
+        groups[region][country].push(tour);
+    });
 
-    try {
-        const response = await fetch(`${API_URL}/tours`, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify(newTour) 
+    // 2. HTML generieren (Bootstrap Accordion)
+    const accordionId = "accordionRegions";
+    let html = `<div class="accordion accordion-flush" id="${accordionId}">`;
+
+    Object.keys(groups).sort().forEach((region, index) => {
+        const regionId = `heading${index}`;
+        const collapseId = `collapse${index}`;
+        
+        // Level 1 Header (Region)
+        html += `
+        <div class="accordion-item bg-transparent">
+            <h2 class="accordion-header" id="${regionId}">
+                <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                    🌍 ${region}
+                </button>
+            </h2>
+            <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" data-bs-parent="#${accordionId}">
+                <div class="accordion-body p-0">
+        `;
+
+        // Level 2: Länder
+        const countries = groups[region];
+        Object.keys(countries).sort().forEach(country => {
+            const tours = countries[country];
+            
+            // Land Header
+            html += `<div class="bg-light p-2 ps-3 fw-bold text-secondary border-bottom border-top"><small>🏳️ ${country}</small></div>`;
+            
+            // Level 3: Die Touren Cards
+            html += `<div class="list-group list-group-flush">`;
+            tours.forEach(tour => {
+                html += createTourListItem(tour);
+            });
+            html += `</div>`;
         });
-        
-        if(response.ok) { 
-            const savedTour = await response.json();
-            toursData.unshift(savedTour); 
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addTourModal'));
-            modal.hide();
-            e.target.reset(); 
-            resetMapMarkers();
-            
-            filterTours(); 
-            alert("Tour veröffentlicht!"); 
-        }
-    } catch (err) { alert("Fehler: " + err.message); }
+
+        html += `
+                </div>
+            </div>
+        </div>`;
+    });
+
+    html += `</div>`; // End Accordion
+    container.innerHTML = html;
 }
 
-function resetMapMarkers() {
-    if (tempStartMarker) map.removeLayer(tempStartMarker);
-    if (tempEndMarker) map.removeLayer(tempEndMarker);
-    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-    tempStartMarker = null; tempEndMarker = null; currentRouteLayer = null;
-    window.tempRouteGeometry = null;
+function createTourListItem(tour) {
+    const votes = tour.votes || 0;
+    const starHtml = generateStars(tour.rating || 0, tour.id);
     
-    document.getElementById('btn-pick-start').classList.remove('btn-success');
-    document.getElementById('btn-pick-start').classList.add('btn-outline-danger');
-    document.getElementById('btn-pick-start').innerHTML = "📍 Start wählen";
-    
-    document.getElementById('btn-pick-end').classList.remove('btn-success');
-    document.getElementById('btn-pick-end').classList.add('btn-outline-danger');
-    document.getElementById('btn-pick-end').innerHTML = "🏁 Ziel wählen";
-}
+    // GPX Button Logik
+    let actionBtn = "";
+    if (tour.routeGeometry) {
+        actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
+    }
 
-function renderTours(data) {
-    const listContainer = document.getElementById('tours-container');
-    if(!listContainer) return;
-    listContainer.innerHTML = '';
-    
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-
-    data.forEach(tour => {
-        if(tour.coords) {
-            const marker = L.marker(tour.coords).addTo(map);
-            marker.bindPopup(`<b>${tour.title}</b><br>${tour.km} km`);
-            marker.on('click', () => showTourOnMap(tour));
-            markers.push(marker);
-        }
-
-        const card = document.createElement('div');
-        card.className = 'mini-tour-card mb-2 p-3 border rounded shadow-sm bg-white';
-        
-        let actionBtn = "";
-
-if (tour.routeGeometry) {
-    actionBtn = `<button class="btn btn-sm btn-outline-success mt-2" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
-} else {
-    // Falls keine Route da ist -> Upload Button zeigen
-    // HINWEIS: Wir brauchen ein unsichtbares file input feld für den Upload
-    actionBtn = `
-        <label class="btn btn-sm btn-outline-warning mt-2" onclick="event.stopPropagation();">
-            📂 Route hochladen
-            <input type="file" style="display:none" onchange="handleGpxUpload(event, '${tour.id}')" accept=".gpx">
-        </label>
+    return `
+    <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
+        <div class="d-flex justify-content-between">
+            <h6 class="fw-bold mb-1 text-primary text-truncate">${tour.title}</h6>
+            <small class="text-muted text-nowrap">${tour.km} km</small>
+        </div>
+        <div class="small text-warning mb-1">${starHtml} <span class="text-muted" style="font-size:0.75em">(${votes})</span></div>
+        <p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p>
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="badge bg-secondary fw-normal" style="font-size:0.7em">${tour.state || tour.country}</span>
+            ${actionBtn}
+        </div>
+    </div>
     `;
 }
 
-     // --- IN renderTours(data) ---
+// Wird aufgerufen, wenn man auf eine Tour in der Liste klickt
+window.selectTour = (tourId) => {
+    // 1. Visuell markieren
+    document.querySelectorAll('.tour-item-card').forEach(el => el.classList.remove('tour-card-active'));
+    const activeCard = document.getElementById(`tour-card-${tourId}`);
+    if(activeCard) activeCard.classList.add('tour-card-active');
 
-// Helper funktion für klickbare Sterne
-const generateStars = (currentRating, tourId) => {
-    let html = '<div class="star-rating">';
-    for (let i = 1; i <= 5; i++) {
-        // Entscheiden, ob Stern voll (★) oder leer (☆)
-        const char = i <= Math.round(currentRating) ? '★' : '☆';
-        // Jeder Stern ruft beim Klick 'submitVote' auf
-        html += `<span style="cursor:pointer; font-size:1.2rem;" 
-                  onclick="event.stopPropagation(); submitVote('${tourId}', ${i})" 
-                  title="${i} Sterne geben">${char}</span>`;
-    }
-    html += `</div>`;
-    return html;
-};
-
-// ... inside the loop ...
-const starHtml = generateStars(tour.rating || 0, tour.id);
-// ...
-        card.innerHTML = `
-            <div onclick="window.showTourOnMap('${tour.id}')" style="cursor:pointer;">
-                <div class="d-flex justify-content-between align-items-start">
-                    <h5 class="fw-bold m-0 text-primary">${tour.title}</h5>
-                    <div class="text-warning small" title="${votes} Bewertungen">${starHtml} <span class="text-muted">(${votes})</span></div>
-                </div>
-                <div class="small text-muted mb-2">${tour.category} • ${tour.country} • <b>${tour.km} km</b></div>
-                <p class="small mb-0 text-secondary">${tour.desc || ""}</p>
-            </div>
-            ${gpxBtn}
-        `;
-        listContainer.appendChild(card);
-    });
-}
-
-
-window.submitVote = async (tourId, rating) => {
-    if (!confirm(`Möchtest du dieser Tour ${rating} Sterne geben?`)) return;
-
-    try {
-        const response = await fetch(`${API_URL}/vote`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: tourId, rating: rating })
-        });
-
-        if (response.ok) {
-            const updatedTour = await response.json();
-            // Lokales Array updaten, damit wir nicht neu laden müssen
-            const index = toursData.findIndex(t => t.id === tourId);
-            if (index !== -1) toursData[index] = updatedTour;
-            
-            filterTours(); // Liste neu rendern
-        } else {
-            alert("Fehler beim Bewerten.");
-        }
-    } catch (e) {
-        console.error(e);
+    // 2. Auf Karte anzeigen
+    showTourOnMap(tourId);
+    
+    // 3. Auf Mobile: Automatisch zur Karte scrollen
+    if(window.innerWidth < 768) {
+        document.getElementById('map').scrollIntoView({behavior: 'smooth'});
     }
 };
 
@@ -542,6 +377,185 @@ window.showTourOnMap = (tourId) => {
     if (tour.routeGeometry && tour.routeGeometry.length > 0) {
         currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map);
         map.fitBounds(currentRouteLayer.getBounds());
+    }
+};
+
+/* ==========================================
+   GPX UPLOAD LOGIK
+   ========================================== */
+
+// Globale Variable, um die geparste Route zwischenzuspeichern
+let tempGpxData = null;
+
+// 1. Die Funktion, die aufgerufen wird, wenn eine Datei gewählt wird
+window.handleGpxFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target.result;
+        parseAndPreviewGpx(text);
+    };
+    reader.readAsText(file);
+};
+
+// 2. GPX Parsen, Werte berechnen und Vorschau auf Karte
+function parseAndPreviewGpx(gpxText) {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(gpxText, "text/xml");
+    const trkpts = xmlDoc.getElementsByTagName("trkpt");
+
+    if (trkpts.length === 0) {
+        alert("Fehler: Keine Wegpunkte in dieser GPX gefunden.");
+        return;
+    }
+
+    let coordinates = [];
+    let totalDist = 0;
+
+    // Koordinaten extrahieren & Distanz berechnen
+    for (let i = 0; i < trkpts.length; i++) {
+        const lat = parseFloat(trkpts[i].getAttribute("lat"));
+        const lon = parseFloat(trkpts[i].getAttribute("lon"));
+        coordinates.push([lat, lon]);
+
+        if (i > 0) {
+            const prev = coordinates[i - 1];
+            totalDist += getDistanceFromLatLonInKm(prev[0], prev[1], lat, lon);
+        }
+    }
+
+    // Werte runden
+    const km = totalDist.toFixed(1);
+    const hours = Math.floor(km / 60);
+    const minutes = Math.round((km % 60)); 
+    
+    // Formular füllen
+    document.getElementById('newKm').value = km;
+    document.getElementById('newTime').value = `${hours}h ${minutes}min`; 
+    document.getElementById('btn-publish-tour').disabled = false;
+
+    // Temporär speichern für den Upload
+    tempGpxData = {
+        routeGeometry: coordinates,
+        coords: coordinates[0], 
+        km: km
+    };
+
+    console.log("GPX geladen:", km, "km");
+}
+
+// Hilfsfunktion: Distanz berechnen
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    var R = 6371; 
+    var dLat = deg2rad(lat2 - lat1);
+    var dLon = deg2rad(lon2 - lon1);
+    var a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat1)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
+// 3. Das eigentliche Speichern
+async function handleAddTour(e) {
+    e.preventDefault();
+    if (!currentUser) return alert("Bitte einloggen.");
+    if (!tempGpxData) return alert("Bitte erst eine GPX Datei wählen.");
+
+    const title = document.getElementById('newTitle').value;
+    const region = document.getElementById('newRegion').value;
+    const country = document.getElementById('newCountry').value;
+    const state = document.getElementById('newState').value;
+    const desc = document.getElementById('newDesc').value;
+    const time = document.getElementById('newTime').value;
+
+    const newTour = {
+        title,
+        category: region,
+        country,
+        state,
+        desc,
+        time,
+        km: tempGpxData.km, 
+        coords: tempGpxData.coords, 
+        routeGeometry: tempGpxData.routeGeometry, 
+        user: currentUser.displayName || "Unbekannt",
+        createdAt: new Date().toISOString(),
+        rating: 0,
+        votes: 0
+    };
+
+    try {
+        const response = await fetch(API_URL + '/tours', { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(newTour) 
+        });
+
+        if (response.ok) {
+            const savedTour = await response.json();
+            // In die Liste einsortieren (reload reicht hier, oder manuell einfügen)
+            toursData.push(savedTour); 
+            toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            renderTourTree();
+            
+            // UI Reset
+            bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide();
+            e.target.reset();
+            tempGpxData = null;
+            document.getElementById('btn-publish-tour').disabled = true;
+
+            showTourOnMap(savedTour);
+            alert("Tour erfolgreich hochgeladen!");
+        }
+    } catch (err) {
+        alert("Fehler beim Speichern: " + err.message);
+    }
+}
+
+/* ==========================================
+   HELPER FUNKTIONEN (Sterne, Downloads)
+   ========================================== */
+
+const generateStars = (currentRating, tourId) => {
+    let html = '<div class="star-rating">';
+    for (let i = 1; i <= 5; i++) {
+        const char = i <= Math.round(currentRating) ? '★' : '☆';
+        html += `<span style="cursor:pointer; font-size:1.2rem;" 
+                  onclick="event.stopPropagation(); submitVote('${tourId}', ${i})" 
+                  title="${i} Sterne geben">${char}</span>`;
+    }
+    html += `</div>`;
+    return html;
+};
+
+window.submitVote = async (tourId, rating) => {
+    if (!confirm(`Möchtest du dieser Tour ${rating} Sterne geben?`)) return;
+
+    try {
+        const response = await fetch(`${API_URL}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: tourId, rating: rating })
+        });
+
+        if (response.ok) {
+            const updatedTour = await response.json();
+            const index = toursData.findIndex(t => t.id === tourId);
+            if (index !== -1) toursData[index] = updatedTour;
+            renderTourTree(); 
+        } else {
+            alert("Fehler beim Bewerten.");
+        }
+    } catch (e) {
+        console.error(e);
     }
 };
 
@@ -571,101 +585,10 @@ window.downloadGPX = (tourId) => {
     document.body.removeChild(a);
 };
 
-window.handleGpxUpload = (event, tourId) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        const text = e.target.result;
-        
-        // Simpler GPX Parser (sucht nach <trkpt>)
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(text, "text/xml");
-        const points = xmlDoc.getElementsByTagName("trkpt");
-        
-        let coords = [];
-        for (let i = 0; i < points.length; i++) {
-            const lat = parseFloat(points[i].getAttribute("lat"));
-            const lon = parseFloat(points[i].getAttribute("lon"));
-            coords.push([lat, lon]);
-        }
-
-        if (coords.length === 0) return alert("Keine Wegpunkte im GPX gefunden.");
-
-        // An Backend senden
-        try {
-            const res = await fetch(`${API_URL}/tours/update-route`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    id: tourId, 
-                    routeGeometry: coords,
-                    km: (coords.length * 0.05).toFixed(1) // Sehr grobe Schätzung, besser wäre Berechnung
-                }) 
-            });
-
-            if (res.ok) {
-                alert("Route erfolgreich hinzugefügt!");
-                loadToursFromServer(); // Neu laden
-            }
-        } catch (err) {
-            alert("Fehler beim Upload: " + err.message);
-        }
-    };
-    reader.readAsText(file);
-};
-
 /* ==========================================
-   HELPER FOR FORUM & OTHERS
+   FORUM LOGIK
    ========================================== */
-function initFilters() {
-    const catSelect = document.getElementById('filter-category');
-    if(!catSelect) return;
-    catSelect.innerHTML = '<option value="all">Bitte wählen...</option>';
-    const cats = [...new Set(toursData.map(t => t.category))].sort();
-    cats.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; catSelect.appendChild(opt); });
-}
-window.onCategoryChange = () => {
-    const selectedCat = document.getElementById('filter-category').value;
-    const countrySelect = document.getElementById('filter-country');
-    countrySelect.innerHTML = '<option value="all">Alle Länder</option>';
-    countrySelect.disabled = (selectedCat === 'all');
-    if (!countrySelect.disabled) {
-        const countries = [...new Set(toursData.filter(t => t.category === selectedCat).map(t => t.country))].sort();
-        countries.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; countrySelect.appendChild(opt); });
-    }
-    window.filterTours();
-};
-window.onCountryChange = () => {
-    const selectedCat = document.getElementById('filter-category').value;
-    const selectedCountry = document.getElementById('filter-country').value;
-    const stateSelect = document.getElementById('filter-state');
-    stateSelect.innerHTML = '<option value="all">Alle Gebiete</option>';
-    stateSelect.disabled = (selectedCountry === 'all');
-    if (!stateSelect.disabled) {
-        const states = [...new Set(toursData.filter(t => t.category === selectedCat && t.country === selectedCountry).map(t => t.state))].sort();
-        states.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.innerText = s; stateSelect.appendChild(opt); });
-    }
-    window.filterTours();
-};
-window.filterTours = () => {
-    const cat = document.getElementById('filter-category')?.value;
-    const country = document.getElementById('filter-country')?.value;
-    const state = document.getElementById('filter-state')?.value;
-    const search = document.getElementById('search-input')?.value.toLowerCase();
-    let filtered = toursData;
-    if(cat && cat !== 'all') filtered = filtered.filter(t => t.category === cat);
-    if(country && country !== 'all') filtered = filtered.filter(t => t.country === country);
-    if(state && state !== 'all') filtered = filtered.filter(t => t.state === state);
-    if(search) filtered = filtered.filter(t => t.title.toLowerCase().includes(search) || t.desc.toLowerCase().includes(search));
-    renderTours(filtered);
-};
-window.resetFilters = () => {
-    document.getElementById('search-input').value = "";
-    document.getElementById('filter-category').value = "all";
-    window.onCategoryChange();
-};
+
 window.renderForumHome = function() {
     currentCategoryId = null; currentForumTopic = null;
     renderBreadcrumbs([]); 
@@ -679,6 +602,7 @@ window.renderForumHome = function() {
         container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')"><div class="forum-icon">🏍️</div><div class="forum-main"><h5 class="fw-bold text-dark mb-0">${cat.title}</h5><p class="text-muted small mb-0">${cat.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
     });
 };
+
 window.renderForumSubCategory = function(catId) {
     currentCategoryId = catId; currentForumTopic = null;
     const category = allForumData.find(c => c.id === catId);
@@ -694,6 +618,7 @@ window.renderForumSubCategory = function(catId) {
         container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')"><div class="forum-icon">🔧</div><div class="forum-main"><h5 class="fw-bold text-primary mb-0">${topic.title}</h5><p class="text-muted small mb-0">${topic.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
     });
 };
+
 window.renderForumThreads = async function(topicName, catId) {
     currentForumTopic = topicName;
     const cat = allForumData.find(c => c.id === catId);
@@ -711,6 +636,7 @@ window.renderForumThreads = async function(topicName, catId) {
         listArea.innerHTML += `<div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')"><div class="forum-icon">📄</div><div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div><div class="forum-stats fw-bold">${thread.replies || 0}</div><div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div></div>`;
     });
 };
+
 window.renderThreadDetail = async function(threadId, topicName, catId) {
     let breadcrumbs = [];
     if (catId) {
@@ -737,6 +663,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         container.innerHTML += `<div class="card mt-4 bg-light border-0"><div class="card-body"><h6 class="fw-bold mb-2">Antworten</h6><textarea id="replyText" class="form-control mb-2" rows="3"></textarea><div class="d-flex justify-content-between"><div><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button></div><button class="btn btn-danger" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Antworten</button></div></div></div>`;
     }
 };
+
 window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
     if (!text.trim()) return alert("Bitte Text eingeben!");
@@ -749,6 +676,8 @@ window.sendReply = async function(threadId, topic, catId) {
         if (response.ok) renderThreadDetail(threadId, topic, catId);
     } catch (err) { alert(err.message); }
 };
+
+
 async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;

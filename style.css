@@ -276,3 +276,41 @@ a { text-decoration: none; }
         height: 100% !important;
     }
 }
+
+/* --- NEUES TOUR LAYOUT --- */
+#tours-tree-container {
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: #ccc #f0f0f0;
+}
+
+#tours-tree-container::-webkit-scrollbar {
+    width: 8px;
+}
+#tours-tree-container::-webkit-scrollbar-track {
+    background: #f0f0f0;
+}
+#tours-tree-container::-webkit-scrollbar-thumb {
+    background-color: #ccc;
+    border-radius: 10px;
+}
+
+/* Accordion Styling */
+.accordion-button {
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 12px 15px;
+}
+.accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+}
+.accordion-body {
+    padding: 10px;
+    background-color: #fcfcfc;
+}
+
+/* Aktive Tour hervorheben */
+.tour-card-active {
+    border-left: 4px solid #0d6efd !important;
+    background-color: #f0f8ff !important;
+}
