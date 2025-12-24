@@ -13,10 +13,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ÄNDERN FÜR LOCALHOST:
-const API_URL = "http://localhost:7071/api"; 
+//const API_URL = "http://localhost:7071/api"; 
 
 // ORIGINAL (für späteres Deployment wieder zurückändern):
-// const API_URL = "/api"; 
+ const API_URL = "/api"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
