@@ -13,10 +13,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ÄNDERN FÜR LOCALHOST:
-//const API_URL = "http://localhost:7071/api"; 
+const API_URL = "http://localhost:7071/api"; 
 
 // ORIGINAL (für späteres Deployment wieder zurückändern):
- const API_URL = "/api"; 
+// const API_URL = "/api"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -737,3 +737,73 @@ async function handleLogin(e) {
 window.openNewThreadModal = () => { document.getElementById('threadTopicDisplay').value = currentForumTopic; new bootstrap.Modal(document.getElementById('createThreadModal')).show(); };
 window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput').value = id; new bootstrap.Modal(document.getElementById('addCategoryModal')).show(); };
 window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
+
+
+// POST ERSTELLEN
+window.createPost = async () => {
+    // 1. Prüfen: Ist der User eingeloggt?
+    if (!auth.currentUser) {
+        alert("Bitte melde dich erst an, um zu posten!");
+        return;
+    }
+
+    const textInput = document.getElementById('postInputText');
+    const fileInput = document.getElementById('postInputFile');
+    const submitBtn = document.querySelector('button[onclick="window.createPost()"]');
+
+    // Nichts eingegeben? Abbrechen.
+    if (!textInput.value.trim() && fileInput.files.length === 0) {
+        alert("Bitte schreibe etwas oder wähle ein Bild aus.");
+        return;
+    }
+
+    // Button deaktivieren (Lade-Status)
+    const oldText = submitBtn.innerText;
+    submitBtn.innerText = "Sende...";
+    submitBtn.disabled = true;
+
+    try {
+        // 2. Daten für den Versand vorbereiten (FormData)
+        const formData = new FormData();
+        formData.append('content', textInput.value);
+        
+        // Wenn eine Datei gewählt wurde, hinzufügen
+        if (fileInput.files.length > 0) {
+            formData.append('media', fileInput.files[0]);
+        }
+
+        // 3. An deine Azure Function senden
+        // HINWEIS: '/api/createPost' muss exakt so heißen wie deine Datei im 'functions' Ordner
+        const response = await fetch('/api/createPost', {
+            method: 'POST',
+            headers: {
+                // Wir schicken die User-ID im Header mit, damit das Backend weiß, wer postet
+                'x-user-id': auth.currentUser.uid 
+            },
+            body: formData 
+            // Wichtig: Bei FormData setzt der Browser den Content-Type automatisch!
+        });
+
+        if (response.ok) {
+            // Erfolg!
+            alert("Beitrag veröffentlicht!");
+            textInput.value = "";     // Feld leeren
+            fileInput.value = "";     // Datei leeren
+            
+            // Hier rufen wir gleich die Lade-Funktion auf (machen wir im nächsten Schritt)
+            // if(window.loadFeed) window.loadFeed(); 
+        } else {
+            const errorMsg = await response.text();
+            console.error("Server Fehler:", errorMsg);
+            alert("Fehler beim Posten. Schau in die Konsole (F12).");
+        }
+
+    } catch (error) {
+        console.error("Netzwerkfehler:", error);
+        alert("Server nicht erreichbar. Läuft deine API?");
+    } finally {
+        // Button wieder normal machen
+        submitBtn.innerText = oldText;
+        submitBtn.disabled = false;
+    }
+};
