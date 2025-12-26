@@ -4,7 +4,7 @@ const { CosmosClient } = require('@azure/cosmos');
 const multipart = require('parse-multipart-data');
 
 // Verbindungsdaten aus den Umgebungsvariablen holen
-const connectionString = process.env.AzureWebJobsStorage; 
+const connectionString = process.env.BLOB_STORAGE_CONNECTION;
 const cosmosConnectionString = process.env.COSMOS_CONNECTION_STRING;
 
 // Setup für Blob Storage (Bilder)
