@@ -16,7 +16,7 @@ import {
 //const API_URL = "http://localhost:7071/api"; 
 
 // ORIGINAL (für späteres Deployment wieder zurückändern):
- const API_URL = "/api"; 
+ const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
