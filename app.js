@@ -12,11 +12,8 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// ÄNDERN FÜR LOCALHOST:
-//const API_URL = "http://localhost:7071/api"; 
-
-// ORIGINAL (für späteres Deployment wieder zurückändern):
- const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
+// ORIGINAL Azure Backend URL:
+const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -106,7 +103,8 @@ function getActivePage() {
 
 async function syncUserWithBackend(firebaseUser) {
     try {
-        const response = await fetch(`${API_URL}/user-sync`, {
+        // KORREKTUR: Pfad angepasst an users.js
+        const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ uid: firebaseUser.uid, email: firebaseUser.email })
@@ -116,7 +114,7 @@ async function syncUserWithBackend(firebaseUser) {
             currentRole = dbUser.role || "user"; 
             updateUI(); 
         }
-    } catch (err) { console.warn("Backend Sync skip"); }
+    } catch (err) { console.warn("Backend Sync skip", err); }
 }
 
 function updateUI() {
@@ -178,7 +176,8 @@ function setupEventListeners() {
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
             try {
-                const response = await fetch(`${API_URL}/threads`, {
+                // KORREKTUR: Pfad angepasst an createThread.js
+                const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic: currentForumTopic, title, text, user: currentUser.displayName || "Unbekannt" })
@@ -201,7 +200,8 @@ function setupEventListeners() {
             const title = document.getElementById('newCatTitle').value;
             const desc = document.getElementById('newCatDesc').value;
             try {
-                const response = await fetch(`${API_URL}/forum/category`, {
+                // KORREKTUR: Pfad angepasst an addCategory.js
+                const response = await fetch(`${API_URL}/addCategory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ mainCatId, title, desc })
@@ -227,12 +227,15 @@ function setupEventListeners() {
 
 async function loadToursFromServer() {
     try {
-        const response = await fetch(`${API_URL}/tours`);
+        // KORREKTUR: Pfad angepasst an GetTours.js (Großschreibung beachten!)
+        const response = await fetch(`${API_URL}/GetTours`);
         if (response.ok) {
             toursData = await response.json();
             // Sortieren: Neueste zuerst
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
+        } else {
+            console.warn("GetTours returned status:", response.status);
         }
     } catch (error) { 
         console.warn("Tours offline", error); 
@@ -493,7 +496,8 @@ async function handleAddTour(e) {
     };
 
     try {
-        const response = await fetch(API_URL + '/tours', { 
+        // KORREKTUR: Pfad angepasst an addTour.js
+        const response = await fetch(API_URL + '/addTour', { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
             body: JSON.stringify(newTour) 
@@ -540,7 +544,8 @@ window.submitVote = async (tourId, rating) => {
     if (!confirm(`Möchtest du dieser Tour ${rating} Sterne geben?`)) return;
 
     try {
-        const response = await fetch(`${API_URL}/vote`, {
+        // KORREKTUR: Pfad angepasst an voteTour.js
+        const response = await fetch(`${API_URL}/voteTour`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: tourId, rating: rating })
@@ -627,7 +632,9 @@ window.renderForumThreads = async function(topicName, catId) {
     container.innerHTML = `<div class="clearfix mb-3"><h3 class="fw-bold float-start">${topicName}</h3>${currentUser ? `<button class="btn btn-danger float-end" onclick="openNewThreadModal()">Neues Thema +</button>` : ""}</div>
         <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
         <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>`;
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+    
+    // KORREKTUR: Pfad angepasst an getThreads.js
+    const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     const listArea = document.getElementById('thread-list-area');
     listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
@@ -648,7 +655,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     renderBreadcrumbs(breadcrumbs);
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
-    const response = await fetch(`${API_URL}/threads?topic=${encodeURIComponent(topicName)}`);
+    
+    // KORREKTUR: Pfad angepasst an getThreads.js
+    const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
@@ -668,7 +677,8 @@ window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
     if (!text.trim()) return alert("Bitte Text eingeben!");
     try {
-        const response = await fetch(`${API_URL}/reply`, {
+        // KORREKTUR: Pfad angepasst an addReply.js
+        const response = await fetch(`${API_URL}/addReply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: threadId, topic, text, user: currentUser.displayName || "Unbekannt" })
@@ -682,9 +692,12 @@ async function loadForumData() {
     const container = document.getElementById('forum-container');
     if(!container) return;
     try {
+        // KORREKTUR: Pfad angepasst an forum.js (sofern es GET unterstützt und so heißt)
         const catResponse = await fetch(`${API_URL}/forum`);
         allForumData = await catResponse.json();
-        const threadResponse = await fetch(`${API_URL}/threads`); 
+        
+        // KORREKTUR: Pfad angepasst an getThreads.js
+        const threadResponse = await fetch(`${API_URL}/getThreads`); 
         if (threadResponse.ok) allThreadsCache = await threadResponse.json();
         if (!currentCategoryId && !currentForumTopic) renderForumHome();
     } catch (error) { console.error(error); }
@@ -773,8 +786,8 @@ window.createPost = async () => {
         }
 
         // 3. An deine Azure Function senden
-        // HINWEIS: '/api/createPost' muss exakt so heißen wie deine Datei im 'functions' Ordner
-        const response = await fetch('/api/createPost', {
+        // KORREKTUR: Absoluter Pfad statt relativ!
+        const response = await fetch(`${API_URL}/createPost`, {
             method: 'POST',
             headers: {
                 // Wir schicken die User-ID im Header mit, damit das Backend weiß, wer postet
