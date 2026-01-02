@@ -11,6 +11,7 @@ const cosmosOutput = output.cosmosDB({
 app.http('user-sync', {
     methods: ['POST'],
     authLevel: 'anonymous',
+    route: 'users',
     extraOutputs: [cosmosOutput], // Wir sagen der Funktion: Du darfst schreiben
     
   handler: async (request, context) => {

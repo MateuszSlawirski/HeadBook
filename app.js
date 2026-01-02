@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadToursFromServer();
     loadForumData(); 
+    if(window.loadFeed) window.loadFeed();
     setupEventListeners();
     
     const startPage = window.location.hash.replace('#', '') || 'home';
@@ -803,8 +804,7 @@ window.createPost = async () => {
             textInput.value = "";     // Feld leeren
             fileInput.value = "";     // Datei leeren
             
-            // Hier rufen wir gleich die Lade-Funktion auf (machen wir im nächsten Schritt)
-            // if(window.loadFeed) window.loadFeed(); 
+            
         } else {
             const errorMsg = await response.text();
             console.error("Server Fehler:", errorMsg);
@@ -818,5 +818,70 @@ window.createPost = async () => {
         // Button wieder normal machen
         submitBtn.innerText = oldText;
         submitBtn.disabled = false;
+    }
+};
+
+/* ==========================================
+   FEED / POSTS LADEN
+   ========================================== */
+window.loadFeed = async function() {
+    // 1. Container suchen (Stelle sicher, dass du ein <div id="feed-container"> in deinem HTML hast!)
+    const container = document.getElementById('feed-posts');
+    if (!container) return; // Falls wir nicht auf der Feed-Seite sind
+
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+
+    try {
+        // ACHTUNG: Hier muss der Name stehen, den du in der Azure-Datei "route:" genannt hast!
+        // Wir haben vorhin "getPosts" vereinbart.
+        const response = await fetch(`${API_URL}/getPosts`);
+        
+        if (!response.ok) throw new Error("Fehler beim Laden");
+
+        const posts = await response.json();
+        container.innerHTML = ""; // Lade-Spinner weg
+
+        if (posts.length === 0) {
+            container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge. Sei der Erste!</div>';
+            return;
+        }
+
+        // 2. Posts anzeigen
+        posts.forEach(post => {
+            // Bild-HTML nur bauen, wenn auch ein Bild da ist
+            let mediaHtml = "";
+            if (post.mediaUrl) {
+                if (post.mediaType === 'video') {
+                    mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2" style="max-height:400px; w-100"></video>`;
+                } else {
+                    mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2" style="max-height:400px; object-fit:cover; w-100" loading="lazy">`;
+                }
+            }
+
+            const html = `
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex align-items-center pt-3">
+                    <div style="width:40px; height:40px; background:#ddd; border-radius:50%; text-align:center; line-height:40px; margin-right:10px;">👤</div>
+                    <div>
+                        <div class="fw-bold text-dark">User-ID: ${post.userId.substr(0,5)}...</div>
+                        <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} um ${new Date(post.createdAt).toLocaleTimeString()}</small>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="card-text fs-5">${post.content}</p>
+                    ${mediaHtml}
+                </div>
+                <div class="card-footer bg-white border-0 text-muted small">
+                    <span style="cursor:pointer">❤️ ${post.likes ? post.likes.length : 0} Likes</span> • 
+                    <span>💬 Kommentieren</span>
+                </div>
+            </div>
+            `;
+            container.innerHTML += html;
+        });
+
+    } catch (error) {
+        console.error(error);
+        container.innerHTML = '<div class="alert alert-danger">Konnte Feed nicht laden. API läuft nicht?</div>';
     }
 };

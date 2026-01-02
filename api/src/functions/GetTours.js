@@ -11,7 +11,7 @@ const toursInput = input.cosmosDB({
 app.http('GetTours', {
     methods: ['GET'],
     authLevel: 'anonymous',
-    route: 'tours', // GET /api/tours
+    route: 'GetTours', // GET /api/tours
     extraInputs: [toursInput],
     handler: async (request, context) => {
         const tours = context.extraInputs.get(toursInput);

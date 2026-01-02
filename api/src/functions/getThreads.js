@@ -13,7 +13,7 @@ const cosmosInput = input.cosmosDB({
 app.http('getThreads', {
     methods: ['GET'],
     authLevel: 'anonymous',
-    route: 'threads', // Lauscht auf GET /api/threads
+    route: 'getThreads', // Lauscht auf GET /api/threads
     extraInputs: [cosmosInput],
     handler: async (request, context) => {
         // 1. Alle Threads aus der DB holen (via Input Binding)

@@ -10,7 +10,7 @@ const cosmosOutput = output.cosmosDB({
 app.http('createThread', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    route: 'threads', // Gleiche URL wie beim Lesen, aber diesmal POST
+    route: 'createThread', // Gleiche URL wie beim Lesen, aber diesmal POST
     extraOutputs: [cosmosOutput],
     handler: async (request, context) => {
         try {

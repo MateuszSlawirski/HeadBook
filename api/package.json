@@ -7,8 +7,15 @@
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
-    "@azure/functions": "^4.0.0"
+    "@azure/cosmos": "^4.9.0",
+    "@azure/functions": "^4.0.0",
+    "@azure/storage-blob": "^12.29.1",
+    "bcryptjs": "^3.0.3",
+    "firebase-admin": "^13.6.0",
+    "jsonwebtoken": "^9.0.3",
+    "multiparty": "^4.2.3",
+    "parse-multipart-data": "^1.5.0",
+    "uuid": "^13.0.0"
   },
-  "devDependencies": {},
-  "main": "src/index.js"
+  "main": "src/functions/*.js"
 }
