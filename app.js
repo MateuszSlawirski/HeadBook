@@ -944,25 +944,32 @@ window.toggleLike = async (postId) => {
     const btn = document.getElementById(`btn-like-${postId}`);
     const countSpan = document.getElementById(`like-count-${postId}`);
     
-    // 1. Optimistisches Update (Sofort Rot machen)
+    // 1. Optimistisches Update (Sofort Rot machen für schnelles Gefühl)
     const isLiked = btn.classList.contains('liked');
     btn.classList.toggle('liked');
     
-    // SVG Füllung toggeln
     const svg = btn.querySelector('svg');
     if(!isLiked) svg.setAttribute('fill', 'currentColor');
     else svg.setAttribute('fill', 'none');
 
-    // Zahl anpassen (nur visuell)
     let currentCount = parseInt(countSpan.innerText.replace(/\D/g, '')) || 0;
     currentCount = isLiked ? currentCount - 1 : currentCount + 1;
     countSpan.innerText = `❤️ ${currentCount} Likes`;
 
-    // 2. An Backend senden (Optional, wenn Endpoint existiert)
-    // await fetch(`${API_URL}/likePost`, { body: JSON.stringify({ postId, userId: auth.currentUser.uid }) ... });
-    console.log(`Like ${isLiked ? 'entfernt' : 'gesetzt'} für Post: ${postId}`);
+    // 2. An Backend senden (ECHTE SPEICHERUNG)
+    try {
+        await fetch(`${API_URL}/toggleLike`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                postId: postId, 
+                userId: auth.currentUser.uid 
+            }) 
+        });
+    } catch(e) {
+        console.error("Like konnte nicht gespeichert werden", e);
+    }
 };
-
 window.postComment = async (postId) => {
     if (!auth.currentUser) return alert("Bitte erst einloggen!");
     
@@ -984,18 +991,24 @@ window.postComment = async (postId) => {
     </div>`;
     
     list.insertAdjacentHTML('beforeend', newCommentHtml);
-    input.value = ""; // Feld leeren
+    input.value = ""; 
 
-    // 2. An Backend senden (damit es gespeichert wird)
-    /* try {
-        await fetch(`${API_URL}/addComment`, { 
+    // 2. An Backend senden (JETZT AKTIV!)
+    try {
+        const response = await fetch(`${API_URL}/addComment`, { 
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, text, user: username }) 
         });
-    } catch(e) { console.error(e); }
-    */
-};
 
+        if(!response.ok) {
+            console.error("Fehler beim Speichern des Kommentars");
+        }
+    } catch(e) { 
+        console.error(e); 
+        alert("Fehler: Kommentar wurde nicht gespeichert.");
+    }
+};
 /* ==========================================
    HELPER: EMOJIS EINFÜGEN
    ========================================== */
