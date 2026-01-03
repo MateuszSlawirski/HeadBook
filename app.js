@@ -826,56 +826,104 @@ window.createPost = async () => {
 /* ==========================================
    FEED / POSTS LADEN
    ========================================== */
+/* ==========================================
+   FEED / POSTS LADEN (MIT LIKES & KOMMENTAREN)
+   ========================================== */
 window.loadFeed = async function() {
-    // 1. Container suchen (Stelle sicher, dass du ein <div id="feed-container"> in deinem HTML hast!)
     const container = document.getElementById('feed-posts');
-    if (!container) return; // Falls wir nicht auf der Feed-Seite sind
+    if (!container) return; 
 
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
 
     try {
-        // ACHTUNG: Hier muss der Name stehen, den du in der Azure-Datei "route:" genannt hast!
-        // Wir haben vorhin "getPosts" vereinbart.
         const response = await fetch(`${API_URL}/getPosts`);
-        
         if (!response.ok) throw new Error("Fehler beim Laden");
 
         const posts = await response.json();
-        container.innerHTML = ""; // Lade-Spinner weg
+        container.innerHTML = ""; 
 
         if (posts.length === 0) {
             container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge. Sei der Erste!</div>';
             return;
         }
 
-        // 2. Posts anzeigen
+        // Sortieren: Neueste zuerst (falls das Backend das nicht schon macht)
+        posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
         posts.forEach(post => {
-            // Bild-HTML nur bauen, wenn auch ein Bild da ist
+            // IDs und Daten sicherstellen
+            const postId = post.id || post._id || post.rowKey; // Je nach DB (Cosmos/Mongo/Table)
+            const likes = Array.isArray(post.likes) ? post.likes : [];
+            const comments = Array.isArray(post.comments) ? post.comments : [];
+            
+            // Prüfen ob DU schon geliked hast (Firebase User ID vs Array)
+            const myUid = auth.currentUser ? auth.currentUser.uid : null;
+            const isLiked = myUid && likes.includes(myUid);
+            const likeClass = isLiked ? 'liked' : '';
+            
+            // Medien HTML
             let mediaHtml = "";
             if (post.mediaUrl) {
                 if (post.mediaType === 'video') {
-                    mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2" style="max-height:400px; w-100"></video>`;
+                    mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
                 } else {
-                    mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2" style="max-height:400px; object-fit:cover; w-100" loading="lazy">`;
+                    mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2 w-100" style="max-height:500px; object-fit:cover;" loading="lazy">`;
                 }
             }
 
+            // Kommentare rendern
+            let commentsHtml = '';
+            comments.forEach(c => {
+                commentsHtml += `
+                <div class="comment-item">
+                    <div style="width:28px; height:28px; background:#ddd; border-radius:50%; min-width:28px;"></div>
+                    <div class="comment-bubble">
+                        <span class="comment-author">${c.user}</span>
+                        ${c.text}
+                    </div>
+                </div>`;
+            });
+
+            // HTML Karte zusammenbauen
             const html = `
             <div class="card mb-4 border-0 shadow-sm">
                 <div class="card-header bg-white border-0 d-flex align-items-center pt-3">
-                    <div style="width:40px; height:40px; background:#ddd; border-radius:50%; text-align:center; line-height:40px; margin-right:10px;">👤</div>
+                    <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
                     <div>
                         <div class="fw-bold text-dark">${post.user || "Unbekannt"}</div>
-                        <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} um ${new Date(post.createdAt).toLocaleTimeString()}</small>
+                        <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} • ${new Date(post.createdAt).toLocaleTimeString().slice(0,5)}</small>
                     </div>
                 </div>
-                <div class="card-body">
-                    <p class="card-text fs-5">${post.content}</p>
+                
+                <div class="card-body pt-1">
+                    <p class="card-text fs-5 mb-2">${post.content}</p>
                     ${mediaHtml}
-                </div>
-                <div class="card-footer bg-white border-0 text-muted small">
-                    <span style="cursor:pointer">❤️ ${post.likes ? post.likes.length : 0} Likes</span> • 
-                    <span>💬 Kommentieren</span>
+                    
+                    <div class="d-flex justify-content-between text-muted small mt-3">
+                        <span id="like-count-${postId}">❤️ ${likes.length} Likes</span>
+                        <span style="cursor:pointer" onclick="document.getElementById('comments-${postId}').classList.toggle('show')">${comments.length} Kommentare</span>
+                    </div>
+
+                    <div class="post-actions">
+                        <button class="action-btn ${likeClass}" id="btn-like-${postId}" onclick="window.toggleLike('${postId}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                            Gefällt mir
+                        </button>
+                        <button class="action-btn" onclick="document.getElementById('comments-${postId}').classList.toggle('show')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            Kommentieren
+                        </button>
+                    </div>
+
+                    <div id="comments-${postId}" class="comment-section">
+                        <div id="comment-list-${postId}">
+                            ${commentsHtml}
+                        </div>
+                        <div class="comment-input-wrapper">
+                            <input type="text" id="input-comment-${postId}" class="form-control form-control-sm border-0" placeholder="Schreibe einen Kommentar...">
+                            <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="window.postComment('${postId}')">➤</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             `;
@@ -884,8 +932,68 @@ window.loadFeed = async function() {
 
     } catch (error) {
         console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Konnte Feed nicht laden. API läuft nicht?</div>';
+        container.innerHTML = '<div class="alert alert-danger">Konnte Feed nicht laden.</div>';
     }
+};
+
+// --- INTERAKTIVITÄT (LIKES & KOMMENTARE) ---
+
+window.toggleLike = async (postId) => {
+    if (!auth.currentUser) return alert("Bitte erst einloggen!");
+
+    const btn = document.getElementById(`btn-like-${postId}`);
+    const countSpan = document.getElementById(`like-count-${postId}`);
+    
+    // 1. Optimistisches Update (Sofort Rot machen)
+    const isLiked = btn.classList.contains('liked');
+    btn.classList.toggle('liked');
+    
+    // SVG Füllung toggeln
+    const svg = btn.querySelector('svg');
+    if(!isLiked) svg.setAttribute('fill', 'currentColor');
+    else svg.setAttribute('fill', 'none');
+
+    // Zahl anpassen (nur visuell)
+    let currentCount = parseInt(countSpan.innerText.replace(/\D/g, '')) || 0;
+    currentCount = isLiked ? currentCount - 1 : currentCount + 1;
+    countSpan.innerText = `❤️ ${currentCount} Likes`;
+
+    // 2. An Backend senden (Optional, wenn Endpoint existiert)
+    // await fetch(`${API_URL}/likePost`, { body: JSON.stringify({ postId, userId: auth.currentUser.uid }) ... });
+    console.log(`Like ${isLiked ? 'entfernt' : 'gesetzt'} für Post: ${postId}`);
+};
+
+window.postComment = async (postId) => {
+    if (!auth.currentUser) return alert("Bitte erst einloggen!");
+    
+    const input = document.getElementById(`input-comment-${postId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    const list = document.getElementById(`comment-list-${postId}`);
+    const username = auth.currentUser.displayName || "Ich";
+
+    // 1. Sofort anzeigen (Optimistisch)
+    const newCommentHtml = `
+    <div class="comment-item">
+        <div style="width:28px; height:28px; background:#0d6efd; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:0.7rem;">Ich</div>
+        <div class="comment-bubble">
+            <span class="comment-author">${username}</span>
+            ${text}
+        </div>
+    </div>`;
+    
+    list.insertAdjacentHTML('beforeend', newCommentHtml);
+    input.value = ""; // Feld leeren
+
+    // 2. An Backend senden (damit es gespeichert wird)
+    /* try {
+        await fetch(`${API_URL}/addComment`, { 
+            method: 'POST',
+            body: JSON.stringify({ postId, text, user: username }) 
+        });
+    } catch(e) { console.error(e); }
+    */
 };
 
 /* ==========================================
