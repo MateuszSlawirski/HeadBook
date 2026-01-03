@@ -887,3 +887,22 @@ window.loadFeed = async function() {
         container.innerHTML = '<div class="alert alert-danger">Konnte Feed nicht laden. API läuft nicht?</div>';
     }
 };
+
+/* ==========================================
+   HELPER: EMOJIS EINFÜGEN
+   ========================================== */
+window.insertPostEmoji = function(emoji) {
+    const input = document.getElementById('postInputText');
+    if (!input) return;
+
+    // Den Emoji dort einfügen, wo der Cursor gerade ist (oder am Ende)
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const text = input.value;
+    
+    input.value = text.substring(0, start) + emoji + text.substring(end);
+    
+    // Cursor hinter den Emoji setzen und Fokus zurückgeben
+    input.selectionStart = input.selectionEnd = start + emoji.length;
+    input.focus();
+};

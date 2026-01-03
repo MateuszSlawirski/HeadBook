@@ -122,16 +122,46 @@
                 <div class="feed">
                     <div class="card">
     <div class="card-header">Beitrag erstellen</div>
-    <div style="display:flex; flex-direction: column; gap:10px;">
-        
-        <div style="display:flex; gap:10px;">
-            <div class="new-post-avatar"></div> <textarea id="postInputText" class="new-post-input" style="height:80px; resize:none; padding:10px;" placeholder="Was hast du heute erlebt?"></textarea>
+    <div class="card shadow-sm border-0">
+    <div class="card-body">
+        <div class="d-flex gap-3 mb-3">
+            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px; min-width:45px;">
+                👤
+            </div>
+            <textarea id="postInputText" class="form-control border-0 bg-light" rows="2" 
+                      placeholder="Was gibt's Neues auf der Straße?" style="resize: none;"></textarea>
         </div>
 
-        <div style="display:flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 10px;">
-            <input type="file" id="postInputFile" accept="image/*,video/*" style="font-size: 0.9em;">
+        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
             
-            <button onclick="window.createPost()" style="background-color: #007bff; color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer;">
+            <div class="d-flex align-items-center gap-2">
+                <input type="file" id="postInputFile" accept="image/*,video/*" class="d-none" onchange="document.getElementById('file-label').style.color = '#0d6efd'">
+                <label for="postInputFile" id="file-label" class="btn btn-light btn-sm text-muted" title="Bild/Video hinzufügen">
+                    📷 Medien
+                </label>
+
+                <div class="emoji-toolbar d-flex gap-1 flex-wrap">
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🏍️')">🏍️</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🛵')">🛵</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('💨')">💨</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🏁')">🏁</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🛣️')">🛣️</button>
+    
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🛠️')">🛠️</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('⛽')">⛽</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('☀️')">☀️</button>
+    
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('😎')">😎</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('😂')">😂</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🔥')">🔥</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('❤️')">❤️</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('👍')">👍</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('✌️')">✌️</button>
+    <button type="button" class="emoji-btn" onclick="insertPostEmoji('📸')">📸</button>
+</div>
+            </div>
+
+            <button onclick="window.createPost()" class="btn btn-primary px-4 rounded-pill fw-bold">
                 Posten
             </button>
         </div>

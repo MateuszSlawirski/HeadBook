@@ -118,18 +118,66 @@ a { text-decoration: none; }
 /* --- 2. LAYOUT & GRID --- */
 .container { max-width: 1000px; margin: 0 auto; padding: 0 15px; }
 
-/* Profil & Feed Grid */
-.content-grid { 
-    display: flex; 
-    gap: 20px; 
-    align-items: flex-start; 
-}
-.sidebar { width: 360px; flex-shrink: 0; }
-.feed { flex-grow: 1; }
+/* ==========================================
+   LAYOUT OPTIMIERUNG
+   ========================================== */
 
-@media (max-width: 992px) {
-    .content-grid { flex-direction: column; }
-    .sidebar { width: 100%; display: none; } 
+/* Das Gitter-Layout für die Startseite */
+.content-grid {
+    display: grid;
+    /* VORHER war es vielleicht 300px 1fr (oder ähnlich). 
+       JETZT: Sidebar fix 260px, der Rest (1fr) gehört dem Feed! */
+    grid-template-columns: 260px 1fr; 
+    gap: 24px;
+    align-items: start;
+    max-width: 1200px; /* Maximale Gesamtbreite */
+    margin: 0 auto;    /* Zentriert alles */
+}
+
+/* Der Bereich zum Posten und Lesen */
+.feed {
+    width: 100%;
+    min-width: 0; /* Verhindert Layout-Probleme bei breiten Bildern */
+}
+
+/* Mobile Ansicht: Alles untereinander */
+@media (max-width: 768px) {
+    .content-grid {
+        grid-template-columns: 1fr; /* Nur eine Spalte */
+    }
+    .sidebar {
+        display: none; /* Optional: Sidebar am Handy ausblenden für mehr Platz */
+    }
+}
+
+/* Moderne Emoji Leiste */
+.emoji-toolbar {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid #eee; /* Kleine Trennlinie zum Medien-Button */
+}
+
+.emoji-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.4rem; /* Größer sieht moderner aus */
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 8px;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Sprung-Effekt */
+    opacity: 0.8; /* Nicht ganz so knallig, bis man drüber fährt */
+}
+
+/* Hover-Effekt: Emoji wird größer und voll sichtbar */
+.emoji-btn:hover {
+    background-color: #f0f2f5;
+    transform: scale(1.3); /* Ploppt auf */
+    opacity: 1;
+}
+
+/* Klick-Effekt */
+.emoji-btn:active {
+    transform: scale(0.95);
 }
 
 /* Touren Page Layout */
