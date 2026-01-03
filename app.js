@@ -779,6 +779,8 @@ window.createPost = async () => {
     try {
         // 2. Daten für den Versand vorbereiten (FormData)
         const formData = new FormData();
+        const myName = auth.currentUser.displayName || "Unbekannter Biker";
+        formData.append('username', myName);
         formData.append('content', textInput.value);
         
         // Wenn eine Datei gewählt wurde, hinzufügen
@@ -863,7 +865,7 @@ window.loadFeed = async function() {
                 <div class="card-header bg-white border-0 d-flex align-items-center pt-3">
                     <div style="width:40px; height:40px; background:#ddd; border-radius:50%; text-align:center; line-height:40px; margin-right:10px;">👤</div>
                     <div>
-                        <div class="fw-bold text-dark">User-ID: ${post.userId.substr(0,5)}...</div>
+                        <div class="fw-bold text-dark">${post.user || "Unbekannt"}</div>
                         <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} um ${new Date(post.createdAt).toLocaleTimeString()}</small>
                     </div>
                 </div>

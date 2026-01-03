@@ -39,6 +39,7 @@ app.http('createPost', {
             const boundary = multipart.getBoundary(request.headers.get('content-type'));
             const parts = multipart.parse(bodyBuffer, boundary);
 
+            let username = "Gast";
             let contentText = "";
             let mediaUrl = "";
             let mediaType = "";
@@ -48,6 +49,9 @@ app.http('createPost', {
                 if (part.name === 'content') {
                     contentText = part.data.toString();
                 } 
+                else if (part.name === 'username') {
+                username = part.data.toString();
+            }
                 else if (part.filename) {
                     const fileExtension = part.filename.split('.').pop();
                     const uniqueName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExtension}`;
@@ -65,6 +69,7 @@ app.http('createPost', {
             const newPost = {
                 id: Math.random().toString(36).substr(2, 9),
                 userId: userId,
+                user: username,
                 content: contentText,
                 mediaUrl: mediaUrl,
                 mediaType: mediaType,
