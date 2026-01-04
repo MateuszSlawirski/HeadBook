@@ -671,7 +671,20 @@ window.renderForumThreads = async function(topicName, catId) {
     listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     threads.forEach(thread => {
-        listArea.innerHTML += `<div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')"><div class="forum-icon">📄</div><div class="forum-main"><div class="fw-bold text-dark">${thread.title}</div><div class="small text-muted">von ${thread.user} • ${thread.date}</div></div><div class="forum-stats fw-bold">${thread.replies || 0}</div><div class="text-end text-muted small" style="width:150px;">${thread.date}<br>by ${thread.user}</div></div>`;
+        const deleteBtn = getDeleteBtn('thread', thread.id, thread.topic);
+
+        listArea.innerHTML += `
+        <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
+            <div class="forum-icon">📄</div>
+            <div class="forum-main">
+                <div class="fw-bold text-dark">${thread.title}</div>
+                <div class="small text-muted">von ${thread.user} • ${thread.date}</div>
+            </div>
+            <div class="forum-stats fw-bold d-none d-md-block">${thread.replies || 0}</div>
+            <div class="text-end text-muted small" style="min-width:100px;">
+                ${thread.date}
+                ${deleteBtn} </div>
+        </div>`;
     });
 };
 
@@ -690,19 +703,53 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     // KORREKTUR: Pfad angepasst an getThreads.js
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
+    
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
-    container.innerHTML = `<h3 class="fw-bold mb-4">${t.title}</h3>
-        <div class="card mb-3 border-0 shadow-sm"><div class="card-header bg-light border-bottom py-2 d-flex justify-content-between"><div><span class="fw-bold text-danger">${t.user}</span> <span class="text-muted small">schrieb am ${t.date}:</span></div><div class="text-muted small">#1</div></div><div class="card-body"><p class="card-text fs-5" style="white-space: pre-wrap;">${t.text}</p></div></div>`;
+
+    // 1. Mülleimer für das HAUPT-THEMA
+    const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
+
+    container.innerHTML = `
+        <h3 class="fw-bold mb-4">${t.title}</h3>
+        <div class="card mb-3 border-0 shadow-sm">
+            <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="fw-bold text-danger">${t.user}</span> 
+                    <span class="text-muted small">schrieb am ${t.date}:</span>
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="text-muted small me-2">#1</span>
+                    ${deleteThreadBtn} </div>
+            </div>
+            <div class="card-body">
+                <p class="card-text fs-5" style="white-space: pre-wrap;">${t.text}</p>
+            </div>
+        </div>`;
+
+    // 2. Mülleimer für die ANTWORTEN (Replies)
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
-            container.innerHTML += `<div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white"><div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between"><div><span class="fw-bold text-dark">${r.user}</span> <span class="text-muted small">antwortete am ${r.date}:</span></div><div class="text-muted small">#${idx + 2}</div></div><div class="card-body pt-0"><p class="mb-0" style="white-space: pre-wrap;">${r.text}</p></div></div>`;
+            // Wir brauchen: Typ 'reply', keine ID (null), PartitionKey (t.topic), ParentID (t.id), Text & User zum Identifizieren
+            const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
+
+            container.innerHTML += `
+            <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
+                <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold text-dark">${r.user}</span> 
+                        <span class="text-muted small">antwortete am ${r.date}:</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted small me-2">#${idx + 2}</span>
+                        ${deleteReplyBtn} </div>
+                </div>
+                <div class="card-body pt-0">
+                    <p class="mb-0" style="white-space: pre-wrap;">${r.text}</p>
+                </div>
+            </div>`;
         });
     }
-    if (currentUser) {
-        container.innerHTML += `<div class="card mt-4 bg-light border-0"><div class="card-body"><h6 class="fw-bold mb-2">Antworten</h6><textarea id="replyText" class="form-control mb-2" rows="3"></textarea><div class="d-flex justify-content-between"><div><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('😀', 'replyText')">😀</button><button type="button" class="btn btn-sm btn-outline-secondary border-0" onclick="insertEmoji('👍', 'replyText')">👍</button></div><button class="btn btn-danger" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Antworten</button></div></div></div>`;
-    }
-};
 
 window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
