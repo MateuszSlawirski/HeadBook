@@ -325,6 +325,8 @@ function renderTourTree() {
     html += `</div>`; // End Accordion
     container.innerHTML = html;
 }
+
+
 function createTourListItem(tour) {
     // GPX Button Logik
     let actionBtn = "";
@@ -347,6 +349,8 @@ function createTourListItem(tour) {
     </div>
     `;
 }
+
+
 
 
 // Wird aufgerufen, wenn man auf eine Tour in der Liste klickt
