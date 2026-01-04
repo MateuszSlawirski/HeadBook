@@ -1,7 +1,7 @@
 const { app, output } = require('@azure/functions');
 const crypto = require('crypto');
 
-// Output Binding für Cosmos DB (Container "tours")
+// Output Binding für Cosmos DB
 const cosmosOutput = output.cosmosDB({
     databaseName: 'riderpoint-db',
     containerName: 'tours',
@@ -11,7 +11,8 @@ const cosmosOutput = output.cosmosDB({
 app.http('addTour', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    route: 'tours', // POST /api/tours
+    // Zwingend entfernen, damit die Route wieder /api/addTour heißt:
+    // route: 'tours', 
     extraOutputs: [cosmosOutput],
     handler: async (request, context) => {
         try {
@@ -21,17 +22,23 @@ app.http('addTour', {
                 return { status: 400, body: "Titel und Land sind Pflichtfelder." };
             }
 
+            // Sicherstellen, dass alles für die DB da ist
             const newTour = {
                 id: crypto.randomUUID(),
-                ...data, // Übernimmt coords, title, desc usw. vom Frontend
+                ...data, 
                 createdAt: new Date().toISOString()
             };
 
-            // Speichern
+            // WICHTIG: Falls dein Container "tours" auch /userId als Partition Key hat,
+            // muss sichergestellt sein, dass 'data' eine userId enthält!
+            // Wenn der PK einfach /id ist, passt alles so.
+
+            // Speichern via Output Binding (das ist sehr effizient)
             context.extraOutputs.set(cosmosOutput, newTour);
 
             return { status: 201, jsonBody: newTour };
         } catch (error) {
+            context.log.error(error);
             return { status: 500, body: error.message };
         }
     }

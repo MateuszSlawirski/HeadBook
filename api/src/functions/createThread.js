@@ -1,6 +1,6 @@
 const { app, output } = require('@azure/functions');
 const crypto = require('crypto');
-// Wir definieren den Ausgang (wohin sollen die Daten?)
+
 const cosmosOutput = output.cosmosDB({
     databaseName: 'riderpoint-db',
     containerName: 'threads',
@@ -10,34 +10,29 @@ const cosmosOutput = output.cosmosDB({
 app.http('createThread', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    route: 'createThread', // Gleiche URL wie beim Lesen, aber diesmal POST
+    // route: 'createThread', <--- ENTFERNT (Standard ist eh Dateiname)
     extraOutputs: [cosmosOutput],
     handler: async (request, context) => {
         try {
-            // 1. Daten aus dem Request lesen
             const data = await request.json();
 
-            // 2. Ein paar Sicherheits-Checks
             if (!data.topic || !data.title || !data.user) {
                 return { status: 400, body: "Fehlende Daten (Topic, Title oder User)" };
             }
 
-            // 3. Das fertige Objekt für die Datenbank bauen
             const newThread = {
-                id: crypto.randomUUID(), // Zufällige ID generieren
+                id: crypto.randomUUID(),
                 topic: data.topic,
                 title: data.title,
-                text: data.text || "",   // Der eigentliche Text
+                text: data.text || "",
                 user: data.user,
                 replies: 0,
-                date: new Date().toISOString().split('T')[0], // Heute (YYYY-MM-DD)
+                date: new Date().toISOString().split('T')[0],
                 createdAt: new Date().toISOString()
             };
 
-            // 4. In die Datenbank speichern
             context.extraOutputs.set(cosmosOutput, newThread);
 
-            // 5. Erfolgsmeldung zurückgeben
             return { status: 201, jsonBody: newThread };
 
         } catch (error) {

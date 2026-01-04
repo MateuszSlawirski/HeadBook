@@ -326,10 +326,7 @@ function renderTourTree() {
     container.innerHTML = html;
 }
 
-function createTourListItem(tour) {
-    const votes = tour.votes || 0;
-    const starHtml = generateStars(tour.rating || 0, tour.id);
-    
+
     // GPX Button Logik
     let actionBtn = "";
     if (tour.routeGeometry) {
@@ -342,7 +339,7 @@ function createTourListItem(tour) {
             <h6 class="fw-bold mb-1 text-primary text-truncate">${tour.title}</h6>
             <small class="text-muted text-nowrap">${tour.km} km</small>
         </div>
-        <div class="small text-warning mb-1">${starHtml} <span class="text-muted" style="font-size:0.75em">(${votes})</span></div>
+       
         <p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p>
         <div class="d-flex justify-content-between align-items-center">
             <span class="badge bg-secondary fw-normal" style="font-size:0.7em">${tour.state || tour.country}</span>
@@ -350,7 +347,6 @@ function createTourListItem(tour) {
         </div>
     </div>
     `;
-}
 
 // Wird aufgerufen, wenn man auf eine Tour in der Liste klickt
 window.selectTour = (tourId) => {
@@ -492,8 +488,7 @@ async function handleAddTour(e) {
         routeGeometry: tempGpxData.routeGeometry, 
         user: currentUser.displayName || "Unbekannt",
         createdAt: new Date().toISOString(),
-        rating: 0,
-        votes: 0
+        
     };
 
     try {
@@ -526,44 +521,10 @@ async function handleAddTour(e) {
 }
 
 /* ==========================================
-   HELPER FUNKTIONEN (Sterne, Downloads)
+   HELPER FUNKTIONEN  Downloads
    ========================================== */
 
-const generateStars = (currentRating, tourId) => {
-    let html = '<div class="star-rating">';
-    for (let i = 1; i <= 5; i++) {
-        const char = i <= Math.round(currentRating) ? '★' : '☆';
-        html += `<span style="cursor:pointer; font-size:1.2rem;" 
-                  onclick="event.stopPropagation(); submitVote('${tourId}', ${i})" 
-                  title="${i} Sterne geben">${char}</span>`;
-    }
-    html += `</div>`;
-    return html;
-};
 
-window.submitVote = async (tourId, rating) => {
-    if (!confirm(`Möchtest du dieser Tour ${rating} Sterne geben?`)) return;
-
-    try {
-        // KORREKTUR: Pfad angepasst an voteTour.js
-        const response = await fetch(`${API_URL}/voteTour`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: tourId, rating: rating })
-        });
-
-        if (response.ok) {
-            const updatedTour = await response.json();
-            const index = toursData.findIndex(t => t.id === tourId);
-            if (index !== -1) toursData[index] = updatedTour;
-            renderTourTree(); 
-        } else {
-            alert("Fehler beim Bewerten.");
-        }
-    } catch (e) {
-        console.error(e);
-    }
-};
 
 window.downloadGPX = (tourId) => {
     const tour = toursData.find(t => t.id === tourId);

@@ -1,66 +1,69 @@
-const { app, input, output } = require('@azure/functions');
+const { app } = require('@azure/functions');
+const { CosmosClient } = require('@azure/cosmos');
 
-// Wir brauchen Zugriff auf den Container "threads"
-const cosmosInput = input.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'threads',
-    connection: 'CosmosDbConnectionString',
-    sqlQuery: 'SELECT * FROM c WHERE c.id = {id} AND c.topic = {topic}'
-});
+const cosmosConnectionString = process.env.CosmosDbConnectionString;
+let container = null;
 
-const cosmosOutput = output.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'threads',
-    connection: 'CosmosDbConnectionString'
-});
+if (cosmosConnectionString) {
+    const client = new CosmosClient(cosmosConnectionString);
+    const database = client.database("riderpoint-db");
+    container = database.container("threads");
+}
 
 app.http('addReply', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    route: 'reply',
-    extraInputs: [cosmosInput],
-    extraOutputs: [cosmosOutput],
     handler: async (request, context) => {
+
+        if (!container) return { status: 500, body: "DB Error" };
+
         try {
             const data = await request.json();
             
-            // Wir brauchen ID und Topic, um den Beitrag zu finden
-            if (!data.id || !data.topic || !data.text || !data.user) {
-                return { status: 400, body: "Fehlende Daten!" };
+            // Validierung
+            if (!data.id || !data.text || !data.user) {
+                return { status: 400, body: "Fehlende Daten (id, text, user)!" };
             }
 
-            // 1. Den alten Beitrag aus der DB holen
-            const items = context.extraInputs.get(cosmosInput);
-            if (!items || items.length === 0) {
+            // 1. Thread suchen via ID
+            const querySpec = {
+                query: "SELECT * FROM c WHERE c.id = @id",
+                parameters: [{ name: "@id", value: data.id }]
+            };
+
+            const { resources: items } = await container.items.query(querySpec).fetchAll();
+
+            if (items.length === 0) {
                 return { status: 404, body: "Beitrag nicht gefunden." };
             }
+            
             const thread = items[0];
 
-            // Änderungsvorschlag für addReply.js (Ausschnitt)
-const newReply = {
-    user: data.user,
-    text: data.text,
-    date: new Date().toISOString().split('T')[0], // Für die Anzeige (YYYY-MM-DD)
-    createdAt: new Date().toISOString()           // Für exakte Sortierung
-};
+            // 2. Antwort bauen
+            const newReply = {
+                user: data.user,
+                text: data.text,
+                date: new Date().toISOString().split('T')[0], 
+                createdAt: new Date().toISOString()
+            };
 
-            // 3. Antwort hinzufügen (Array erstellen, falls noch nicht da)
+            // 3. Array prüfen und pushen
             if (!thread.repliesList) {
                 thread.repliesList = [];
             }
             thread.repliesList.push(newReply);
-
             
-            
-            // Counter hochzählen
+            // Counter aktualisieren
             thread.replies = thread.repliesList.length;
 
-            // 4. Update speichern (überschreibt das alte Dokument)
-            context.extraOutputs.set(cosmosOutput, thread);
+            // 4. FIX: Speichern mit korrektem Partition Key
+            // Da dein PK "/topic" ist, müssen wir thread.topic übergeben!
+            await container.item(thread.id, thread.topic).replace(thread);
 
             return { status: 200, jsonBody: thread };
 
         } catch (error) {
+            context.log.error(error);
             return { status: 500, body: error.message };
         }
     }

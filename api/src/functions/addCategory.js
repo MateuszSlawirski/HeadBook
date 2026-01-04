@@ -1,26 +1,22 @@
-const { app, input, output } = require('@azure/functions');
+const { app } = require('@azure/functions');
+const { CosmosClient } = require('@azure/cosmos');
 
-// Wir holen das Forum-Struktur-Dokument aus dem Container "forum"
-const cosmosInput = input.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'forum',
-    connection: 'CosmosDbConnectionString',
-    sqlQuery: 'SELECT * FROM c WHERE c.id = {mainCatId}'
-});
+const cosmosConnectionString = process.env.CosmosDbConnectionString;
+let container = null;
 
-const cosmosOutput = output.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'forum',
-    connection: 'CosmosDbConnectionString'
-});
+if (cosmosConnectionString) {
+    const client = new CosmosClient(cosmosConnectionString);
+    const database = client.database("riderpoint-db");
+    container = database.container("forum");
+}
 
 app.http('addCategory', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    route: 'forum/category',
-    extraInputs: [cosmosInput],
-    extraOutputs: [cosmosOutput],
     handler: async (request, context) => {
+        
+        if (!container) return { status: 500, body: "DB Error: Container nicht initialisiert" };
+
         try {
             const data = await request.json();
             const { mainCatId, title, desc } = data;
@@ -29,15 +25,23 @@ app.http('addCategory', {
                 return { status: 400, body: "Hauptkategorie und Titel werden benötigt." };
             }
 
-            // 1. Das Dokument der Hauptkategorie (z.B. "bikes") finden
-            const items = context.extraInputs.get(cosmosInput);
-            if (!items || items.length === 0) {
-                return { status: 404, body: "Hauptkategorie in der Datenbank nicht gefunden." };
+            // 1. Dokument suchen
+            const querySpec = {
+                query: "SELECT * FROM c WHERE c.id = @id",
+                parameters: [{ name: "@id", value: mainCatId }]
+            };
+
+            const { resources: items } = await container.items.query(querySpec).fetchAll();
+
+            if (items.length === 0) {
+                return { status: 404, body: "Hauptkategorie nicht gefunden." };
             }
+            
             const forumDoc = items[0];
 
-            // 2. Prüfen, ob das Thema schon existiert
+            // 2. Array prüfen
             if (!forumDoc.topics) forumDoc.topics = [];
+            
             const exists = forumDoc.topics.find(t => t.title.toLowerCase() === title.toLowerCase());
             if (exists) {
                 return { status: 409, body: "Dieses Thema existiert bereits." };
@@ -46,17 +50,19 @@ app.http('addCategory', {
             // 3. Neues Thema hinzufügen
             const newTopic = {
                 title: title,
-                desc: desc || "Keine Beschreibung vorhanden.",
+                desc: desc || "Keine Beschreibung.",
                 createdAt: new Date().toISOString()
             };
             forumDoc.topics.push(newTopic);
 
-            // 4. In Cosmos DB speichern
-            context.extraOutputs.set(cosmosOutput, forumDoc);
+            // 4. FIX: Speichern mit (id, partitionKey)
+            // Da dein PK "/id" ist, ist der Partition Key identisch mit der ID.
+            await container.item(forumDoc.id, forumDoc.id).replace(forumDoc);
 
             return { status: 201, jsonBody: newTopic };
 
         } catch (error) {
+            context.log.error(error);
             return { status: 500, body: error.message };
         }
     }
