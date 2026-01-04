@@ -104,18 +104,35 @@ function getActivePage() {
 
 async function syncUserWithBackend(firebaseUser) {
     try {
-        // KORREKTUR: Pfad angepasst an users.js
+        // Wir fragen das Backend: Wer bin ich? (Admin oder User?)
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ uid: firebaseUser.uid, email: firebaseUser.email })
         });
+
         if(response.ok) {
             const dbUser = await response.json();
+            
+            // Hier wird die Rolle gesetzt (z.B. "admin")
             currentRole = dbUser.role || "user"; 
+            console.log("Rolle erkannt:", currentRole); // Zur Kontrolle in der Konsole (F12)
+
             updateUI(); 
+
+            // --- NEU: ALLES NEU LADEN ---
+            // Jetzt wo wir wissen, dass du Admin bist, laden wir die Listen neu,
+            // damit die Mülleimer gemalt werden.
+            
+            if (window.loadFeed) window.loadFeed(); // Feed neu laden (mit Mülleimern)
+            loadToursFromServer();                  // Touren neu laden (mit Mülleimern)
+            
+            // Falls Forum gerade offen ist, das auch aktualisieren
+            if (getActivePage() === 'forum') renderForumHome();
         }
-    } catch (err) { console.warn("Backend Sync skip", err); }
+    } catch (err) { 
+        console.warn("Backend Sync skip", err); 
+    }
 }
 
 function updateUI() {

@@ -1,25 +1,23 @@
-const { app, output } = require('@azure/functions');
+const { app } = require('@azure/functions');
+const { CosmosClient } = require('@azure/cosmos');
 
-// Wir definieren den Ausgang (Output), um zu speichern
-const cosmosOutput = output.cosmosDB({
-    databaseName: 'riderpoint-db',
-    containerName: 'users',
-    connection: 'CosmosDbConnectionString',
-    createIfNotExists: true
-});
+const cosmosConnectionString = process.env.CosmosDbConnectionString;
+let container = null;
 
-// WICHTIG: Wir nennen die Funktion jetzt "users" (statt user-sync)
-// Dadurch ist die URL automatisch: /api/users
-// Das passt perfekt zu deinem Frontend.
+if (cosmosConnectionString) {
+    const client = new CosmosClient(cosmosConnectionString);
+    const database = client.database("riderpoint-db");
+    container = database.container("users");
+}
+
 app.http('users', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    // route: 'users', <--- Brauchen wir nicht mehr, da der Name jetzt stimmt!
-    extraOutputs: [cosmosOutput], 
-    
     handler: async (request, context) => {
+        
+        if (!container) return { status: 500, jsonBody: { error: "DB nicht verbunden" } };
+
         try {
-            // 1. Daten aus dem Frontend lesen
             const data = await request.json();
             const { uid, email, displayName } = data;
 
@@ -27,18 +25,30 @@ app.http('users', {
                 return { status: 400, jsonBody: { error: "Keine UID gesendet" } };
             }
 
+            // 1. Erstmal schauen: Gibt es den User schon in der DB?
+            let existingUser = null;
+            try {
+                const { resource } = await container.item(uid, uid).read();
+                existingUser = resource;
+            } catch (err) {
+                // User existiert noch nicht (404), kein Problem.
+            }
+
             // 2. Das User-Objekt vorbereiten
-            const userProfile = {
+            const userToSave = {
                 id: uid,
                 email: email,
-                displayName: displayName || "Biker",
-                lastLogin: new Date().toISOString()
+                displayName: displayName || (existingUser ? existingUser.displayName : "Biker"),
+                lastLogin: new Date().toISOString(),
+                // WICHTIG: Die Rolle behalten, wenn sie schon da ist! Sonst "user".
+                role: (existingUser && existingUser.role) ? existingUser.role : "user"
             };
 
             // 3. Speichern (Upsert)
-            context.extraOutputs.set(cosmosOutput, userProfile);
+            await container.items.upsert(userToSave);
 
-            return { status: 200, jsonBody: { message: "User erfolgreich synchronisiert." } };
+            // 4. UND WICHTIG: Den fertigen User (mit Rolle!) zurück ans Frontend schicken
+            return { status: 200, jsonBody: userToSave };
 
         } catch (error) {
             context.log("Fehler beim Speichern:", error);
