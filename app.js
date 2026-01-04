@@ -325,8 +325,7 @@ function renderTourTree() {
     html += `</div>`; // End Accordion
     container.innerHTML = html;
 }
-
-
+function createTourListItem(tour) {
     // GPX Button Logik
     let actionBtn = "";
     if (tour.routeGeometry) {
@@ -347,6 +346,8 @@ function renderTourTree() {
         </div>
     </div>
     `;
+}
+
 
 // Wird aufgerufen, wenn man auf eine Tour in der Liste klickt
 window.selectTour = (tourId) => {
