@@ -528,7 +528,54 @@ async function handleAddTour(e) {
 /* ==========================================
    HELPER FUNKTIONEN  Downloads
    ========================================== */
+// --- ADMIN LÖSCH-FUNKTION ---
+window.deleteItem = async (type, id, partitionKey, parentId = null, commentText = null, commentUser = null) => {
+    if (!confirm("Wirklich unwiderruflich löschen?")) return;
 
+    try {
+        const response = await fetch(`${API_URL}/deleteItem`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                type, 
+                id, 
+                partitionKey, 
+                parentId,
+                commentText, // Nur für Kommentare nötig
+                commentUser  // Nur für Kommentare nötig
+            })
+        });
+
+        if (response.ok) {
+            alert("Gelöscht!");
+            // Seite neu laden oder UI aktualisieren
+            if (type === 'tour') { loadToursFromServer(); }
+            else if (type === 'post' || type === 'comment') { window.loadFeed(); }
+            else if (type === 'thread' || type === 'reply') { 
+                if(type==='thread') renderForumSubCategory(currentCategoryId); 
+                else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
+            }
+        } else {
+            alert("Fehler beim Löschen");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Server Fehler");
+    }
+};
+
+// Hilfsfunktion: Button HTML generieren
+function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
+    // Zeige Button nur, wenn User = Admin ist
+    if (currentRole !== 'admin') return "";
+    
+    // Wir müssen Strings escapen, damit sie im HTML onclick funktionieren
+    const pKeySafe = partitionKey ? `'${partitionKey.replace(/'/g, "\\'")}'` : 'null';
+    const textSafe = text ? `'${text.replace(/'/g, "\\'").replace(/\n/g, " ")}'` : 'null';
+    const userSafe = user ? `'${user.replace(/'/g, "\\'")}'` : 'null';
+
+    return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" onclick="event.stopPropagation(); deleteItem('${type}', '${id}', ${pKeySafe}, '${parentId}', ${textSafe}, ${userSafe})">🗑️</button>`;
+}
 
 
 window.downloadGPX = (tourId) => {
@@ -853,12 +900,18 @@ window.loadFeed = async function() {
             // HTML Karte zusammenbauen
             const html = `
             <div class="card mb-4 border-0 shadow-sm">
-                <div class="card-header bg-white border-0 d-flex align-items-center pt-3">
-                    <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
-                    <div>
-                        <div class="fw-bold text-dark">${post.user || "Unbekannt"}</div>
-                        <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} • ${new Date(post.createdAt).toLocaleTimeString().slice(0,5)}</small>
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+                    
+                    <div class="d-flex align-items-center">
+                        <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
+                        <div>
+                            <div class="fw-bold text-dark">${post.user || "Unbekannt"}</div>
+                            <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} • ${new Date(post.createdAt).toLocaleTimeString().slice(0,5)}</small>
+                        </div>
                     </div>
+
+                    ${getDeleteBtn('post', postId, post.userId)}
+                    
                 </div>
                 
                 <div class="card-body pt-1">
