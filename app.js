@@ -345,11 +345,19 @@ function renderTourTree() {
 
 
 function createTourListItem(tour) {
-    // GPX Button Logik
+    // 1. GPX Button
     let actionBtn = "";
     if (tour.routeGeometry) {
         actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
     }
+
+    // 2. NEU: Mülleimer Button (für Admins)
+    // Bei Touren ist der PartitionKey oft identisch mit der ID oder dem Land,
+    // aber wir haben voteTour auf ID umgestellt, also nutzen wir tour.id als Key.
+    const deleteBtn = getDeleteBtn('tour', tour.id, tour.id);
+    
+    // Buttons zusammenfügen
+    const buttonsHtml = actionBtn + deleteBtn;
 
     return `
     <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
@@ -361,7 +369,7 @@ function createTourListItem(tour) {
         <p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p>
         <div class="d-flex justify-content-between align-items-center">
             <span class="badge bg-secondary fw-normal" style="font-size:0.7em">${tour.state || tour.country}</span>
-            ${actionBtn}
+            <div>${buttonsHtml}</div>
         </div>
     </div>
     `;
