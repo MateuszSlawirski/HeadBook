@@ -758,6 +758,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             </div>`;
         });
     }
+ };   
 
 window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
@@ -1119,3 +1120,7 @@ window.insertPostEmoji = function(emoji) {
     input.selectionStart = input.selectionEnd = start + emoji.length;
     input.focus();
 };
+
+/* ==========================================
+   ENDE FORUM / FEED LOGIK
+   ========================================== */
