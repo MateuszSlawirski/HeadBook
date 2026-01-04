@@ -887,15 +887,16 @@ window.loadFeed = async function() {
             // Kommentare rendern
             let commentsHtml = '';
             comments.forEach(c => {
-                commentsHtml += `
-                <div class="comment-item">
-                    <div style="width:28px; height:28px; background:#ddd; border-radius:50%; min-width:28px;"></div>
-                    <div class="comment-bubble">
-                        <span class="comment-author">${c.user}</span>
-                        ${c.text}
-                    </div>
-                </div>`;
-            });
+    commentsHtml += `
+    <div class="comment-item">
+        ...
+        <div class="comment-bubble">
+            <span class="comment-author">${c.user}</span>
+            ${c.text}
+            <div class="text-end">${getDeleteBtn('comment', null, post.userId, postId, c.text, c.user)}</div>
+        </div>
+    </div>`;
+});
 
             // HTML Karte zusammenbauen
             const html = `
