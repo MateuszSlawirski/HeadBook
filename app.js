@@ -19,6 +19,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 // STATE VARIABLES
+let allPostsCache = []; // Hier speichern wir alle Feed-Posts
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
@@ -79,6 +80,13 @@ function navigateTo(pageId) {
         window.location.hash = pageId;
 
         if (pageId === 'forum') renderForumHome();
+
+        // --- NEU: Hier wird das Profil geladen ---
+        if (pageId === 'profile') {
+            if (typeof renderProfilePage === "function") {
+                renderProfilePage();
+            }
+        }
         
         // Refresh bei Klick auf "Touren"
         if (pageId === 'tours') {
@@ -94,9 +102,11 @@ function navigateTo(pageId) {
 }
 window.navigateTo = navigateTo;
 
+
 function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
+
 
 /* ==========================================
    AUTH & UI
@@ -351,14 +361,12 @@ function createTourListItem(tour) {
         actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
     }
 
-    // 2. NEU: Mülleimer Button (für Admins)
-    // Bei Touren ist der PartitionKey oft identisch mit der ID oder dem Land,
-    // aber wir haben voteTour auf ID umgestellt, also nutzen wir tour.id als Key.
+    // 2. Mülleimer Button (für Admins)
     const deleteBtn = getDeleteBtn('tour', tour.id, tour.id);
-    
-    // Buttons zusammenfügen
     const buttonsHtml = actionBtn + deleteBtn;
 
+    // 3. HTML Generierung
+    // HIER ist die Änderung für den Namen (unter dem Badge):
     return `
     <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
         <div class="d-flex justify-content-between">
@@ -368,7 +376,10 @@ function createTourListItem(tour) {
        
         <p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p>
         <div class="d-flex justify-content-between align-items-center">
-            <span class="badge bg-secondary fw-normal" style="font-size:0.7em">${tour.state || tour.country}</span>
+            <div>
+                <span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span>
+                <small class="text-muted" style="font-size:0.8em">von <b>${tour.user || "Unbekannt"}</b></small>
+            </div>
             <div>${buttonsHtml}</div>
         </div>
     </div>
@@ -926,6 +937,7 @@ window.loadFeed = async function() {
         if (!response.ok) throw new Error("Fehler beim Laden");
 
         const posts = await response.json();
+        allPostsCache = posts;
         container.innerHTML = ""; 
 
         if (posts.length === 0) {
@@ -1121,6 +1133,153 @@ window.insertPostEmoji = function(emoji) {
     input.focus();
 };
 
+async function renderProfilePage() {
+    const container = document.getElementById('page-profile');
+    if (!container) return;
+    
+    // Fallback: Wenn viewingUserProfile null ist, nimm den aktuellen User
+    if (!viewingUserProfile && currentUser) {
+        viewingUserProfile = { 
+            uid: currentUser.uid, 
+            displayName: currentUser.displayName, 
+            isMe: true 
+        };
+    } else if (!viewingUserProfile) {
+        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder einen Nutzer auswählen.</div>';
+        return;
+    }
+
+    // --- 1. HEADER FÜLLEN ---
+    const nameEl = document.getElementById('profile-name');
+    const bioEl = document.getElementById('profile-bio');
+    const actionArea = document.getElementById('profile-actions');
+    const statsArea = document.getElementById('profile-stats-content');
+
+    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
+    if (bioEl) bioEl.innerText = viewingUserProfile.isMe ? currentUser.email : "RiderPoint Community Mitglied";
+    
+    // Profilbild Platzhalter (optional: Avatar-Logik einbauen)
+    const imgEl = document.getElementById('profile-img');
+    if(imgEl) imgEl.src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+
+
+    // --- 2. BUTTONS ---
+    if (actionArea) {
+        if (viewingUserProfile.isMe) {
+            actionArea.innerHTML = `
+                <button class="btn btn-outline-secondary btn-sm" onclick="alert('Bearbeiten kommt bald')">✏️ Profil bearbeiten</button>
+            `;
+        } else {
+            actionArea.innerHTML = `
+                <button class="btn btn-danger btn-sm me-2" onclick="sendFriendRequest('${viewingUserProfile.uid}')">🤝 Freund+</button>
+                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>
+            `;
+        }
+    }
+
+    // --- 3. DATEN FILTERN ---
+    if (statsArea) {
+        statsArea.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-danger"></div></div>';
+        
+        const targetName = viewingUserProfile.displayName;
+
+        // A) Touren
+        const myTours = toursData.filter(t => t.user === targetName);
+        
+        // B) Forum Themen
+        const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
+        
+        // C) Feed Posts (aus dem neuen Cache)
+        const myPosts = allPostsCache.filter(p => p.user === targetName);
+
+        // D) Kommentare (Wir müssen durch alle Posts loopen und schauen, wo der User kommentiert hat)
+        let myComments = [];
+        allPostsCache.forEach(post => {
+            if (post.comments && Array.isArray(post.comments)) {
+                post.comments.forEach(c => {
+                    if (c.user === targetName) {
+                        // Wir speichern den Kommentar + Infos zum Ursprungs-Post
+                        myComments.push({ 
+                            commentText: c.text, 
+                            postUser: post.user, 
+                            date: c.date || "unbekannt" 
+                        });
+                    }
+                });
+            }
+        });
+
+        // --- 4. HTML RENDERN ---
+        let html = ``;
+
+        // FEED POSTS
+        if (myPosts.length > 0) {
+            html += `<h6 class="fw-bold mt-4 mb-2">📸 Feed Beiträge <span class="badge bg-secondary rounded-pill">${myPosts.length}</span></h6>`;
+            html += `<div class="list-group mb-3 shadow-sm">`;
+            myPosts.forEach(p => {
+                const preview = p.content ? p.content.substring(0, 50) + "..." : "Bild/Video Beitrag";
+                html += `<div class="list-group-item list-group-item-action border-0 border-bottom">
+                            <small class="text-muted d-block">${new Date(p.createdAt).toLocaleDateString()}</small>
+                            <span>${preview}</span>
+                            <div class="small text-muted mt-1">❤️ ${p.likes ? p.likes.length : 0} Likes</div>
+                         </div>`;
+            });
+            html += `</div>`;
+        }
+
+        // KOMMENTARE
+        if (myComments.length > 0) {
+            html += `<h6 class="fw-bold mt-4 mb-2">💬 Geschriebene Kommentare <span class="badge bg-secondary rounded-pill">${myComments.length}</span></h6>`;
+            html += `<div class="list-group mb-3 shadow-sm">`;
+            myComments.forEach(c => {
+                html += `<div class="list-group-item border-0 border-bottom bg-light">
+                            <small class="text-muted">Bei <b>${c.postUser}</b>:</small><br>
+                            <i class="text-dark">"${c.commentText}"</i>
+                         </div>`;
+            });
+            html += `</div>`;
+        }
+
+        // TOUREN
+        if (myTours.length > 0) {
+            html += `<h6 class="fw-bold mt-4 mb-2">🏍️ Erstellte Touren <span class="badge bg-secondary rounded-pill">${myTours.length}</span></h6>`;
+            html += `<div class="list-group mb-3 shadow-sm">`;
+            myTours.forEach(t => {
+                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1 text-primary">${t.title}</h6>
+                                <small>${t.km} km</small>
+                            </div>
+                            <small class="text-muted">${t.category} • ${t.country}</small>
+                         </a>`;
+            });
+            html += `</div>`;
+        }
+
+        // FORUM
+        if (myThreads.length > 0) {
+            html += `<h6 class="fw-bold mt-4 mb-2">🔧 Forum Themen <span class="badge bg-secondary rounded-pill">${myThreads.length}</span></h6>`;
+            html += `<div class="list-group mb-3 shadow-sm">`;
+            myThreads.forEach(t => {
+                html += `<div class="list-group-item border-0 border-bottom">
+                            <h6 class="mb-1">${t.title}</h6>
+                            <small class="text-muted">in ${t.topic}</small>
+                         </div>`;
+            });
+            html += `</div>`;
+        }
+
+        // WENN GAR NICHTS DA IST
+        if (myPosts.length === 0 && myComments.length === 0 && myTours.length === 0 && myThreads.length === 0) {
+            html += `<div class="text-center p-5 text-muted bg-light rounded-3 mt-3">
+                        <h4>🤷‍♂️</h4>
+                        <p>Dieser User ist noch ein unbeschriebenes Blatt.</p>
+                     </div>`;
+        }
+
+        statsArea.innerHTML = html;
+    }
+}
 /* ==========================================
    ENDE FORUM / FEED LOGIK
    ========================================== */
