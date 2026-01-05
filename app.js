@@ -12,7 +12,6 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// Azure Backend URL:
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
@@ -27,7 +26,6 @@ let viewingUserProfile = null;
 
 // MAP STATE
 let map = null;
-let markers = []; 
 let currentRouteLayer = null; 
 
 // FORUM STATE
@@ -81,15 +79,11 @@ function navigateTo(pageId) {
         window.location.hash = pageId;
 
         if (pageId === 'forum') renderForumHome();
-
-        // Profil laden
         if (pageId === 'profile') {
-            if (typeof renderProfilePage === 'function') {
-                renderProfilePage();
-            }
+            if (typeof renderProfilePage === 'function') renderProfilePage();
         }
         
-        // Refresh bei Klick auf "Touren"
+        // Map Refresh
         if (pageId === 'tours' && map) {
             setTimeout(() => { 
                 map.invalidateSize(); 
@@ -122,14 +116,11 @@ async function syncUserWithBackend(firebaseUser) {
             currentRole = dbUser.role || "user"; 
             console.log("Rolle erkannt:", currentRole);
             updateUI(); 
-
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
         }
-    } catch (err) { 
-        console.warn("Backend Sync skip", err); 
-    }
+    } catch (err) { console.warn("Backend Sync skip", err); }
 }
 
 function updateUI() {
@@ -180,7 +171,6 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Forum: Thread erstellen
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -204,7 +194,6 @@ function setupEventListeners() {
         });
     }
 
-    // Forum: Kategorie erstellen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -233,7 +222,7 @@ function setupEventListeners() {
 }
 
 /* ==========================================
-   TOUREN LOGIK & MAP
+   TOUREN & MAP
    ========================================== */
 
 async function loadToursFromServer() {
@@ -365,7 +354,7 @@ window.showTourOnMap = (tourId) => {
 };
 
 /* ==========================================
-   GPX UPLOAD LOGIK
+   GPX UPLOAD
    ========================================== */
 let tempGpxData = null;
 
@@ -381,12 +370,10 @@ function parseAndPreviewGpx(gpxText) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(gpxText, "text/xml");
     const trkpts = xmlDoc.getElementsByTagName("trkpt");
-
     if (trkpts.length === 0) return alert("Fehler: Keine Wegpunkte in GPX.");
 
     let coordinates = [];
     let totalDist = 0;
-
     for (let i = 0; i < trkpts.length; i++) {
         const lat = parseFloat(trkpts[i].getAttribute("lat"));
         const lon = parseFloat(trkpts[i].getAttribute("lon"));
@@ -442,7 +429,6 @@ async function handleAddTour(e) {
             headers: { "Content-Type": "application/json" }, 
             body: JSON.stringify(newTour) 
         });
-
         if (response.ok) {
             const savedTour = await response.json();
             toursData.push(savedTour); 
@@ -459,14 +445,13 @@ async function handleAddTour(e) {
 }
 
 /* ==========================================
-   LÖSCH-FUNKTION (MIT DEBUGGING)
+   LÖSCH-FUNKTION
    ========================================== */
 window.deleteItem = async (type, id, partitionKey, parentId = null, commentText = null, commentUser = null) => {
     if (!confirm("Wirklich unwiderruflich löschen?")) return;
 
-    // Payload für die Konsole (damit du siehst, was gesendet wird)
     const payload = { type, id, partitionKey, parentId, commentText, commentUser };
-    console.log("Sende deleteItem Request:", payload);
+    console.log("Delete Request:", payload);
 
     try {
         const response = await fetch(`${API_URL}/deleteItem`, {
@@ -476,49 +461,33 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
         });
 
         if (response.ok) {
-            alert("Erfolgreich gelöscht!");
-            // UI aktualisieren
+            alert("Gelöscht!");
             if (type === 'tour') { loadToursFromServer(); }
             else if (type === 'post' || type === 'comment') { window.loadFeed(); }
             else if (type === 'thread' || type === 'reply') { 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            else if (type === 'category') {
+            else if (type === 'topic') { // KORRIGIERT: Typ 'topic'
                 renderForumSubCategory(currentCategoryId);
             }
         } else {
-            // HIER IST DIE ÄNDERUNG: Wir lesen den Fehlertext vom Server!
-            const errorText = await response.text();
-            console.error("Lösch-Fehler Details:", errorText);
-            alert(`Fehler beim Löschen (400)!\n\nGrund: ${errorText}\n\n(Prüfe die Konsole für Details)`);
+            const err = await response.text();
+            alert(`Fehler beim Löschen (${response.status}): ${err}`);
         }
-    } catch (e) { 
-        console.error(e); 
-        alert("Netzwerk- oder Server-Fehler beim Löschen."); 
-    }
+    } catch (e) { console.error(e); alert("Server Fehler"); }
 };
 
-// Hilfsfunktion: Button HTML generieren - KORRIGIERT FÜR NULL WERTE
 function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
     if (currentRole !== 'admin') return "";
 
-    // Hilfsfunktion: Setzt Anführungszeichen nur wenn nötig, sonst 'null' ohne Anführungszeichen
     const formatArg = (val) => {
         if (val === null || val === undefined) return 'null';
-        // Strings escapen (für onclick)
         return `'${val.toString().replace(/'/g, "\\'").replace(/\n/g, " ")}'`;
     };
 
-    const argType = formatArg(type);
-    const argId = formatArg(id);
-    const argPKey = formatArg(partitionKey);
-    const argParent = formatArg(parentId); // HIER war der Fehler (war früher '${parentId}')
-    const argText = formatArg(text);
-    const argUser = formatArg(user);
-
     return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" 
-            onclick="event.stopPropagation(); deleteItem(${argType}, ${argId}, ${argPKey}, ${argParent}, ${argText}, ${argUser})">
+            onclick="event.stopPropagation(); deleteItem('${type}', ${formatArg(id)}, ${formatArg(partitionKey)}, ${formatArg(parentId)}, ${formatArg(text)}, ${formatArg(user)})">
             🗑️</button>`;
 }
 
@@ -571,13 +540,12 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // Versuchen, eine gültige ID zu finden. Falls die API "rowKey" verwendet, nehmen wir diesen.
+        // --- FIX: ID verwenden und Typ 'topic' ---
         const safeId = topic.id || topic.rowKey || topic.title;
-        
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // Wichtig: 'catId' ist hier der PartitionKey (z.B. "bikes")
-             deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
+             // WICHTIG: Typ geändert auf 'topic'
+             deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
         }
 
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
@@ -766,7 +734,6 @@ window.openNewThreadModal = () => { document.getElementById('threadTopicDisplay'
 window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput').value = id; new bootstrap.Modal(document.getElementById('addCategoryModal')).show(); };
 window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
 
-// POST ERSTELLEN
 window.createPost = async () => {
     if (!auth.currentUser) { return alert("Bitte melde dich erst an, um zu posten!"); }
     const textInput = document.getElementById('postInputText');
@@ -804,7 +771,7 @@ window.createPost = async () => {
 };
 
 /* ==========================================
-   FEED / POSTS LADEN
+   FEED / POSTS
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
@@ -968,14 +935,14 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // 2. DOM Elemente finden
+    // 2. DOM Elemente finden (DIE JETZT ZUM HTML PASSEN)
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
     const statsArea = document.getElementById('profile-stats-content');
-    
-    // 3. Bild setzen (Check ob Element existiert)
     const imgEl = document.getElementById('profile-img');
+
+    // 3. Bild setzen
     if(imgEl) {
         imgEl.src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
     }
