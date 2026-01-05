@@ -19,18 +19,11 @@ app.http('deleteItem', {
         try {
             const body = await request.json();
             const { type, id, partitionKey, parentId } = body; 
-            // type: 'post', 'tour', 'thread', 'comment', 'reply'
-            // id: ID des Elements (oder ID des Kommentars)
-            // partitionKey: Wichtig für Cosmos DB (z.B. userId oder country)
-            // parentId: Nur nötig, wenn wir Kommentare/Replies löschen (ID des Posts/Threads)
-
-            // Sicherheits-Check: Hier könntest du prüfen, ob der User Admin ist.
-            // (Wir vertrauen vorerst dem Frontend, da du der einzige Admin bist)
             
             let containerName = "";
-            let operation = "deleteDoc"; // oder "updateDoc" (für Kommentare)
+            let operation = "deleteDoc"; 
 
-            // 1. Strategie wählen
+            // 1. Container und Strategie wählen
             switch (type) {
                 case 'post':
                     containerName = "posts";
@@ -39,63 +32,71 @@ app.http('deleteItem', {
                     containerName = "tours";
                     break;
                 case 'thread':
-                    containerName = "threads"; // Achtung: PartitionKey ist hier oft 'topic'
+                    containerName = "threads";
                     break;
-                case 'comment': // Kommentar in einem Post
+                // --- NEU: Topic (Unterkategorie) löschen ---
+                case 'topic':
+                    containerName = "forum";      // Liegt im 'forum' Container
+                    operation = "deleteSubItem";  // Ist ein Teil eines Dokuments
+                    break;
+                // ------------------------------------------
+                case 'comment': 
                     containerName = "posts";
                     operation = "deleteSubItem";
                     break;
-                case 'reply': // Antwort in einem Thread
+                case 'reply': 
                     containerName = "threads";
                     operation = "deleteSubItem";
                     break;
                 default:
-                    return { status: 400, body: "Unbekannter Typ" };
+                    return { status: 400, body: "Unbekannter Typ: " + type };
             }
 
             const container = database.container(containerName);
 
-            // 2. Ausführen
+            // 2. Löschen ausführen
             if (operation === "deleteDoc") {
                 // Ganzes Dokument löschen
-                // WICHTIG: partitionKey muss stimmen, sonst knallt es.
                 await container.item(id, partitionKey).delete();
                 return { status: 200, jsonBody: { message: "Gelöscht" } };
 
             } else {
-                // Unter-Element löschen (Kommentar/Reply)
-                // Wir laden das Eltern-Dokument (Post oder Thread)
-                // parentId ist hier die ID des Posts/Threads
-                // partitionKey gehört zum Eltern-Dokument
+                // Unter-Element löschen (Kommentar, Reply oder Topic)
+                // Wir laden das Eltern-Dokument
                 const { resource: doc } = await container.item(parentId, partitionKey).read();
                 
-                if (!doc) return { status: 404, body: "Eltern-Element nicht gefunden" };
+                if (!doc) return { status: 404, body: "Eltern-Dokument nicht gefunden" };
 
                 if (type === 'comment') {
-                    // Kommentar aus Array filtern (wir nehmen an, Kommentare haben keine ID, also filtern wir nach Text+User oder Index? 
-                    // BESSER: Wir erweitern addComment später um IDs. 
-                    // FÜR JETZT: Wir löschen per Index oder Text-Match. 
-                    // Trick: Frontend übergibt den KOMPLETTEN Kommentar-Text zum Finden.
-                    
-                    // Wir suchen den Index des Kommentars im Array
-                    // body.commentText muss vom Frontend kommen
+                    // Kommentar löschen
                     const idx = doc.comments.findIndex(c => c.text === body.commentText && c.user === body.commentUser);
                     if (idx > -1) doc.comments.splice(idx, 1);
                 } 
                 else if (type === 'reply') {
-                    // Gleiches Spiel für Forum-Antworten
+                    // Antwort löschen
                     if (doc.repliesList) {
                         const idx = doc.repliesList.findIndex(r => r.text === body.commentText && r.user === body.commentUser);
                         if (idx > -1) {
                             doc.repliesList.splice(idx, 1);
-                            doc.replies = doc.repliesList.length; // Counter fixen
+                            doc.replies = doc.repliesList.length;
                         }
                     }
                 }
+                // --- NEU: Topic aus der Liste entfernen ---
+                else if (type === 'topic') {
+                    if (doc.topics) {
+                        // Wir suchen nach ID oder Titel
+                        const idx = doc.topics.findIndex(t => t.id === id || t.title === id);
+                        if (idx > -1) {
+                            doc.topics.splice(idx, 1);
+                        }
+                    }
+                }
+                // ------------------------------------------
 
                 // Speichern
                 await container.item(doc.id, partitionKey).replace(doc);
-                return { status: 200, jsonBody: { message: "Unter-Element gelöscht" } };
+                return { status: 200, jsonBody: { message: "Update erfolgreich" } };
             }
 
         } catch (error) {

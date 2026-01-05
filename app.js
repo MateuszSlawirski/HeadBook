@@ -79,8 +79,6 @@ function navigateTo(pageId) {
         window.location.hash = pageId;
 
         if (pageId === 'forum') renderForumHome();
-        
-        // Profil Logik
         if (pageId === 'profile') {
             if (typeof renderProfilePage === 'function') renderProfilePage();
         }
@@ -469,8 +467,8 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            // Wir aktualisieren die Kategorie-Ansicht, egal wie wir es genannt haben
-            else if (type === 'thread' || type === 'topic' || type === 'category') { 
+            // Aktualisiere Kategorie-Ansicht nach Löschen
+            else if (type === 'topic') { 
                 renderForumSubCategory(currentCategoryId);
             }
         } else {
@@ -546,9 +544,8 @@ window.renderForumSubCategory = function(catId) {
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // WICHTIG: Wir versuchen es mit 'thread', da 'category' unbekannt ist.
-             // Wenn das auch nicht klappt, fehlt im Backend die Funktion komplett.
-             deleteBtn = getDeleteBtn('thread', safeId, catId, null, topic.title);
+             // WICHTIG: Typ 'topic'. ParentID ist hier catId (damit das Backend das Forum-Dokument findet)
+             deleteBtn = getDeleteBtn('topic', safeId, catId, catId, topic.title);
         }
 
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
