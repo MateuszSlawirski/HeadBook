@@ -23,6 +23,7 @@ let allPostsCache = []; // Hier speichern wir alle Feed-Posts
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
+let viewingUserProfile = null;
 
 // MAP STATE
 let map = null;
@@ -98,16 +99,9 @@ function navigateTo(pageId) {
 }
 window.navigateTo = navigateTo;
 
-
 function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
-
-
-function getActivePage() {
-    return window.location.hash.replace('#', '') || 'home';
-}
-
 
 /* ==========================================
    AUTH & UI
@@ -691,14 +685,15 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // KORREKTUR BEIM LÖSCHEN:
-        // Wir nutzen topic.id wenn vorhanden, sonst topic.title.
-        // WICHTIG: Wenn topic.id undefined ist, kann das Löschen fehlschlagen (Fehler 400).
-        // Wir verstecken den Button, falls keine saubere ID da ist, um Fehler zu vermeiden.
+        // --- FIX FÜR FEHLER 400 ---
+        // Wir nehmen die ID. Falls keine ID da ist, nehmen wir den Titel.
+        // Achtung: Wenn dein Backend eine UUID erwartet, funktioniert 'Honda' (Titel) nicht!
         const safeId = topic.id || topic.title; 
         
+        // Button nur generieren, wenn Admin
         let deleteBtn = "";
         if (currentRole === 'admin') {
+             // Typ 'category' für Sub-Kategorien verwenden
              deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
         }
 
@@ -1186,153 +1181,7 @@ window.insertPostEmoji = function(emoji) {
     input.focus();
 };
 
-async function renderProfilePage() {
-    const container = document.getElementById('page-profile');
-    if (!container) return;
-    
-    // Fallback: Wenn viewingUserProfile null ist, nimm den aktuellen User
-    if (!viewingUserProfile && currentUser) {
-        viewingUserProfile = { 
-            uid: currentUser.uid, 
-            displayName: currentUser.displayName, 
-            isMe: true 
-        };
-    } else if (!viewingUserProfile) {
-        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder einen Nutzer auswählen.</div>';
-        return;
-    }
 
-    // --- 1. HEADER FÜLLEN ---
-    const nameEl = document.getElementById('profile-name');
-    const bioEl = document.getElementById('profile-bio');
-    const actionArea = document.getElementById('profile-actions');
-    const statsArea = document.getElementById('profile-stats-content');
-
-    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
-    if (bioEl) bioEl.innerText = viewingUserProfile.isMe ? currentUser.email : "RiderPoint Community Mitglied";
-    
-    // Profilbild Platzhalter (optional: Avatar-Logik einbauen)
-    const imgEl = document.getElementById('profile-img');
-    if(imgEl) imgEl.src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-
-
-    // --- 2. BUTTONS ---
-    if (actionArea) {
-        if (viewingUserProfile.isMe) {
-            actionArea.innerHTML = `
-                <button class="btn btn-outline-secondary btn-sm" onclick="alert('Bearbeiten kommt bald')">✏️ Profil bearbeiten</button>
-            `;
-        } else {
-            actionArea.innerHTML = `
-                <button class="btn btn-danger btn-sm me-2" onclick="sendFriendRequest('${viewingUserProfile.uid}')">🤝 Freund+</button>
-                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>
-            `;
-        }
-    }
-
-    // --- 3. DATEN FILTERN ---
-    if (statsArea) {
-        statsArea.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-danger"></div></div>';
-        
-        const targetName = viewingUserProfile.displayName;
-
-        // A) Touren
-        const myTours = toursData.filter(t => t.user === targetName);
-        
-        // B) Forum Themen
-        const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
-        
-        // C) Feed Posts (aus dem neuen Cache)
-        const myPosts = allPostsCache.filter(p => p.user === targetName);
-
-        // D) Kommentare (Wir müssen durch alle Posts loopen und schauen, wo der User kommentiert hat)
-        let myComments = [];
-        allPostsCache.forEach(post => {
-            if (post.comments && Array.isArray(post.comments)) {
-                post.comments.forEach(c => {
-                    if (c.user === targetName) {
-                        // Wir speichern den Kommentar + Infos zum Ursprungs-Post
-                        myComments.push({ 
-                            commentText: c.text, 
-                            postUser: post.user, 
-                            date: c.date || "unbekannt" 
-                        });
-                    }
-                });
-            }
-        });
-
-        // --- 4. HTML RENDERN ---
-        let html = ``;
-
-        // FEED POSTS
-        if (myPosts.length > 0) {
-            html += `<h6 class="fw-bold mt-4 mb-2">📸 Feed Beiträge <span class="badge bg-secondary rounded-pill">${myPosts.length}</span></h6>`;
-            html += `<div class="list-group mb-3 shadow-sm">`;
-            myPosts.forEach(p => {
-                const preview = p.content ? p.content.substring(0, 50) + "..." : "Bild/Video Beitrag";
-                html += `<div class="list-group-item list-group-item-action border-0 border-bottom">
-                            <small class="text-muted d-block">${new Date(p.createdAt).toLocaleDateString()}</small>
-                            <span>${preview}</span>
-                            <div class="small text-muted mt-1">❤️ ${p.likes ? p.likes.length : 0} Likes</div>
-                         </div>`;
-            });
-            html += `</div>`;
-        }
-
-        // KOMMENTARE
-        if (myComments.length > 0) {
-            html += `<h6 class="fw-bold mt-4 mb-2">💬 Geschriebene Kommentare <span class="badge bg-secondary rounded-pill">${myComments.length}</span></h6>`;
-            html += `<div class="list-group mb-3 shadow-sm">`;
-            myComments.forEach(c => {
-                html += `<div class="list-group-item border-0 border-bottom bg-light">
-                            <small class="text-muted">Bei <b>${c.postUser}</b>:</small><br>
-                            <i class="text-dark">"${c.commentText}"</i>
-                         </div>`;
-            });
-            html += `</div>`;
-        }
-
-        // TOUREN
-        if (myTours.length > 0) {
-            html += `<h6 class="fw-bold mt-4 mb-2">🏍️ Erstellte Touren <span class="badge bg-secondary rounded-pill">${myTours.length}</span></h6>`;
-            html += `<div class="list-group mb-3 shadow-sm">`;
-            myTours.forEach(t => {
-                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1 text-primary">${t.title}</h6>
-                                <small>${t.km} km</small>
-                            </div>
-                            <small class="text-muted">${t.category} • ${t.country}</small>
-                         </a>`;
-            });
-            html += `</div>`;
-        }
-
-        // FORUM
-        if (myThreads.length > 0) {
-            html += `<h6 class="fw-bold mt-4 mb-2">🔧 Forum Themen <span class="badge bg-secondary rounded-pill">${myThreads.length}</span></h6>`;
-            html += `<div class="list-group mb-3 shadow-sm">`;
-            myThreads.forEach(t => {
-                html += `<div class="list-group-item border-0 border-bottom">
-                            <h6 class="mb-1">${t.title}</h6>
-                            <small class="text-muted">in ${t.topic}</small>
-                         </div>`;
-            });
-            html += `</div>`;
-        }
-
-        // WENN GAR NICHTS DA IST
-        if (myPosts.length === 0 && myComments.length === 0 && myTours.length === 0 && myThreads.length === 0) {
-            html += `<div class="text-center p-5 text-muted bg-light rounded-3 mt-3">
-                        <h4>🤷‍♂️</h4>
-                        <p>Dieser User ist noch ein unbeschriebenes Blatt.</p>
-                     </div>`;
-        }
-
-        statsArea.innerHTML = html;
-    }
-}
 
 /* ==========================================
    PROFIL & USER INTERACTION (AM ENDE EINFÜGEN)
