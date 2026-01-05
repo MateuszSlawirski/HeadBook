@@ -12,18 +12,18 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// ORIGINAL Azure Backend URL:
+// Azure Backend URL:
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 // STATE VARIABLES
-let allPostsCache = []; // Hier speichern wir alle Feed-Posts
+let allPostsCache = []; 
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
-let viewingUserProfile = null;
+let viewingUserProfile = null; // WICHTIG: Damit das Profil nicht leer bleibt
 
 // MAP STATE
 let map = null;
@@ -82,9 +82,13 @@ function navigateTo(pageId) {
 
         if (pageId === 'forum') renderForumHome();
 
-        // Profil laden, falls Funktion vorhanden
-        if (pageId === 'profile' && typeof renderProfilePage === 'function') {
-            renderProfilePage();
+        // Profil laden
+        if (pageId === 'profile') {
+            if (typeof renderProfilePage === 'function') {
+                renderProfilePage();
+            } else {
+                console.error("renderProfilePage ist nicht definiert!");
+            }
         }
         
         // Refresh bei Klick auf "Touren"
@@ -103,17 +107,12 @@ function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
 
-function getActivePage() {
-    return window.location.hash.replace('#', '') || 'home';
-}
-
 /* ==========================================
    AUTH & UI
    ========================================== */
 
 async function syncUserWithBackend(firebaseUser) {
     try {
-        // Wir fragen das Backend: Wer bin ich? (Admin oder User?)
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -122,21 +121,13 @@ async function syncUserWithBackend(firebaseUser) {
 
         if(response.ok) {
             const dbUser = await response.json();
-            
-            // Hier wird die Rolle gesetzt (z.B. "admin")
             currentRole = dbUser.role || "user"; 
-            console.log("Rolle erkannt:", currentRole); // Zur Kontrolle in der Konsole (F12)
-
+            console.log("Rolle erkannt:", currentRole);
             updateUI(); 
 
-            // --- NEU: ALLES NEU LADEN ---
-            // Jetzt wo wir wissen, dass du Admin bist, laden wir die Listen neu,
-            // damit die Mülleimer gemalt werden.
-            
-            if (window.loadFeed) window.loadFeed(); // Feed neu laden (mit Mülleimern)
-            loadToursFromServer();                  // Touren neu laden (mit Mülleimern)
-            
-            // Falls Forum gerade offen ist, das auch aktualisieren
+            // Listen neu laden (für Mülleimer)
+            if (window.loadFeed) window.loadFeed(); 
+            loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
         }
     } catch (err) { 
@@ -169,13 +160,11 @@ function updateUI() {
 
 window.openAddTourModal = () => {
     if (!currentUser) {
-        const modal = new bootstrap.Modal(document.getElementById('authModal'));
-        modal.show();
+        new bootstrap.Modal(document.getElementById('authModal')).show();
         const msg = document.getElementById('auth-message');
         if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Bitte erst einloggen!</span>';
     } else {
-        const modal = new bootstrap.Modal(document.getElementById('addTourModal'));
-        modal.show();
+        new bootstrap.Modal(document.getElementById('addTourModal')).show();
     }
 };
 
@@ -194,7 +183,7 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Forum Listeners
+    // Forum: Thread erstellen
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -203,7 +192,6 @@ function setupEventListeners() {
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
             try {
-                // KORREKTUR: Pfad angepasst an createThread.js
                 const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -219,6 +207,7 @@ function setupEventListeners() {
         });
     }
 
+    // Forum: Kategorie erstellen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -227,7 +216,6 @@ function setupEventListeners() {
             const title = document.getElementById('newCatTitle').value;
             const desc = document.getElementById('newCatDesc').value;
             try {
-                // KORREKTUR: Pfad angepasst an addCategory.js
                 const response = await fetch(`${API_URL}/addCategory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -243,26 +231,21 @@ function setupEventListeners() {
         });
     }
 
-    // Tour Listeners
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
 
 /* ==========================================
-   TOUREN LOGIK (BAUM-STRUKTUR) & MAP
+   TOUREN LOGIK & MAP
    ========================================== */
 
 async function loadToursFromServer() {
     try {
-        // KORREKTUR: Pfad angepasst an GetTours.js (Großschreibung beachten!)
         const response = await fetch(`${API_URL}/GetTours`);
         if (response.ok) {
             toursData = await response.json();
-            // Sortieren: Neueste zuerst
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
-        } else {
-            console.warn("GetTours returned status:", response.status);
         }
     } catch (error) { 
         console.warn("Tours offline", error); 
@@ -275,15 +258,12 @@ function initMap() {
     if (map) return; 
     const mapContainer = document.getElementById('map');
     if (!mapContainer) return;
-    
     map = L.map('map').setView([51.16, 10.45], 6); 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors' 
+        maxZoom: 19, attribution: '© OpenStreetMap contributors' 
     }).addTo(map);
 }
 
-// Gruppiert die Daten und baut das Accordion
 function renderTourTree() {
     const container = document.getElementById('tours-tree-container');
     if (!container) return;
@@ -294,19 +274,15 @@ function renderTourTree() {
         return;
     }
 
-    // 1. Daten gruppieren: Region -> Land -> Array von Touren
     const groups = {};
     toursData.forEach(tour => {
         const region = tour.category || "Sonstiges";
         const country = tour.country || "Unbekannt";
-        
         if (!groups[region]) groups[region] = {};
         if (!groups[region][country]) groups[region][country] = [];
-        
         groups[region][country].push(tour);
     });
 
-    // 2. HTML generieren (Bootstrap Accordion)
     const accordionId = "accordionRegions";
     let html = `<div class="accordion accordion-flush" id="${accordionId}">`;
 
@@ -314,7 +290,6 @@ function renderTourTree() {
         const regionId = `heading${index}`;
         const collapseId = `collapse${index}`;
         
-        // Level 1 Header (Region)
         html += `
         <div class="accordion-item bg-transparent">
             <h2 class="accordion-header" id="${regionId}">
@@ -326,60 +301,40 @@ function renderTourTree() {
                 <div class="accordion-body p-0">
         `;
 
-        // Level 2: Länder
         const countries = groups[region];
         Object.keys(countries).sort().forEach(country => {
             const tours = countries[country];
-            
-            // Land Header
             html += `<div class="bg-light p-2 ps-3 fw-bold text-secondary border-bottom border-top"><small>🏳️ ${country}</small></div>`;
-            
-            // Level 3: Die Touren Cards
             html += `<div class="list-group list-group-flush">`;
             tours.forEach(tour => {
                 html += createTourListItem(tour);
             });
             html += `</div>`;
         });
-
-        html += `
-                </div>
-            </div>
-        </div>`;
+        html += `</div></div></div>`;
     });
-
-    html += `</div>`; // End Accordion
+    html += `</div>`;
     container.innerHTML = html;
 }
 
-
 function createTourListItem(tour) {
-    // 1. GPX Button
     let actionBtn = "";
     if (tour.routeGeometry) {
         actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`;
     }
-
-    // 2. Mülleimer Button (für Admins)
-    // Wir übergeben 'tour' als Typ und die ID
     const deleteBtn = getDeleteBtn('tour', tour.id, tour.id);
-    
-    // Buttons zusammenfügen
     const buttonsHtml = actionBtn + deleteBtn;
 
-    // 3. HTML Generierung
     return `
     <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
         <div class="d-flex justify-content-between">
             <h6 class="fw-bold mb-1 text-primary text-truncate">${tour.title}</h6>
             <small class="text-muted text-nowrap">${tour.km} km</small>
         </div>
-       
         <p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p>
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span>
-                
                 <small class="text-muted" style="font-size:0.8em">von 
                     <b style="cursor:pointer" class="text-primary" onclick="event.stopPropagation(); openUserProfile('${tour.userId}', '${tour.user}')">
                         ${tour.user || "Unbekannt"}
@@ -388,24 +343,14 @@ function createTourListItem(tour) {
             </div>
             <div>${buttonsHtml}</div>
         </div>
-    </div>
-    `;
+    </div>`;
 }
 
-
-
-
-// Wird aufgerufen, wenn man auf eine Tour in der Liste klickt
 window.selectTour = (tourId) => {
-    // 1. Visuell markieren
     document.querySelectorAll('.tour-item-card').forEach(el => el.classList.remove('tour-card-active'));
     const activeCard = document.getElementById(`tour-card-${tourId}`);
     if(activeCard) activeCard.classList.add('tour-card-active');
-
-    // 2. Auf Karte anzeigen
     showTourOnMap(tourId);
-    
-    // 3. Auf Mobile: Automatisch zur Karte scrollen
     if(window.innerWidth < 768) {
         document.getElementById('map').scrollIntoView({behavior: 'smooth'});
     }
@@ -414,13 +359,8 @@ window.selectTour = (tourId) => {
 window.showTourOnMap = (tourId) => {
     const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId;
     if (!tour) return;
-
     if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-
-    if (tour.coords) {
-        map.flyTo(tour.coords, 11);
-    }
-
+    if (tour.coords) map.flyTo(tour.coords, 11);
     if (tour.routeGeometry && tour.routeGeometry.length > 0) {
         currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map);
         map.fitBounds(currentRouteLayer.getBounds());
@@ -430,116 +370,76 @@ window.showTourOnMap = (tourId) => {
 /* ==========================================
    GPX UPLOAD LOGIK
    ========================================== */
-
-// Globale Variable, um die geparste Route zwischenzuspeichern
 let tempGpxData = null;
 
-// 1. Die Funktion, die aufgerufen wird, wenn eine Datei gewählt wird
 window.handleGpxFileSelect = (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const text = e.target.result;
-        parseAndPreviewGpx(text);
-    };
+    reader.onload = (e) => parseAndPreviewGpx(e.target.result);
     reader.readAsText(file);
 };
 
-// 2. GPX Parsen, Werte berechnen und Vorschau auf Karte
 function parseAndPreviewGpx(gpxText) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(gpxText, "text/xml");
     const trkpts = xmlDoc.getElementsByTagName("trkpt");
 
-    if (trkpts.length === 0) {
-        alert("Fehler: Keine Wegpunkte in dieser GPX gefunden.");
-        return;
-    }
+    if (trkpts.length === 0) return alert("Fehler: Keine Wegpunkte in GPX.");
 
     let coordinates = [];
     let totalDist = 0;
 
-    // Koordinaten extrahieren & Distanz berechnen
     for (let i = 0; i < trkpts.length; i++) {
         const lat = parseFloat(trkpts[i].getAttribute("lat"));
         const lon = parseFloat(trkpts[i].getAttribute("lon"));
         coordinates.push([lat, lon]);
-
         if (i > 0) {
             const prev = coordinates[i - 1];
             totalDist += getDistanceFromLatLonInKm(prev[0], prev[1], lat, lon);
         }
     }
-
-    // Werte runden
     const km = totalDist.toFixed(1);
     const hours = Math.floor(km / 60);
     const minutes = Math.round((km % 60)); 
     
-    // Formular füllen
     document.getElementById('newKm').value = km;
     document.getElementById('newTime').value = `${hours}h ${minutes}min`; 
     document.getElementById('btn-publish-tour').disabled = false;
 
-    // Temporär speichern für den Upload
-    tempGpxData = {
-        routeGeometry: coordinates,
-        coords: coordinates[0], 
-        km: km
-    };
-
-    console.log("GPX geladen:", km, "km");
+    tempGpxData = { routeGeometry: coordinates, coords: coordinates[0], km: km };
 }
 
-// Hilfsfunktion: Distanz berechnen
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
     var R = 6371; 
     var dLat = deg2rad(lat2 - lat1);
     var dLon = deg2rad(lon2 - lon1);
-    var a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat1)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat1)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
+function deg2rad(deg) { return deg * (Math.PI / 180); }
 
-function deg2rad(deg) {
-    return deg * (Math.PI / 180);
-}
-
-// 3. Das eigentliche Speichern
 async function handleAddTour(e) {
     e.preventDefault();
     if (!currentUser) return alert("Bitte einloggen.");
     if (!tempGpxData) return alert("Bitte erst eine GPX Datei wählen.");
 
-    const title = document.getElementById('newTitle').value;
-    const region = document.getElementById('newRegion').value;
-    const country = document.getElementById('newCountry').value;
-    const state = document.getElementById('newState').value;
-    const desc = document.getElementById('newDesc').value;
-    const time = document.getElementById('newTime').value;
-
     const newTour = {
-        title,
-        category: region,
-        country,
-        state,
-        desc,
-        time,
+        title: document.getElementById('newTitle').value,
+        category: document.getElementById('newRegion').value,
+        country: document.getElementById('newCountry').value,
+        state: document.getElementById('newState').value,
+        desc: document.getElementById('newDesc').value,
+        time: document.getElementById('newTime').value,
         km: tempGpxData.km, 
         coords: tempGpxData.coords, 
         routeGeometry: tempGpxData.routeGeometry, 
         user: currentUser.displayName || "Unbekannt",
         createdAt: new Date().toISOString(),
-        
     };
 
     try {
-        // KORREKTUR: Pfad angepasst an addTour.js
         const response = await fetch(API_URL + '/addTour', { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -548,29 +448,22 @@ async function handleAddTour(e) {
 
         if (response.ok) {
             const savedTour = await response.json();
-            // In die Liste einsortieren (reload reicht hier, oder manuell einfügen)
             toursData.push(savedTour); 
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
-            
-            // UI Reset
             bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide();
             e.target.reset();
             tempGpxData = null;
             document.getElementById('btn-publish-tour').disabled = true;
-
             showTourOnMap(savedTour);
             alert("Tour erfolgreich hochgeladen!");
         }
-    } catch (err) {
-        alert("Fehler beim Speichern: " + err.message);
-    }
+    } catch (err) { alert("Fehler beim Speichern: " + err.message); }
 }
 
 /* ==========================================
-   HELPER FUNKTIONEN  Downloads
+   LÖSCH-FUNKTION (ADMIN)
    ========================================== */
-// --- ADMIN LÖSCH-FUNKTION ---
 window.deleteItem = async (type, id, partitionKey, parentId = null, commentText = null, commentUser = null) => {
     if (!confirm("Wirklich unwiderruflich löschen?")) return;
 
@@ -578,72 +471,46 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
         const response = await fetch(`${API_URL}/deleteItem`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                type, 
-                id, 
-                partitionKey, 
-                parentId,
-                commentText, // Nur für Kommentare nötig
-                commentUser  // Nur für Kommentare nötig
-            })
+            body: JSON.stringify({ type, id, partitionKey, parentId, commentText, commentUser })
         });
 
         if (response.ok) {
             alert("Gelöscht!");
-            // Seite neu laden oder UI aktualisieren
             if (type === 'tour') { loadToursFromServer(); }
             else if (type === 'post' || type === 'comment') { window.loadFeed(); }
             else if (type === 'thread' || type === 'reply') { 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
+            // Sonderfall Subkategorie
+            else if (type === 'category') {
+                renderForumSubCategory(currentCategoryId);
+            }
         } else {
-            alert("Fehler beim Löschen");
+            alert("Fehler beim Löschen (Status 400/500).");
         }
-    } catch (e) {
-        console.error(e);
-        alert("Server Fehler");
-    }
+    } catch (e) { console.error(e); alert("Server Fehler"); }
 };
 
-// Hilfsfunktion: Button HTML generieren
 function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
-    // Zeige Button nur, wenn User = Admin ist
     if (currentRole !== 'admin') return "";
-    
-    // Wir müssen Strings escapen, damit sie im HTML onclick funktionieren
     const pKeySafe = partitionKey ? `'${partitionKey.replace(/'/g, "\\'")}'` : 'null';
     const textSafe = text ? `'${text.replace(/'/g, "\\'").replace(/\n/g, " ")}'` : 'null';
     const userSafe = user ? `'${user.replace(/'/g, "\\'")}'` : 'null';
-
+    // Wichtig: ID als String übergeben!
     return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" onclick="event.stopPropagation(); deleteItem('${type}', '${id}', ${pKeySafe}, '${parentId}', ${textSafe}, ${userSafe})">🗑️</button>`;
 }
 
-
 window.downloadGPX = (tourId) => {
     const tour = toursData.find(t => t.id === tourId);
-    if (!tour || !tour.routeGeometry) return alert("Keine Routendaten vorhanden.");
-
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Riderpoint App">
-  <trk>
-    <name>${tour.title}</name>
-    <trkseg>`;
-    tour.routeGeometry.forEach(pt => {
-        gpx += `\n      <trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`;
-    });
-    gpx += `\n    </trkseg>
-  </trk>
-</gpx>`;
-
+    if (!tour || !tour.routeGeometry) return alert("Keine Routendaten.");
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Riderpoint"><trk><name>${tour.title}</name><trkseg>`;
+    tour.routeGeometry.forEach(pt => { gpx += `\n<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`; });
+    gpx += `\n</trkseg></trk></gpx>`;
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${tour.title.replace(/\s+/g, '_')}.gpx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const a = document.createElement('a'); a.href = url; a.download = `${tour.title}.gpx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
 };
 
 /* ==========================================
@@ -659,7 +526,7 @@ window.renderForumHome = function() {
 
     allForumData.forEach(cat => {
         const stats = getForumStats(t => cat.topics.map(topic => topic.title).includes(t.topic));
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Keine Beiträge</small>`;
+        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag in <span class="fw-bold text-dark">${stats.lastPost.topic}</span> von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Keine Beiträge</small>`;
         container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumSubCategory('${cat.id}')"><div class="forum-icon">🏍️</div><div class="forum-main"><h5 class="fw-bold text-dark mb-0">${cat.title}</h5><p class="text-muted small mb-0">${cat.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
     });
 };
@@ -670,7 +537,6 @@ window.renderForumSubCategory = function(catId) {
     if (!category) return;
     
     renderBreadcrumbs([{ label: category.title, onclick: null }]); 
-    
     const container = document.getElementById('forum-container');
     const showAddBtn = (currentUser && (USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin'));
     
@@ -679,23 +545,17 @@ window.renderForumSubCategory = function(catId) {
             <h2 class="fw-bold float-start">${category.title}</h2>
             ${showAddBtn ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}
         </div>
-        <div class="d-none d-md-flex forum-header-row">
-            <div style="flex-grow:1;">Thema</div>
-            <div style="width:100px; text-align:center;">Themen</div>
-            <div style="width:100px; text-align:center;">Beiträge</div>
-            <div style="width:30px;"></div>
-        </div>`;
+        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
     
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-   
+        // --- ID CHECK FÜR LÖSCHEN (Fix Fehler 400) ---
+        // Wir bevorzugen ID oder RowKey. Wenn beides fehlt, nehmen wir den Title.
         const safeId = topic.id || topic.rowKey || topic.title;
         
-        // Button nur generieren, wenn Admin
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // Typ 'category' für Sub-Kategorien verwenden
              deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
         }
 
@@ -728,7 +588,6 @@ window.renderForumThreads = async function(topicName, catId) {
         <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
         <div id="thread-list-area"><div class="text-center p-4"><div class="spinner-border text-danger"></div></div></div>`;
     
-    // KORREKTUR: Pfad angepasst an getThreads.js
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     const listArea = document.getElementById('thread-list-area');
@@ -767,14 +626,12 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     
-    // KORREKTUR: Pfad angepasst an getThreads.js
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
 
-    // 1. Mülleimer für das HAUPT-THEMA
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
 
     container.innerHTML = `
@@ -794,12 +651,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             </div>
         </div>`;
 
-    // 2. Mülleimer für die ANTWORTEN (Replies)
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
-            // Wir brauchen: Typ 'reply', keine ID (null), PartitionKey (t.topic), ParentID (t.id), Text & User zum Identifizieren
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
-
             container.innerHTML += `
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
@@ -823,7 +677,6 @@ window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
     if (!text.trim()) return alert("Bitte Text eingeben!");
     try {
-        // KORREKTUR: Pfad angepasst an addReply.js
         const response = await fetch(`${API_URL}/addReply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -833,21 +686,16 @@ window.sendReply = async function(threadId, topic, catId) {
     } catch (err) { alert(err.message); }
 };
 
-
 async function loadForumData() {
-    const container = document.getElementById('forum-container');
-    if(!container) return;
     try {
-        // KORREKTUR: Pfad angepasst an forum.js (sofern es GET unterstützt und so heißt)
         const catResponse = await fetch(`${API_URL}/forum`);
         allForumData = await catResponse.json();
-        
-        // KORREKTUR: Pfad angepasst an getThreads.js
         const threadResponse = await fetch(`${API_URL}/getThreads`); 
         if (threadResponse.ok) allThreadsCache = await threadResponse.json();
-        if (!currentCategoryId && !currentForumTopic) renderForumHome();
+        if (!currentCategoryId && !currentForumTopic && getActivePage() === 'forum') renderForumHome();
     } catch (error) { console.error(error); }
 }
+
 function renderBreadcrumbs(pathArray) {
     let breadcrumbEl = document.getElementById('custom-breadcrumbs');
     if (!breadcrumbEl) {
@@ -897,82 +745,45 @@ window.openNewThreadModal = () => { document.getElementById('threadTopicDisplay'
 window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput').value = id; new bootstrap.Modal(document.getElementById('addCategoryModal')).show(); };
 window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
 
-
 // POST ERSTELLEN
 window.createPost = async () => {
-    // 1. Prüfen: Ist der User eingeloggt?
-    if (!auth.currentUser) {
-        alert("Bitte melde dich erst an, um zu posten!");
-        return;
-    }
-
+    if (!auth.currentUser) { return alert("Bitte melde dich erst an, um zu posten!"); }
     const textInput = document.getElementById('postInputText');
     const fileInput = document.getElementById('postInputFile');
     const submitBtn = document.querySelector('button[onclick="window.createPost()"]');
 
-    // Nichts eingegeben? Abbrechen.
-    if (!textInput.value.trim() && fileInput.files.length === 0) {
-        alert("Bitte schreibe etwas oder wähle ein Bild aus.");
-        return;
-    }
+    if (!textInput.value.trim() && fileInput.files.length === 0) { return alert("Bitte schreibe etwas."); }
 
-    // Button deaktivieren (Lade-Status)
     const oldText = submitBtn.innerText;
     submitBtn.innerText = "Sende...";
     submitBtn.disabled = true;
 
     try {
-        // 2. Daten für den Versand vorbereiten (FormData)
         const formData = new FormData();
         const myName = auth.currentUser.displayName || "Unbekannter Biker";
         formData.append('username', myName);
         formData.append('content', textInput.value);
-        
-        // Wenn eine Datei gewählt wurde, hinzufügen
-        if (fileInput.files.length > 0) {
-            formData.append('media', fileInput.files[0]);
-        }
+        if (fileInput.files.length > 0) { formData.append('media', fileInput.files[0]); }
 
-        // 3. An deine Azure Function senden
-        // KORREKTUR: Absoluter Pfad statt relativ!
         const response = await fetch(`${API_URL}/createPost`, {
             method: 'POST',
-            headers: {
-                // Wir schicken die User-ID im Header mit, damit das Backend weiß, wer postet
-                'x-user-id': auth.currentUser.uid 
-            },
+            headers: { 'x-user-id': auth.currentUser.uid },
             body: formData 
-            // Wichtig: Bei FormData setzt der Browser den Content-Type automatisch!
         });
 
         if (response.ok) {
-            // Erfolg!
             alert("Beitrag veröffentlicht!");
-            textInput.value = "";     // Feld leeren
-            fileInput.value = "";     // Datei leeren
-            
-            
+            textInput.value = ""; fileInput.value = "";
+            loadFeed();
         } else {
-            const errorMsg = await response.text();
-            console.error("Server Fehler:", errorMsg);
-            alert("Fehler beim Posten. Schau in die Konsole (F12).");
+            console.error("Server Fehler:", await response.text());
         }
-
-    } catch (error) {
-        console.error("Netzwerkfehler:", error);
-        alert("Server nicht erreichbar. Läuft deine API?");
-    } finally {
-        // Button wieder normal machen
-        submitBtn.innerText = oldText;
-        submitBtn.disabled = false;
-    }
+    } catch (error) { console.error("Netzwerkfehler:", error); } 
+    finally { submitBtn.innerText = oldText; submitBtn.disabled = false; }
 };
 
 /* ==========================================
    FEED / POSTS LADEN
-   ========================================== */
-/* ==========================================
-   FEED / POSTS LADEN (MIT LIKES & KOMMENTAREN)
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
@@ -989,209 +800,133 @@ window.loadFeed = async function() {
         container.innerHTML = ""; 
 
         if (posts.length === 0) {
-            container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge. Sei der Erste!</div>';
+            container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge.</div>';
             return;
         }
 
-        // Sortieren: Neueste zuerst (falls das Backend das nicht schon macht)
         posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         posts.forEach(post => {
-            // IDs und Daten sicherstellen
-            const postId = post.id || post._id || post.rowKey; // Je nach DB (Cosmos/Mongo/Table)
+            const postId = post.id || post._id || post.rowKey; 
             const likes = Array.isArray(post.likes) ? post.likes : [];
             const comments = Array.isArray(post.comments) ? post.comments : [];
-            
-            // Prüfen ob DU schon geliked hast (Firebase User ID vs Array)
             const myUid = auth.currentUser ? auth.currentUser.uid : null;
             const isLiked = myUid && likes.includes(myUid);
             const likeClass = isLiked ? 'liked' : '';
             
-            // Medien HTML
             let mediaHtml = "";
             if (post.mediaUrl) {
-                if (post.mediaType === 'video') {
-                    mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
-                } else {
-                    mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2 w-100" style="max-height:500px; object-fit:cover;" loading="lazy">`;
-                }
+                if (post.mediaType === 'video') mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
+                else mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2 w-100" style="max-height:500px; object-fit:cover;" loading="lazy">`;
             }
 
-            // Kommentare rendern
             let commentsHtml = '';
             comments.forEach(c => {
-    commentsHtml += `
-    <div class="comment-item">
-        ...
-        <div class="comment-bubble">
-            <span class="comment-author">${c.user}</span>
-            ${c.text}
-            <div class="text-end">${getDeleteBtn('comment', null, post.userId, postId, c.text, c.user)}</div>
-        </div>
-    </div>`;
-});
+                commentsHtml += `
+                <div class="comment-item">
+                    <div class="comment-bubble">
+                        <span class="comment-author">${c.user}</span>
+                        ${c.text}
+                        <div class="text-end">${getDeleteBtn('comment', null, post.userId, postId, c.text, c.user)}</div>
+                    </div>
+                </div>`;
+            });
 
-            // HTML Karte zusammenbauen
             const html = `
             <div class="card mb-4 border-0 shadow-sm">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
-                    
                     <div class="d-flex align-items-center">
                         <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
                         <div>
                             <div class="fw-bold text-dark" style="cursor:pointer;" onclick="openUserProfile('${post.userId}', '${post.user}')">
                             ${post.user || "Unbekannt"}
-                        </div>
-                            <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} • ${new Date(post.createdAt).toLocaleTimeString().slice(0,5)}</small>
+                            </div>
+                            <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()}</small>
                         </div>
                     </div>
-
                     ${getDeleteBtn('post', postId, post.userId)}
-                    
                 </div>
                 
                 <div class="card-body pt-1">
                     <p class="card-text fs-5 mb-2">${post.content}</p>
                     ${mediaHtml}
-                    
                     <div class="d-flex justify-content-between text-muted small mt-3">
                         <span id="like-count-${postId}">❤️ ${likes.length} Likes</span>
                         <span style="cursor:pointer" onclick="document.getElementById('comments-${postId}').classList.toggle('show')">${comments.length} Kommentare</span>
                     </div>
-
                     <div class="post-actions">
-                        <button class="action-btn ${likeClass}" id="btn-like-${postId}" onclick="window.toggleLike('${postId}')">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                            Gefällt mir
-                        </button>
-                        <button class="action-btn" onclick="document.getElementById('comments-${postId}').classList.toggle('show')">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                            Kommentieren
-                        </button>
+                        <button class="action-btn ${likeClass}" id="btn-like-${postId}" onclick="window.toggleLike('${postId}')">Gefällt mir</button>
+                        <button class="action-btn" onclick="document.getElementById('comments-${postId}').classList.toggle('show')">Kommentieren</button>
                     </div>
-
                     <div id="comments-${postId}" class="comment-section">
-                        <div id="comment-list-${postId}">
-                            ${commentsHtml}
-                        </div>
+                        <div id="comment-list-${postId}">${commentsHtml}</div>
                         <div class="comment-input-wrapper">
-                            <input type="text" id="input-comment-${postId}" class="form-control form-control-sm border-0" placeholder="Schreibe einen Kommentar...">
+                            <input type="text" id="input-comment-${postId}" class="form-control form-control-sm border-0" placeholder="Kommentar...">
                             <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="window.postComment('${postId}')">➤</button>
                         </div>
                     </div>
                 </div>
-            </div>
-            `;
+            </div>`;
             container.innerHTML += html;
         });
 
-    } catch (error) {
-        console.error(error);
-        container.innerHTML = '<div class="alert alert-danger">Konnte Feed nicht laden.</div>';
-    }
+    } catch (error) { console.error(error); }
 };
-
-// --- INTERAKTIVITÄT (LIKES & KOMMENTARE) ---
 
 window.toggleLike = async (postId) => {
     if (!auth.currentUser) return alert("Bitte erst einloggen!");
-
     const btn = document.getElementById(`btn-like-${postId}`);
     const countSpan = document.getElementById(`like-count-${postId}`);
-    
-    // 1. Optimistisches Update (Sofort Rot machen für schnelles Gefühl)
     const isLiked = btn.classList.contains('liked');
     btn.classList.toggle('liked');
-    
-    const svg = btn.querySelector('svg');
-    if(!isLiked) svg.setAttribute('fill', 'currentColor');
-    else svg.setAttribute('fill', 'none');
-
     let currentCount = parseInt(countSpan.innerText.replace(/\D/g, '')) || 0;
     currentCount = isLiked ? currentCount - 1 : currentCount + 1;
     countSpan.innerText = `❤️ ${currentCount} Likes`;
 
-    // 2. An Backend senden (ECHTE SPEICHERUNG)
     try {
         await fetch(`${API_URL}/toggleLike`, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                postId: postId, 
-                userId: auth.currentUser.uid 
-            }) 
+            body: JSON.stringify({ postId: postId, userId: auth.currentUser.uid }) 
         });
-    } catch(e) {
-        console.error("Like konnte nicht gespeichert werden", e);
-    }
+    } catch(e) { console.error("Fehler Like", e); }
 };
+
 window.postComment = async (postId) => {
     if (!auth.currentUser) return alert("Bitte erst einloggen!");
-    
     const input = document.getElementById(`input-comment-${postId}`);
     const text = input.value.trim();
     if (!text) return;
-
     const list = document.getElementById(`comment-list-${postId}`);
     const username = auth.currentUser.displayName || "Ich";
 
-    // 1. Sofort anzeigen (Optimistisch)
-    const newCommentHtml = `
-    <div class="comment-item">
-        <div style="width:28px; height:28px; background:#0d6efd; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:0.7rem;">Ich</div>
-        <div class="comment-bubble">
-            <span class="comment-author">${username}</span>
-            ${text}
-        </div>
-    </div>`;
-    
+    const newCommentHtml = `<div class="comment-item"><div class="comment-bubble"><span class="comment-author">${username}</span>${text}</div></div>`;
     list.insertAdjacentHTML('beforeend', newCommentHtml);
     input.value = ""; 
 
-    // 2. An Backend senden (JETZT AKTIV!)
     try {
-        const response = await fetch(`${API_URL}/addComment`, { 
+        await fetch(`${API_URL}/addComment`, { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, text, user: username }) 
         });
-
-        if(!response.ok) {
-            console.error("Fehler beim Speichern des Kommentars");
-        }
-    } catch(e) { 
-        console.error(e); 
-        alert("Fehler: Kommentar wurde nicht gespeichert.");
-    }
+    } catch(e) { console.error(e); }
 };
-/* ==========================================
-   HELPER: EMOJIS EINFÜGEN
-   ========================================== */
+
 window.insertPostEmoji = function(emoji) {
     const input = document.getElementById('postInputText');
-    if (!input) return;
-
-    // Den Emoji dort einfügen, wo der Cursor gerade ist (oder am Ende)
-    const start = input.selectionStart;
-    const end = input.selectionEnd;
-    const text = input.value;
-    
-    input.value = text.substring(0, start) + emoji + text.substring(end);
-    
-    // Cursor hinter den Emoji setzen und Fokus zurückgeben
-    input.selectionStart = input.selectionEnd = start + emoji.length;
-    input.focus();
+    if (input) {
+        input.value += emoji;
+        input.focus();
+    }
 };
 
-
-
 /* ==========================================
-   PROFIL & USER INTERACTION (AM ENDE EINFÜGEN)
+   PROFIL & USER INTERACTION (BEREINIGT)
    ========================================== */
 
-// Diese Funktion macht die Namen klickbar
 window.openUserProfile = (userId, userName) => {
-    console.log("Öffne Profil:", userId, userName); // Zum Testen in der Konsole
+    console.log("Öffne Profil für:", userId, userName);
     viewingUserProfile = { 
         uid: userId, 
         displayName: userName, 
@@ -1200,32 +935,35 @@ window.openUserProfile = (userId, userName) => {
     navigateTo('profile');
 };
 
-// Diese Funktion füllt die Profil-Seite
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
+    // 1. Fallback prüfen
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { uid: currentUser.uid, displayName: currentUser.displayName, isMe: true };
     } else if (!viewingUserProfile) {
-        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen.</div>';
+        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
         return;
     }
 
-    // Header Infos füllen
+    // 2. DOM Elemente finden
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
     const statsArea = document.getElementById('profile-stats-content');
     
-    if(document.getElementById('profile-img')) {
-        document.getElementById('profile-img').src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+    // 3. Bild setzen (Check ob Element existiert)
+    const imgEl = document.getElementById('profile-img');
+    if(imgEl) {
+        imgEl.src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
     }
 
+    // 4. Texte setzen
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
     if (bioEl) bioEl.innerText = viewingUserProfile.isMe ? currentUser.email : "Community Mitglied";
 
-    // Buttons
+    // 5. Buttons
     if (actionArea) {
         if (viewingUserProfile.isMe) {
             actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="alert('Bearbeiten kommt bald')">✏️ Profil bearbeiten</button>`;
@@ -1237,14 +975,13 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // Inhalte laden
+    // 6. Inhalte laden
     if (statsArea) {
         statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
         
         const targetName = viewingUserProfile.displayName;
         const myTours = toursData.filter(t => t.user === targetName);
-        // Sicherstellen, dass Posts geladen sind
-        const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
+        const myPosts = allPostsCache.filter(p => p.user === targetName);
 
         let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
                         <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
@@ -1257,8 +994,6 @@ window.renderProfilePage = async () => {
                 html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">${t.title} <small class="text-muted">(${t.km} km)</small></a>`;
             });
             html += `</div>`;
-        } else if (myPosts.length === 0) {
-             html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
         }
         
         if (myPosts.length > 0) {
@@ -1269,9 +1004,10 @@ window.renderProfilePage = async () => {
              html += `</div>`;
         }
 
+        if(myTours.length === 0 && myPosts.length === 0) {
+            html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
+        }
+
         statsArea.innerHTML = html;
     }
 };
-/* ==========================================
-   ENDE FORUM / FEED LOGIK
-   ========================================== */
