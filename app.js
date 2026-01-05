@@ -23,7 +23,7 @@ let allPostsCache = [];
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
-let viewingUserProfile = null; // WICHTIG: Damit das Profil nicht leer bleibt
+let viewingUserProfile = null; 
 
 // MAP STATE
 let map = null;
@@ -86,8 +86,6 @@ function navigateTo(pageId) {
         if (pageId === 'profile') {
             if (typeof renderProfilePage === 'function') {
                 renderProfilePage();
-            } else {
-                console.error("renderProfilePage ist nicht definiert!");
             }
         }
         
@@ -125,7 +123,6 @@ async function syncUserWithBackend(firebaseUser) {
             console.log("Rolle erkannt:", currentRole);
             updateUI(); 
 
-            // Listen neu laden (für Mülleimer)
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
@@ -462,43 +459,67 @@ async function handleAddTour(e) {
 }
 
 /* ==========================================
-   LÖSCH-FUNKTION (ADMIN)
+   LÖSCH-FUNKTION (MIT DEBUGGING)
    ========================================== */
 window.deleteItem = async (type, id, partitionKey, parentId = null, commentText = null, commentUser = null) => {
     if (!confirm("Wirklich unwiderruflich löschen?")) return;
+
+    // Payload für die Konsole (damit du siehst, was gesendet wird)
+    const payload = { type, id, partitionKey, parentId, commentText, commentUser };
+    console.log("Sende deleteItem Request:", payload);
 
     try {
         const response = await fetch(`${API_URL}/deleteItem`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, id, partitionKey, parentId, commentText, commentUser })
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {
-            alert("Gelöscht!");
+            alert("Erfolgreich gelöscht!");
+            // UI aktualisieren
             if (type === 'tour') { loadToursFromServer(); }
             else if (type === 'post' || type === 'comment') { window.loadFeed(); }
             else if (type === 'thread' || type === 'reply') { 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            // Sonderfall Subkategorie
             else if (type === 'category') {
                 renderForumSubCategory(currentCategoryId);
             }
         } else {
-            alert("Fehler beim Löschen (Status 400/500).");
+            // HIER IST DIE ÄNDERUNG: Wir lesen den Fehlertext vom Server!
+            const errorText = await response.text();
+            console.error("Lösch-Fehler Details:", errorText);
+            alert(`Fehler beim Löschen (400)!\n\nGrund: ${errorText}\n\n(Prüfe die Konsole für Details)`);
         }
-    } catch (e) { console.error(e); alert("Server Fehler"); }
+    } catch (e) { 
+        console.error(e); 
+        alert("Netzwerk- oder Server-Fehler beim Löschen."); 
+    }
 };
 
+// Hilfsfunktion: Button HTML generieren - KORRIGIERT FÜR NULL WERTE
 function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
     if (currentRole !== 'admin') return "";
-    const pKeySafe = partitionKey ? `'${partitionKey.replace(/'/g, "\\'")}'` : 'null';
-    const textSafe = text ? `'${text.replace(/'/g, "\\'").replace(/\n/g, " ")}'` : 'null';
-    const userSafe = user ? `'${user.replace(/'/g, "\\'")}'` : 'null';
-    // Wichtig: ID als String übergeben!
-    return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" onclick="event.stopPropagation(); deleteItem('${type}', '${id}', ${pKeySafe}, '${parentId}', ${textSafe}, ${userSafe})">🗑️</button>`;
+
+    // Hilfsfunktion: Setzt Anführungszeichen nur wenn nötig, sonst 'null' ohne Anführungszeichen
+    const formatArg = (val) => {
+        if (val === null || val === undefined) return 'null';
+        // Strings escapen (für onclick)
+        return `'${val.toString().replace(/'/g, "\\'").replace(/\n/g, " ")}'`;
+    };
+
+    const argType = formatArg(type);
+    const argId = formatArg(id);
+    const argPKey = formatArg(partitionKey);
+    const argParent = formatArg(parentId); // HIER war der Fehler (war früher '${parentId}')
+    const argText = formatArg(text);
+    const argUser = formatArg(user);
+
+    return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" 
+            onclick="event.stopPropagation(); deleteItem(${argType}, ${argId}, ${argPKey}, ${argParent}, ${argText}, ${argUser})">
+            🗑️</button>`;
 }
 
 window.downloadGPX = (tourId) => {
@@ -550,12 +571,12 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // --- ID CHECK FÜR LÖSCHEN (Fix Fehler 400) ---
-        // Wir bevorzugen ID oder RowKey. Wenn beides fehlt, nehmen wir den Title.
+        // Versuchen, eine gültige ID zu finden. Falls die API "rowKey" verwendet, nehmen wir diesen.
         const safeId = topic.id || topic.rowKey || topic.title;
         
         let deleteBtn = "";
         if (currentRole === 'admin') {
+             // Wichtig: 'catId' ist hier der PartitionKey (z.B. "bikes")
              deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
         }
 
