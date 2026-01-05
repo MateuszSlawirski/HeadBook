@@ -80,10 +80,10 @@ function navigateTo(pageId) {
 
         if (pageId === 'forum') renderForumHome();
         if (pageId === 'profile') {
+            // Hier sicherstellen, dass renderProfilePage existiert
             if (typeof renderProfilePage === 'function') renderProfilePage();
         }
         
-        // Map Refresh
         if (pageId === 'tours' && map) {
             setTimeout(() => { 
                 map.invalidateSize(); 
@@ -468,12 +468,15 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            else if (type === 'topic') { // KORRIGIERT: Typ 'topic'
+            // HIER IST DIE ÄNDERUNG: Zurück auf 'category'
+            else if (type === 'category') { 
                 renderForumSubCategory(currentCategoryId);
             }
         } else {
+            // Fehlermeldung auslesen
             const err = await response.text();
-            alert(`Fehler beim Löschen (${response.status}): ${err}`);
+            console.error("Delete Error:", err);
+            alert(`Fehler beim Löschen (${response.status}):\n${err}`);
         }
     } catch (e) { console.error(e); alert("Server Fehler"); }
 };
@@ -540,12 +543,12 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // --- FIX: ID verwenden und Typ 'topic' ---
+        // --- ID Check ---
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // WICHTIG: Typ geändert auf 'topic'
-             deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
+             // WICHTIG: Zurück auf 'category' geändert
+             deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
         }
 
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
