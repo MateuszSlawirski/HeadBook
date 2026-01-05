@@ -79,8 +79,9 @@ function navigateTo(pageId) {
         window.location.hash = pageId;
 
         if (pageId === 'forum') renderForumHome();
+        
+        // Profil Logik
         if (pageId === 'profile') {
-            // Hier sicherstellen, dass renderProfilePage existiert
             if (typeof renderProfilePage === 'function') renderProfilePage();
         }
         
@@ -468,14 +469,12 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            // HIER IST DIE ÄNDERUNG: Zurück auf 'category'
-            else if (type === 'category') { 
+            // Wir aktualisieren die Kategorie-Ansicht, egal wie wir es genannt haben
+            else if (type === 'thread' || type === 'topic' || type === 'category') { 
                 renderForumSubCategory(currentCategoryId);
             }
         } else {
-            // Fehlermeldung auslesen
             const err = await response.text();
-            console.error("Delete Error:", err);
             alert(`Fehler beim Löschen (${response.status}):\n${err}`);
         }
     } catch (e) { console.error(e); alert("Server Fehler"); }
@@ -543,12 +542,13 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // --- ID Check ---
+        // --- ID CHECK ---
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // WICHTIG: Zurück auf 'category' geändert
-             deleteBtn = getDeleteBtn('category', safeId, catId, null, topic.title);
+             // WICHTIG: Wir versuchen es mit 'thread', da 'category' unbekannt ist.
+             // Wenn das auch nicht klappt, fehlt im Backend die Funktion komplett.
+             deleteBtn = getDeleteBtn('thread', safeId, catId, null, topic.title);
         }
 
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
@@ -913,7 +913,7 @@ window.insertPostEmoji = function(emoji) {
 };
 
 /* ==========================================
-   PROFIL & USER INTERACTION (BEREINIGT)
+   PROFIL & USER INTERACTION (KORRIGIERT)
    ========================================== */
 
 window.openUserProfile = (userId, userName) => {
