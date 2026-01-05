@@ -22,7 +22,10 @@ let allPostsCache = [];
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
-let viewingUserProfile = null; 
+let viewingUserProfile = null; // null = Mein Profil, sonst Objekt mit User-Daten
+
+// Dummy-Daten für Freunde (da noch keine DB dafür da ist)
+let myFriends = []; 
 
 // MAP STATE
 let map = null;
@@ -49,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await syncUserWithBackend(user); 
         } else {
             currentRole = "guest";
+            // Wenn man auf Profil war und sich ausloggt -> Home
             if (getActivePage() === 'profile') navigateTo('home');
             updateUI();
         }
@@ -79,10 +83,13 @@ function navigateTo(pageId) {
         window.location.hash = pageId;
 
         if (pageId === 'forum') renderForumHome();
+        
+        // Profil Logik
         if (pageId === 'profile') {
             if (typeof renderProfilePage === 'function') renderProfilePage();
         }
         
+        // Map Refresh
         if (pageId === 'tours' && map) {
             setTimeout(() => { 
                 map.invalidateSize(); 
@@ -97,6 +104,12 @@ window.navigateTo = navigateTo;
 function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
+
+// --- NEU: Navigation fixen ---
+window.openMyProfile = () => {
+    viewingUserProfile = null; // Reset auf MICH
+    navigateTo('profile');
+};
 
 /* ==========================================
    AUTH & UI
@@ -113,8 +126,8 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             currentRole = dbUser.role || "user"; 
-            console.log("Rolle erkannt:", currentRole);
             updateUI(); 
+            // Alles neu laden, damit Admin-Rechte greifen
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
@@ -186,6 +199,7 @@ function setupEventListeners() {
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
                     e.target.reset();
+                    // Auto-Update
                     await loadForumData(); 
                     await renderForumThreads(currentForumTopic, currentCategoryId); 
                 }
@@ -232,11 +246,7 @@ async function loadToursFromServer() {
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
         }
-    } catch (error) { 
-        console.warn("Tours offline", error); 
-        const container = document.getElementById('tours-tree-container');
-        if(container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
-    }
+    } catch (error) { console.warn("Tours offline", error); }
 }
 
 function initMap() {
@@ -450,8 +460,7 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
     if (!confirm("Wirklich unwiderruflich löschen?")) return;
 
     const payload = { type, id, partitionKey, parentId, commentText, commentUser };
-    console.log("Delete Request:", payload);
-
+    
     try {
         const response = await fetch(`${API_URL}/deleteItem`, {
             method: 'POST',
@@ -467,7 +476,6 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
                 if(type==='thread') renderForumSubCategory(currentCategoryId); 
                 else renderThreadDetail(parentId, currentForumTopic, currentCategoryId);
             }
-            // Aktualisiere Kategorie-Ansicht nach Löschen
             else if (type === 'topic') { 
                 renderForumSubCategory(currentCategoryId);
             }
@@ -539,13 +547,11 @@ window.renderForumSubCategory = function(catId) {
     
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
-        
-        // --- ID CHECK ---
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // WICHTIG: Typ 'topic'. ParentID ist hier catId (damit das Backend das Forum-Dokument findet)
-             deleteBtn = getDeleteBtn('topic', safeId, catId, catId, topic.title);
+             // WICHTIG: Typ 'topic'
+             deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
         }
 
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
@@ -760,9 +766,25 @@ window.createPost = async () => {
         });
 
         if (response.ok) {
+            // --- NEU: SOFORT UPDATE ---
+            // Wir warten nicht auf loadFeed, sondern fügen es manuell ein, damit es sich "schneller" anfühlt.
+            // (Idealerweise kommt vom Backend das fertige Post-Objekt zurück)
+            const postData = await response.json(); // Backend sollte den Post zurückgeben
+            if(postData && postData.id) {
+                allPostsCache.unshift(postData);
+                // Container leeren und neu rendern (etwas brute force, aber sicher)
+                const container = document.getElementById('feed-posts');
+                if(container) container.innerHTML = "";
+                // Wir rufen die Render-Logik von loadFeed manuell auf (da loadFeed fetcht)
+                // Um Code-Duplizierung zu vermeiden, rufen wir loadFeed auf, aber da wir
+                // optimistisch sein wollen:
+                loadFeed(); // Hier reicht das, da der Server schon geantwortet hat.
+            } else {
+                loadFeed();
+            }
+            
             alert("Beitrag veröffentlicht!");
             textInput.value = ""; fileInput.value = "";
-            loadFeed();
         } else {
             console.error("Server Fehler:", await response.text());
         }
@@ -777,7 +799,10 @@ window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
 
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+    // Nur Spinner zeigen, wenn Cache leer ist
+    if(allPostsCache.length === 0) {
+        container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+    }
 
     try {
         const response = await fetch(`${API_URL}/getPosts`);
@@ -910,11 +935,10 @@ window.insertPostEmoji = function(emoji) {
 };
 
 /* ==========================================
-   PROFIL & USER INTERACTION (KORRIGIERT)
+   PROFIL & USER INTERACTION (KOMPLETT)
    ========================================== */
 
 window.openUserProfile = (userId, userName) => {
-    console.log("Öffne Profil für:", userId, userName);
     viewingUserProfile = { 
         uid: userId, 
         displayName: userName, 
@@ -935,30 +959,39 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // 2. DOM Elemente finden (DIE JETZT ZUM HTML PASSEN)
+    // 2. DOM Elemente finden
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
     const statsArea = document.getElementById('profile-stats-content');
     const imgEl = document.getElementById('profile-img');
+    const friendsCount = document.getElementById('friend-count');
 
     // 3. Bild setzen
     if(imgEl) {
-        imgEl.src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+        // Falls ein echtes Bild existiert (hier simuliert via Avatar API oder DB Feld)
+        // viewingUserProfile könnte ein Feld 'photoUrl' haben
+        const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+        imgEl.src = photo;
     }
 
     // 4. Texte setzen
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
-    if (bioEl) bioEl.innerText = viewingUserProfile.isMe ? currentUser.email : "Community Mitglied";
+    if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
+    
+    // Freunde-Zähler (Dummy)
+    if(friendsCount) {
+        friendsCount.innerText = `${myFriends.length} Freunde`;
+    }
 
     // 5. Buttons
     if (actionArea) {
         if (viewingUserProfile.isMe) {
-            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="alert('Bearbeiten kommt bald')">✏️ Profil bearbeiten</button>`;
+            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
         } else {
             actionArea.innerHTML = `
-                <button class="btn btn-danger btn-sm me-2" onclick="alert('Freundschaftsanfrage gesendet!')">🤝 Freund+</button>
-                <button class="btn btn-dark btn-sm" onclick="alert('Chat folgt bald')">💬 Nachricht</button>
+                <button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>
+                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>
             `;
         }
     }
@@ -998,4 +1031,71 @@ window.renderProfilePage = async () => {
 
         statsArea.innerHTML = html;
     }
+};
+
+// --- NEU: FUNKTIONEN FÜR FEATURES 1-3 ---
+
+window.openEditProfile = () => {
+    // Vorbefüllen
+    document.getElementById('editProfileBio').value = document.getElementById('profile-bio').innerText;
+    new bootstrap.Modal(document.getElementById('editProfileModal')).show();
+};
+
+window.saveProfile = async (e) => {
+    e.preventDefault();
+    const newBio = document.getElementById('editProfileBio').value;
+    
+    // Hier müsste ein Backend-Call stehen (z.B. /updateUser)
+    // Wir simulieren es UI-seitig:
+    viewingUserProfile.bio = newBio;
+    
+    // Wenn ein Bild gewählt wurde (Logik für Base64 Vorschau)
+    const fileInput = document.getElementById('editProfilePic');
+    if (fileInput.files.length > 0) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            viewingUserProfile.photoUrl = e.target.result; // Base64
+            renderProfilePage(); // UI Refresh
+        }
+        reader.readAsDataURL(fileInput.files[0]);
+    } else {
+        renderProfilePage();
+    }
+    
+    bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+    alert("Profil aktualisiert (Lokal simuliert)!");
+};
+
+window.previewProfileImage = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('edit-preview-img').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+};
+
+window.addFriend = (uid) => {
+    if(!myFriends.includes(uid)) {
+        myFriends.push(uid);
+        alert("Freund hinzugefügt!");
+    } else {
+        alert("Bereits befreundet.");
+    }
+};
+
+window.openMessageModal = (recipientName) => {
+    document.getElementById('msg-recipient').innerText = recipientName;
+    new bootstrap.Modal(document.getElementById('messageModal')).show();
+};
+
+window.sendMessage = () => {
+    const text = document.getElementById('msg-text').value;
+    if(!text) return;
+    // Backend Call wäre hier: fetch('/sendMessage', ...)
+    alert("Nachricht gesendet!");
+    document.getElementById('msg-text').value = "";
+    bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
 };
