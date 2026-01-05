@@ -362,11 +362,13 @@ function createTourListItem(tour) {
     }
 
     // 2. Mülleimer Button (für Admins)
+    // Wir übergeben 'tour' als Typ und die ID
     const deleteBtn = getDeleteBtn('tour', tour.id, tour.id);
+    
+    // Buttons zusammenfügen
     const buttonsHtml = actionBtn + deleteBtn;
 
     // 3. HTML Generierung
-    // HIER ist die Änderung für den Namen (unter dem Badge):
     return `
     <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
         <div class="d-flex justify-content-between">
@@ -378,7 +380,12 @@ function createTourListItem(tour) {
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span>
-                <small class="text-muted" style="font-size:0.8em">von <b>${tour.user || "Unbekannt"}</b></small>
+                
+                <small class="text-muted" style="font-size:0.8em">von 
+                    <b style="cursor:pointer" class="text-primary" onclick="event.stopPropagation(); openUserProfile('${tour.userId}', '${tour.user}')">
+                        ${tour.user || "Unbekannt"}
+                    </b>
+                </small>
             </div>
             <div>${buttonsHtml}</div>
         </div>
@@ -662,15 +669,44 @@ window.renderForumSubCategory = function(catId) {
     currentCategoryId = catId; currentForumTopic = null;
     const category = allForumData.find(c => c.id === catId);
     if (!category) return;
+    
     renderBreadcrumbs([{ label: category.title, onclick: null }]); 
+    
     const container = document.getElementById('forum-container');
-    const isAllowed = USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin';
-    container.innerHTML = `<div class="clearfix mb-3"><h2 class="fw-bold float-start">${category.title}</h2>${currentUser && isAllowed ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}</div>
-        <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
+    // Header
+    container.innerHTML = `<div class="clearfix mb-3"><h2 class="fw-bold float-start">${category.title}</h2>
+    ${(currentUser && (USER_EDITABLE_CATEGORIES.includes(catId) || currentRole === 'admin')) ? `<button class="btn btn-outline-dark btn-sm float-end" onclick="openAddCategoryModal('${catId}')">+ Neue Kategorie</button>` : ""}</div>
+    <div class="d-none d-md-flex forum-header-row"><div style="flex-grow:1;">Thema</div><div style="width:100px; text-align:center;">Themen</div><div style="width:100px; text-align:center;">Beiträge</div><div style="width:30px;"></div></div>`;
+    
+    // Liste der Unterkategorien/Themen
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
-        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span> (am ${stats.lastPost.date})</div>` : `<small class="text-muted">Leer</small>`;
-        container.innerHTML += `<div class="forum-row" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')"><div class="forum-icon">🔧</div><div class="forum-main"><h5 class="fw-bold text-primary mb-0">${topic.title}</h5><p class="text-muted small mb-0">${topic.desc || ""}</p>${lastPostHtml}</div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div><div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div><div class="forum-arrow">❯</div></div>`;
+        
+        // HIER IST DAS NEUE: DELETE BUTTON FÜR ADMINS
+        // Wir nutzen 'category' als Typ, da es sich hier um eine Sub-Kategorie handelt
+        // Wir übergeben topic.title als ID (oder topic.id falls vorhanden) und die Haupt-Cat-ID als Parent
+        const deleteBtn = getDeleteBtn('category', topic.id || topic.title, catId, null, topic.title); 
+
+        const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
+        
+        container.innerHTML += `
+        <div class="forum-row">
+            <div class="forum-icon">🔧</div>
+            
+            <div class="forum-main" style="cursor:pointer;" onclick="renderForumThreads('${topic.title}', '${category.id}')">
+                <h5 class="fw-bold text-primary mb-0">${topic.title}</h5>
+                <p class="text-muted small mb-0">${topic.desc || ""}</p>
+                ${lastPostHtml}
+            </div>
+
+            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.threadCount}</div></div>
+            <div class="forum-stats d-none d-md-block"><div class="fw-bold">${stats.postCount}</div></div>
+            
+            <div class="d-flex align-items-center justify-content-end" style="min-width: 40px;">
+                ${deleteBtn}
+                <div class="forum-arrow ms-2">❯</div>
+            </div>
+        </div>`;
     });
 };
 
@@ -697,7 +733,10 @@ window.renderForumThreads = async function(topicName, catId) {
             <div class="forum-icon">📄</div>
             <div class="forum-main">
                 <div class="fw-bold text-dark">${thread.title}</div>
-                <div class="small text-muted">von ${thread.user} • ${thread.date}</div>
+                <div class="small text-muted">
+                von <span class="text-primary fw-bold" style="cursor:pointer" onclick="event.stopPropagation(); openUserProfile(null, '${thread.user}')">${thread.user}</span> 
+                • ${thread.date}
+                </div>
             </div>
             <div class="forum-stats fw-bold d-none d-md-block">${thread.replies || 0}</div>
             <div class="text-end text-muted small" style="min-width:100px;">
@@ -991,7 +1030,9 @@ window.loadFeed = async function() {
                     <div class="d-flex align-items-center">
                         <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
                         <div>
-                            <div class="fw-bold text-dark">${post.user || "Unbekannt"}</div>
+                            <div class="fw-bold text-dark" style="cursor:pointer;" onclick="openUserProfile('${post.userId}', '${post.user}')">
+                            ${post.user || "Unbekannt"}
+                        </div>
                             <small class="text-muted">${new Date(post.createdAt).toLocaleDateString()} • ${new Date(post.createdAt).toLocaleTimeString().slice(0,5)}</small>
                         </div>
                     </div>
@@ -1280,6 +1321,103 @@ async function renderProfilePage() {
         statsArea.innerHTML = html;
     }
 }
+
+/* ==========================================
+   PROFIL & USER-INTERACTION (NEU)
+   ========================================== */
+
+// 1. Klick auf einen Namen -> Profil öffnen
+window.openUserProfile = (userId, userName) => {
+    // Wenn userId null ist, nutzen wir den Namen zum Suchen/Anzeigen
+    viewingUserProfile = { 
+        uid: userId, 
+        displayName: userName, 
+        isMe: (currentUser && currentUser.displayName === userName) 
+    };
+    navigateTo('profile');
+};
+
+// 2. Die Profil-Seite rendern
+window.renderProfilePage = async () => {
+    const container = document.getElementById('page-profile');
+    if (!container) return;
+    
+    // Fallback: Wenn kein User gewählt, nimm mich selbst
+    if (!viewingUserProfile && currentUser) {
+        viewingUserProfile = { uid: currentUser.uid, displayName: currentUser.displayName, isMe: true };
+    } else if (!viewingUserProfile) {
+        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
+        return;
+    }
+
+    // Header Infos
+    const nameEl = document.getElementById('profile-name');
+    const bioEl = document.getElementById('profile-bio');
+    const actionArea = document.getElementById('profile-actions');
+    const statsArea = document.getElementById('profile-stats-content');
+    
+    // Reset Image (Platzhalter)
+    document.getElementById('profile-img').src = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+
+    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
+    if (bioEl) bioEl.innerText = viewingUserProfile.isMe ? currentUser.email : "Community Mitglied";
+
+    // Buttons
+    if (actionArea) {
+        if (viewingUserProfile.isMe) {
+            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm">✏️ Profil bearbeiten</button>`;
+        } else {
+            actionArea.innerHTML = `
+                <button class="btn btn-danger btn-sm me-2" onclick="alert('Anfrage gesendet!')">🤝 Freund+</button>
+                <button class="btn btn-dark btn-sm" onclick="alert('Chat folgt bald')">💬 Nachricht</button>
+            `;
+        }
+    }
+
+    // Aktivitäten laden (Touren & Posts filtern)
+    if (statsArea) {
+        statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
+        
+        const targetName = viewingUserProfile.displayName;
+        
+        // Daten filtern (Wir greifen auf die globalen Variablen zu)
+        const myTours = toursData.filter(t => t.user === targetName);
+        const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
+        const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
+
+        let html = ``;
+
+        // Statistik Zusammenfassung
+        html += `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                    <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
+                    <div class="bg-light p-2 rounded px-3"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
+                    <div class="bg-light p-2 rounded px-3"><b>${myThreads.length}</b><br><small>Themen</small></div>
+                 </div>`;
+
+        // Inhalte auflisten
+        if (myTours.length > 0) {
+            html += `<h6 class="fw-bold mt-3">🏍️ Touren</h6><div class="list-group mb-3">`;
+            myTours.forEach(t => {
+                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">
+                            ${t.title} <small class="text-muted">(${t.km} km)</small>
+                         </a>`;
+            });
+            html += `</div>`;
+        }
+
+        if (myPosts.length > 0) {
+            html += `<h6 class="fw-bold mt-3">📸 Feed</h6><div class="list-group mb-3">`;
+            myPosts.forEach(p => {
+                html += `<div class="list-group-item border-0 border-bottom"><small class="text-muted">${new Date(p.createdAt).toLocaleDateString()}</small><br>${p.content || "Medien-Inhalt"}</div>`;
+            });
+            html += `</div>`;
+        }
+
+        if (html === ``) html += `<p class="text-center text-muted mt-4">Keine öffentlichen Aktivitäten.</p>`;
+        
+        statsArea.innerHTML = html;
+    }
+};
 /* ==========================================
    ENDE FORUM / FEED LOGIK
    ========================================== */
