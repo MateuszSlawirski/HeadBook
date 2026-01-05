@@ -103,6 +103,10 @@ function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
 
+function getActivePage() {
+    return window.location.hash.replace('#', '') || 'home';
+}
+
 /* ==========================================
    AUTH & UI
    ========================================== */
@@ -685,10 +689,8 @@ window.renderForumSubCategory = function(catId) {
     category.topics.forEach(topic => {
         const stats = getForumStats(t => t.topic === topic.title);
         
-        // --- FIX FÜR FEHLER 400 ---
-        // Wir nehmen die ID. Falls keine ID da ist, nehmen wir den Titel.
-        // Achtung: Wenn dein Backend eine UUID erwartet, funktioniert 'Honda' (Titel) nicht!
-        const safeId = topic.id || topic.title; 
+   
+        const safeId = topic.id || topic.rowKey || topic.title;
         
         // Button nur generieren, wenn Admin
         let deleteBtn = "";
