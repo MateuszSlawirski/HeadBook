@@ -126,26 +126,33 @@ async function syncUserWithBackend(firebaseUser) {
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: firebaseUser.uid, email: firebaseUser.email })
+            body: JSON.stringify({ 
+                uid: firebaseUser.uid, 
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName 
+            })
         });
 
         if(response.ok) {
             const dbUser = await response.json();
             
-            // WICHTIG: Daten lokal speichern
+            // WICHTIG: Hier überschreiben wir das lokale currentUser-Objekt 
+            // mit den echten Daten aus der Cosmos DB
             currentUser.role = dbUser.role || "user";
             currentUser.bio = dbUser.bio || "";
-            currentUser.friends = dbUser.friends || [];
             currentUser.photoUrl = dbUser.photoUrl || null;
+            currentUser.friends = dbUser.friends || [];
+
+            // Falls wir gerade auf der Profilseite sind, müssen wir sie neu zeichnen
+            if (typeof renderProfilePage === 'function' && document.getElementById('profile-page').classList.contains('active')) {
+                renderProfilePage();
+            }
             
-            currentRole = currentUser.role;
-            updateUI(); 
-            
-            if (window.loadFeed) window.loadFeed(); 
-            loadToursFromServer();                  
-            if (getActivePage() === 'forum') renderForumHome();
+            console.log("Sync erfolgreich. Bio:", currentUser.bio);
         }
-    } catch (err) { console.warn("Backend Sync skip", err); }
+    } catch (err) {
+        console.warn("Backend Sync Fehler:", err);
+    }
 }
 
 function updateUI() {
@@ -1101,52 +1108,52 @@ window.saveProfile = async (e) => {
     e.preventDefault();
     const newBio = document.getElementById('editProfileBio').value;
     const fileInput = document.getElementById('editProfilePic');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
     
-    let photoUrl = null;
-
-    // Helper: Bild zu Base64 wandeln
-    const fileToBase64 = (file) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
-    });
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Speichere...";
 
     try {
-        // Wenn ein Bild gewählt wurde
+        const formData = new FormData();
+        formData.append('uid', currentUser.uid);
+        formData.append('bio', newBio);
+        
         if (fileInput.files.length > 0) {
-            photoUrl = await fileToBase64(fileInput.files[0]);
+            // Wir senden die echte Datei, keinen Base64-String!
+            formData.append('profilePic', fileInput.files[0]);
         }
-
-        const payload = { 
-            uid: currentUser.uid, 
-            bio: newBio 
-        };
-        // Nur wenn Bild da ist, mitschicken
-        if (photoUrl) payload.photoUrl = photoUrl;
 
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            // Wichtig: Bei FormData keinen Content-Type Header setzen!
+            body: formData 
         });
 
         if(response.ok) {
-            // UI sofort updaten
-            currentUser.bio = newBio;
-            viewingUserProfile.bio = newBio;
-            if(photoUrl) {
-                currentUser.photoUrl = photoUrl;
-                viewingUserProfile.photoUrl = photoUrl;
+            const updatedUser = await response.json();
+            
+            // Lokale Daten mit Server-Daten abgleichen
+            currentUser.bio = updatedUser.bio || newBio;
+            if(updatedUser.photoUrl) {
+                currentUser.photoUrl = updatedUser.photoUrl;
             }
+            
+            // Profil-Ansicht aktualisieren
+            viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
+            
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
-            alert("Profil gespeichert!");
+            alert("Profil erfolgreich gespeichert!");
         } else {
-            alert("Fehler beim Speichern!");
+            const errorText = await response.text();
+            alert("Fehler vom Server: " + errorText);
         }
     } catch(err) {
-        alert("Server Fehler: " + err.message);
+        console.error("Speicherfehler:", err);
+        alert("Netzwerkfehler: " + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Speichern";
     }
 };
 

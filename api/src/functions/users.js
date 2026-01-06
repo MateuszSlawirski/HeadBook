@@ -34,15 +34,19 @@ app.http('users', {
                 // User existiert noch nicht (404), kein Problem.
             }
 
-            // 2. Das User-Objekt vorbereiten
-            const userToSave = {
-                id: uid,
-                email: email,
-                displayName: displayName || (existingUser ? existingUser.displayName : "Biker"),
-                lastLogin: new Date().toISOString(),
-                // WICHTIG: Die Rolle behalten, wenn sie schon da ist! Sonst "user".
-                role: (existingUser && existingUser.role) ? existingUser.role : "user"
-            };
+            // 2. Das User-Objekt vorbereiten - Vorhandene Daten schützen!
+const userToSave = {
+    id: uid,
+    email: email,
+    displayName: displayName || (existingUser ? existingUser.displayName : "Biker"),
+    lastLogin: new Date().toISOString(),
+    role: (existingUser && existingUser.role) ? existingUser.role : "user",
+    
+    // ZUSÄTZLICH: Diese Zeilen verhindern das Löschen beim Neuladen
+    bio: existingUser ? existingUser.bio : "",
+    photoUrl: existingUser ? existingUser.photoUrl : null,
+    friends: existingUser ? (existingUser.friends || []) : []
+};
 
             // 3. Speichern (Upsert)
             await container.items.upsert(userToSave);
