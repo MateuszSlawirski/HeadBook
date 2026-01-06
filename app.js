@@ -36,23 +36,29 @@ let allThreadsCache = [];
 
 const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
-/* ==========================================
-   APP START
-   ========================================== */
 
+/* ==========================================
+   APP START 
+   ========================================== */
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
+    // Auth Listener: Feuert, sobald Firebase weiß, wer du bist
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         
         if (user) {
             updateUI(); 
-            // Profil-Daten (Bio, Bild, Freunde) aus DB laden
+            // Daten aus DB holen
             await syncUserWithBackend(user); 
             
-            // Wenn wir schon auf der Profilseite sind -> Refresh
-            if (getActivePage() === 'profile') renderProfilePage();
+            // --- FIX FÜR DEN LEEREN SCREEN ---
+            // Wenn wir gerade auf der Profilseite sind, laden wir sie jetzt neu!
+            if (getActivePage() === 'profile') {
+                viewingUserProfile = null; // Sicherstellen, dass es MEIN Profil ist
+                renderProfilePage();
+            }
+            // ---------------------------------
         } else {
             currentRole = "guest";
             if (getActivePage() === 'profile') navigateTo('home');

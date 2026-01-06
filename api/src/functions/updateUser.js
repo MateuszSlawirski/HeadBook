@@ -24,44 +24,36 @@ app.http('updateUser', {
 
             const container = database.container("users");
             
-            // 1. User Dokument holen
-            const { resource: userDoc } = await container.item(uid, uid).read();
+            // User lesen oder neu anlegen (Self-Healing)
+            let userDoc;
+            try {
+                const response = await container.item(uid, uid).read();
+                userDoc = response.resource;
+            } catch(e) {}
 
             if (!userDoc) {
-                return { status: 404, body: "User nicht gefunden. Bitte neu einloggen." };
+                userDoc = { id: uid, uid: uid, role: "user", friends: [], bio: "" };
+                await container.items.create(userDoc);
             }
 
-            // 2. Daten ändern
+            // Daten aktualisieren
             let updated = false;
-
-            // Bio update
-            if (bio !== undefined) { 
-                userDoc.bio = bio; 
-                updated = true; 
-            }
+            if (bio !== undefined) { userDoc.bio = bio; updated = true; }
+            if (photoUrl !== undefined) { userDoc.photoUrl = photoUrl; updated = true; }
             
-            // Bild update (Base64 String)
-            if (photoUrl !== undefined) { 
-                userDoc.photoUrl = photoUrl; 
-                updated = true; 
-            }
-            
-            // Freund hinzufügen
             if (friendId) {
                 if (!userDoc.friends) userDoc.friends = [];
-                // Prüfen ob schon vorhanden
                 if (!userDoc.friends.includes(friendId)) {
                     userDoc.friends.push(friendId);
                     updated = true;
                 }
             }
 
-            // 3. Speichern
             if (updated) {
                 await container.item(uid, uid).replace(userDoc);
                 return { status: 200, jsonBody: userDoc };
             } else {
-                return { status: 200, jsonBody: { message: "Keine Änderungen nötig" } };
+                return { status: 200, jsonBody: { message: "Alles aktuell" } };
             }
 
         } catch (error) {
