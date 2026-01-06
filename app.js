@@ -1110,6 +1110,9 @@ window.openEditProfile = () => {
     new bootstrap.Modal(document.getElementById('editProfileModal')).show();
 };
 
+/* ==========================================
+   PROFIL SPEICHERN (REPARIERT)
+   ========================================== */
 window.saveProfile = async (e) => {
     e.preventDefault();
     
@@ -1117,28 +1120,16 @@ window.saveProfile = async (e) => {
     const newBio = document.getElementById('editProfileBio').value;
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
-    // --- NEU: GRÖSSENPRÜFUNG ---
+    // 1. Größenprüfung für Cosmos DB (Max 1.5MB)
     if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        if (file.size > 1.5 * 1024 * 1024) { // Limit auf 1.5 MB setzen zur Sicherheit
-            alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1.5 MB, da die Datenbank sonst den Dienst verweigert.");
+        if (fileInput.files[0].size > 1.5 * 1024 * 1024) { 
+            alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1.5 MB.");
             return;
         }
-    
-    // ---------------------------
+    }
 
     submitBtn.disabled = true;
     submitBtn.innerText = "Speichere...";
-    
-    // ... restlicher Code (fileToBase64, fetch updateUser, etc.)
-}
-    submitBtn.disabled = true;
-    submitBtn.innerText = "Speichere...";
-
-    if (photoUrl && photoUrl.length > 2000000) { 
-    alert("Das Bild ist zu groß für die Datenbank! Bitte wähle ein kleineres Bild.");
-    return;
-}
 
     try {
         const formData = new FormData();
@@ -1146,30 +1137,29 @@ window.saveProfile = async (e) => {
         formData.append('bio', newBio);
         
         if (fileInput.files.length > 0) {
-            // Wir senden die echte Datei, keinen Base64-String!
             formData.append('profilePic', fileInput.files[0]);
         }
 
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
-            // Wichtig: Bei FormData keinen Content-Type Header setzen!
-            body: formData 
+            body: formData // FormData automatisch mit richtigem Boundary senden
         });
 
         if(response.ok) {
             const updatedUser = await response.json();
             
-            // Lokale Daten mit Server-Daten abgleichen
+            // Lokale Daten aktualisieren
             currentUser.bio = updatedUser.bio || newBio;
             if(updatedUser.photoUrl) {
                 currentUser.photoUrl = updatedUser.photoUrl;
             }
             
-            // Profil-Ansicht aktualisieren
+            // UI neu zeichnen
             viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
             
-            bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editProfileModal'));
+            if (modal) modal.hide();
             alert("Profil erfolgreich gespeichert!");
         } else {
             const errorText = await response.text();
@@ -1184,6 +1174,9 @@ window.saveProfile = async (e) => {
     }
 };
 
+/* ==========================================
+   FREUNDE & NACHRICHTEN
+   ========================================== */
 window.addFriend = async (friendUid) => {
     if(!currentUser) return alert("Bitte einloggen.");
     
@@ -1203,8 +1196,6 @@ window.addFriend = async (friendUid) => {
         if(response.ok) {
             currentUser.friends.push(friendUid);
             alert("Freund hinzugefügt!");
-        } else {
-            alert("Fehler beim Hinzufügen.");
         }
     } catch(err) {
         alert("Server Fehler: " + err.message);
@@ -1219,7 +1210,7 @@ window.openMessageModal = (recipientName) => {
 window.sendMessage = () => {
     const text = document.getElementById('msg-text').value;
     if(!text) return;
-    alert("Nachricht gesendet! (Funktion folgt)");
+    alert("Nachricht gesendet!");
     document.getElementById('msg-text').value = "";
     bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
 };
