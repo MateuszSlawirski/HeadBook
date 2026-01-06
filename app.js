@@ -48,10 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (user) {
             updateUI(); 
-            // WICHTIG: Profil-Daten aus DB laden
+            // Profil-Daten (Bio, Bild, Freunde) aus DB laden
             await syncUserWithBackend(user); 
             
-            // Wenn wir schon auf der Profilseite sind -> Refresh mit echten Daten
+            // Wenn wir schon auf der Profilseite sind -> Refresh
             if (getActivePage() === 'profile') renderProfilePage();
         } else {
             currentRole = "guest";
@@ -126,7 +126,7 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // WICHTIG: Daten lokal speichern, damit sie im Profil angezeigt werden
+            // WICHTIG: Daten lokal speichern
             currentUser.role = dbUser.role || "user";
             currentUser.bio = dbUser.bio || "";
             currentUser.friends = dbUser.friends || [];
@@ -135,7 +135,6 @@ async function syncUserWithBackend(firebaseUser) {
             currentRole = currentUser.role;
             updateUI(); 
             
-            // Admin-Reloads
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
@@ -253,7 +252,11 @@ async function loadToursFromServer() {
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
         }
-    } catch (error) { console.warn("Tours offline", error); }
+    } catch (error) { 
+        console.warn("Tours offline", error); 
+        const container = document.getElementById('tours-tree-container');
+        if(container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
+    }
 }
 
 function initMap() {
@@ -635,6 +638,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
 
+    // --- DETAIL VIEW RENDERN ---
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
@@ -673,7 +677,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         });
     }
 
-    // --- FIX: Antwort-Feld wieder hinzufügen ---
+    // --- ANTWORT-FELD (WAR VORHER FEHLEND) ---
     html += `
     <div class="card mt-4 shadow-sm border-0">
         <div class="card-body">
@@ -701,26 +705,22 @@ window.sendReply = async function(threadId, topic, catId) {
 
 // --- HELPER: THREAD ÖFFNEN VOM PROFIL AUS ---
 window.openThreadFromProfile = async (threadId, topic) => {
-    // Navigiere zum Forum
     navigateTo('forum');
-    // Wir müssen herausfinden, in welcher Kategorie das Topic liegt
-    // Da wir das nicht direkt wissen, suchen wir es in allForumData
     let catId = null;
     if(allForumData.length === 0) {
-        // Falls Daten noch nicht geladen, kurz laden
         try {
             const res = await fetch(`${API_URL}/forum`);
             allForumData = await res.json();
         } catch(e){}
     }
     
+    // Wir suchen die Kategorie, zu der das Topic gehört
     for(const cat of allForumData) {
         if(cat.topics.some(t => t.title === topic)) {
             catId = cat.id;
             break;
         }
     }
-    
     renderThreadDetail(threadId, topic, catId);
 };
 
@@ -971,6 +971,7 @@ window.insertPostEmoji = function(emoji) {
    ========================================== */
 
 window.openUserProfile = (userId, userName) => {
+    console.log("Öffne Profil für:", userId, userName);
     viewingUserProfile = { 
         uid: userId, 
         displayName: userName, 
@@ -1093,20 +1094,45 @@ window.openEditProfile = () => {
 window.saveProfile = async (e) => {
     e.preventDefault();
     const newBio = document.getElementById('editProfileBio').value;
+    const fileInput = document.getElementById('editProfilePic');
     
+    let photoUrl = null;
+
+    // Helper: Bild zu Base64 wandeln
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+
     try {
+        // Wenn ein Bild gewählt wurde
+        if (fileInput.files.length > 0) {
+            photoUrl = await fileToBase64(fileInput.files[0]);
+        }
+
+        const payload = { 
+            uid: currentUser.uid, 
+            bio: newBio 
+        };
+        // Nur wenn Bild da ist, mitschicken
+        if (photoUrl) payload.photoUrl = photoUrl;
+
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                uid: currentUser.uid, 
-                bio: newBio 
-            })
+            body: JSON.stringify(payload)
         });
 
         if(response.ok) {
+            // UI sofort updaten
             currentUser.bio = newBio;
             viewingUserProfile.bio = newBio;
+            if(photoUrl) {
+                currentUser.photoUrl = photoUrl;
+                viewingUserProfile.photoUrl = photoUrl;
+            }
             renderProfilePage();
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
             alert("Profil gespeichert!");

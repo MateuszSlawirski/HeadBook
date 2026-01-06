@@ -28,24 +28,28 @@ app.http('updateUser', {
             const { resource: userDoc } = await container.item(uid, uid).read();
 
             if (!userDoc) {
-                return { status: 404, body: "User nicht gefunden" };
+                return { status: 404, body: "User nicht gefunden. Bitte neu einloggen." };
             }
 
             // 2. Daten ändern
             let updated = false;
 
+            // Bio update
             if (bio !== undefined) { 
                 userDoc.bio = bio; 
                 updated = true; 
             }
+            
+            // Bild update (Base64 String)
             if (photoUrl !== undefined) { 
                 userDoc.photoUrl = photoUrl; 
                 updated = true; 
             }
             
-            // Freund hinzufügen (Logik: Array erstellen falls nicht da, prüfen ob schon drin)
+            // Freund hinzufügen
             if (friendId) {
                 if (!userDoc.friends) userDoc.friends = [];
+                // Prüfen ob schon vorhanden
                 if (!userDoc.friends.includes(friendId)) {
                     userDoc.friends.push(friendId);
                     updated = true;
@@ -57,7 +61,7 @@ app.http('updateUser', {
                 await container.item(uid, uid).replace(userDoc);
                 return { status: 200, jsonBody: userDoc };
             } else {
-                return { status: 200, jsonBody: { message: "Keine Änderungen" } };
+                return { status: 200, jsonBody: { message: "Keine Änderungen nötig" } };
             }
 
         } catch (error) {
