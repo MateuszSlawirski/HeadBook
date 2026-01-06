@@ -19,28 +19,31 @@ app.http('updateUser', {
         try {
             const body = await request.json();
             const { uid, bio, photoUrl, friendId } = body; 
-            // uid: Wer bist du?
-            // friendId: Wen willst du hinzufügen? (Optional)
             
             if (!uid) return { status: 400, body: "User ID fehlt" };
 
             const container = database.container("users");
             
-            // 1. User aus DB holen
-            // Wir nutzen 'uid' als ID und PartitionKey (in users ist id=uid)
+            // 1. User Dokument holen
             const { resource: userDoc } = await container.item(uid, uid).read();
 
             if (!userDoc) {
-                // Sollte eigentlich nicht passieren, da syncUserWithBackend den User anlegt
                 return { status: 404, body: "User nicht gefunden" };
             }
 
-            // 2. Daten aktualisieren
+            // 2. Daten ändern
             let updated = false;
 
-            if (bio !== undefined) { userDoc.bio = bio; updated = true; }
-            if (photoUrl !== undefined) { userDoc.photoUrl = photoUrl; updated = true; }
+            if (bio !== undefined) { 
+                userDoc.bio = bio; 
+                updated = true; 
+            }
+            if (photoUrl !== undefined) { 
+                userDoc.photoUrl = photoUrl; 
+                updated = true; 
+            }
             
+            // Freund hinzufügen (Logik: Array erstellen falls nicht da, prüfen ob schon drin)
             if (friendId) {
                 if (!userDoc.friends) userDoc.friends = [];
                 if (!userDoc.friends.includes(friendId)) {
@@ -49,12 +52,12 @@ app.http('updateUser', {
                 }
             }
 
-            // 3. Speichern (wenn was geändert wurde)
+            // 3. Speichern
             if (updated) {
                 await container.item(uid, uid).replace(userDoc);
                 return { status: 200, jsonBody: userDoc };
             } else {
-                return { status: 200, jsonBody: { message: "Nichts zu ändern" } };
+                return { status: 200, jsonBody: { message: "Keine Änderungen" } };
             }
 
         } catch (error) {

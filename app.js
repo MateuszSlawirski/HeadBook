@@ -22,7 +22,7 @@ let allPostsCache = [];
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
-let viewingUserProfile = null; // null = Mein Profil
+let viewingUserProfile = null; 
 
 // MAP STATE
 let map = null;
@@ -48,14 +48,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (user) {
             updateUI(); 
-            // 1. User Daten aus DB holen (Bio, Freunde...)
+            // WICHTIG: Profil-Daten aus DB laden
             await syncUserWithBackend(user); 
             
-            // 2. WICHTIG: Wenn wir gerade auf der Profil-Seite sind und der Login fertig ist -> NEU RENDERN!
-            // Das verhindert die "Bitte einloggen" Meldung nach dem Neuladen.
-            if (getActivePage() === 'profile') {
-                renderProfilePage();
-            }
+            // Wenn wir schon auf der Profilseite sind -> Refresh mit echten Daten
+            if (getActivePage() === 'profile') renderProfilePage();
         } else {
             currentRole = "guest";
             if (getActivePage() === 'profile') navigateTo('home');
@@ -108,10 +105,9 @@ function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
 
-// --- FIX: Profil Navigation ---
-// Diese Funktion wird vom "Profil"-Link in der Navbar aufgerufen.
+// Reset auf MEIN Profil beim Klick in der Nav
 window.openMyProfile = () => {
-    viewingUserProfile = null; // Erzwingt "Mein Profil"
+    viewingUserProfile = null; 
     navigateTo('profile');
 };
 
@@ -130,18 +126,16 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // Datenbank-Daten in das lokale currentUser Objekt übernehmen
-            // Damit wir Bio & Freunde sofort griffbereit haben
+            // WICHTIG: Daten lokal speichern, damit sie im Profil angezeigt werden
             currentUser.role = dbUser.role || "user";
             currentUser.bio = dbUser.bio || "";
             currentUser.friends = dbUser.friends || [];
             currentUser.photoUrl = dbUser.photoUrl || null;
             
             currentRole = currentUser.role;
-            console.log("User Sync Success:", currentRole);
-            
             updateUI(); 
             
+            // Admin-Reloads
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
@@ -259,11 +253,7 @@ async function loadToursFromServer() {
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
         }
-    } catch (error) { 
-        console.warn("Tours offline", error); 
-        const container = document.getElementById('tours-tree-container');
-        if(container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
-    }
+    } catch (error) { console.warn("Tours offline", error); }
 }
 
 function initMap() {
@@ -567,7 +557,6 @@ window.renderForumSubCategory = function(catId) {
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // Typ 'topic'
              deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
         }
 
@@ -646,7 +635,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
 
-    container.innerHTML = `
+    let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
             <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between align-items-center">
@@ -666,7 +655,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
-            container.innerHTML += `
+            html += `
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
                     <div>
@@ -683,7 +672,19 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             </div>`;
         });
     }
- };   
+
+    // --- FIX: Antwort-Feld wieder hinzufügen ---
+    html += `
+    <div class="card mt-4 shadow-sm border-0">
+        <div class="card-body">
+            <h5 class="card-title">Antworten</h5>
+            <textarea class="form-control mb-3" id="replyText" rows="3" placeholder="Deine Antwort..."></textarea>
+            <button class="btn btn-primary" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Absenden</button>
+        </div>
+    </div>`;
+
+    container.innerHTML = html;
+};   
 
 window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
@@ -696,6 +697,31 @@ window.sendReply = async function(threadId, topic, catId) {
         });
         if (response.ok) renderThreadDetail(threadId, topic, catId);
     } catch (err) { alert(err.message); }
+};
+
+// --- HELPER: THREAD ÖFFNEN VOM PROFIL AUS ---
+window.openThreadFromProfile = async (threadId, topic) => {
+    // Navigiere zum Forum
+    navigateTo('forum');
+    // Wir müssen herausfinden, in welcher Kategorie das Topic liegt
+    // Da wir das nicht direkt wissen, suchen wir es in allForumData
+    let catId = null;
+    if(allForumData.length === 0) {
+        // Falls Daten noch nicht geladen, kurz laden
+        try {
+            const res = await fetch(`${API_URL}/forum`);
+            allForumData = await res.json();
+        } catch(e){}
+    }
+    
+    for(const cat of allForumData) {
+        if(cat.topics.some(t => t.title === topic)) {
+            catId = cat.id;
+            break;
+        }
+    }
+    
+    renderThreadDetail(threadId, topic, catId);
 };
 
 async function loadForumData() {
@@ -783,11 +809,10 @@ window.createPost = async () => {
         });
 
         if (response.ok) {
-            // Sofort-Update des Feeds
             const postData = await response.json(); 
             if(postData && postData.id) {
                 allPostsCache.unshift(postData);
-                loadFeed(); // Rendern
+                loadFeed(); 
             } else {
                 loadFeed();
             }
@@ -853,7 +878,7 @@ window.loadFeed = async function() {
             });
 
             const html = `
-            <div class="card mb-4 border-0 shadow-sm">
+            <div class="card mb-4 border-0 shadow-sm" id="post-${postId}">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
                     <div class="d-flex align-items-center">
                         <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
@@ -942,11 +967,10 @@ window.insertPostEmoji = function(emoji) {
 };
 
 /* ==========================================
-   PROFIL & USER INTERACTION
+   PROFIL & USER INTERACTION (KOMPLETT FIX)
    ========================================== */
 
 window.openUserProfile = (userId, userName) => {
-    console.log("Öffne Profil für:", userId, userName);
     viewingUserProfile = { 
         uid: userId, 
         displayName: userName, 
@@ -959,7 +983,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // 1. Fallback: Auf "MICH" zurückfallen
+    // 1. Fallback prüfen
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1011,17 +1035,20 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // 6. Inhalte laden
+    // 6. Inhalte laden (Community + Touren)
     if (statsArea) {
         statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
         
         const targetName = viewingUserProfile.displayName;
         const myTours = toursData.filter(t => t.user === targetName);
         const myPosts = allPostsCache.filter(p => p.user === targetName);
+        // FIX: Community Threads im Profil anzeigen
+        const myThreads = allThreadsCache.filter(t => t.user === targetName);
 
         let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
                         <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
                         <div class="bg-light p-2 rounded px-3"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
+                        <div class="bg-light p-2 rounded px-3"><b>${myThreads.length}</b><br><small>Themen</small></div>
                     </div>`;
 
         if (myTours.length > 0) {
@@ -1035,12 +1062,22 @@ window.renderProfilePage = async () => {
         if (myPosts.length > 0) {
              html += `<h6 class="fw-bold mt-3">📸 Beiträge</h6><div class="list-group mb-3">`;
              myPosts.forEach(p => {
-                 html += `<div class="list-group-item border-0 border-bottom">${p.content || "Medien Inhalt"}</div>`;
+                 // FIX: Klick auf Beitrag springt zum Feed
+                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">${p.content || "Medien Inhalt"}</div>`;
              });
              html += `</div>`;
         }
 
-        if(myTours.length === 0 && myPosts.length === 0) {
+        // FIX: Community Beiträge anzeigen
+        if (myThreads.length > 0) {
+             html += `<h6 class="fw-bold mt-3">💬 Community Themen</h6><div class="list-group mb-3">`;
+             myThreads.forEach(t => {
+                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">${t.title}</div>`;
+             });
+             html += `</div>`;
+        }
+
+        if(myTours.length === 0 && myPosts.length === 0 && myThreads.length === 0) {
             html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
         }
 
@@ -1048,10 +1085,7 @@ window.renderProfilePage = async () => {
     }
 };
 
-// --- ECHTE FUNKTIONEN MIT BACKEND ---
-
 window.openEditProfile = () => {
-    // Vorbefüllen mit aktuellen Daten
     document.getElementById('editProfileBio').value = document.getElementById('profile-bio').innerText;
     new bootstrap.Modal(document.getElementById('editProfileModal')).show();
 };
@@ -1059,11 +1093,6 @@ window.openEditProfile = () => {
 window.saveProfile = async (e) => {
     e.preventDefault();
     const newBio = document.getElementById('editProfileBio').value;
-    
-    // Bild Logik (optional für später, da wir noch keinen File-Upload Endpoint haben)
-    // Wir speichern vorerst nur Bio und ggf. eine Foto-URL (falls Text)
-    // Wenn du Bild-Upload willst, brauchst du einen Blob-Storage.
-    // Hier senden wir nur den Bio-Text an update User.
     
     try {
         const response = await fetch(`${API_URL}/updateUser`, {
@@ -1076,7 +1105,6 @@ window.saveProfile = async (e) => {
         });
 
         if(response.ok) {
-            // UI sofort updaten
             currentUser.bio = newBio;
             viewingUserProfile.bio = newBio;
             renderProfilePage();
@@ -1093,7 +1121,6 @@ window.saveProfile = async (e) => {
 window.addFriend = async (friendUid) => {
     if(!currentUser) return alert("Bitte einloggen.");
     
-    // Optimistisch UI
     if(!currentUser.friends) currentUser.friends = [];
     if(currentUser.friends.includes(friendUid)) return alert("Bereits befreundet.");
     
