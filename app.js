@@ -1124,7 +1124,7 @@ window.saveProfile = async (e) => {
             alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1.5 MB, da die Datenbank sonst den Dienst verweigert.");
             return;
         }
-    }
+    
     // ---------------------------
 
     submitBtn.disabled = true;
