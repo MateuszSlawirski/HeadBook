@@ -22,10 +22,7 @@ let allPostsCache = [];
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
-let viewingUserProfile = null; // null = Mein Profil, sonst Objekt mit User-Daten
-
-// Dummy-Daten für Freunde (da noch keine DB dafür da ist)
-let myFriends = []; 
+let viewingUserProfile = null; // null = Mein Profil
 
 // MAP STATE
 let map = null;
@@ -45,14 +42,22 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
+    
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
+        
         if (user) {
             updateUI(); 
+            // 1. User Daten aus DB holen (Bio, Freunde...)
             await syncUserWithBackend(user); 
+            
+            // 2. WICHTIG: Wenn wir gerade auf der Profil-Seite sind und der Login fertig ist -> NEU RENDERN!
+            // Das verhindert die "Bitte einloggen" Meldung nach dem Neuladen.
+            if (getActivePage() === 'profile') {
+                renderProfilePage();
+            }
         } else {
             currentRole = "guest";
-            // Wenn man auf Profil war und sich ausloggt -> Home
             if (getActivePage() === 'profile') navigateTo('home');
             updateUI();
         }
@@ -84,12 +89,10 @@ function navigateTo(pageId) {
 
         if (pageId === 'forum') renderForumHome();
         
-        // Profil Logik
         if (pageId === 'profile') {
             if (typeof renderProfilePage === 'function') renderProfilePage();
         }
         
-        // Map Refresh
         if (pageId === 'tours' && map) {
             setTimeout(() => { 
                 map.invalidateSize(); 
@@ -105,9 +108,10 @@ function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
 
-// --- NEU: Navigation fixen ---
+// --- FIX: Profil Navigation ---
+// Diese Funktion wird vom "Profil"-Link in der Navbar aufgerufen.
 window.openMyProfile = () => {
-    viewingUserProfile = null; // Reset auf MICH
+    viewingUserProfile = null; // Erzwingt "Mein Profil"
     navigateTo('profile');
 };
 
@@ -125,9 +129,19 @@ async function syncUserWithBackend(firebaseUser) {
 
         if(response.ok) {
             const dbUser = await response.json();
-            currentRole = dbUser.role || "user"; 
+            
+            // Datenbank-Daten in das lokale currentUser Objekt übernehmen
+            // Damit wir Bio & Freunde sofort griffbereit haben
+            currentUser.role = dbUser.role || "user";
+            currentUser.bio = dbUser.bio || "";
+            currentUser.friends = dbUser.friends || [];
+            currentUser.photoUrl = dbUser.photoUrl || null;
+            
+            currentRole = currentUser.role;
+            console.log("User Sync Success:", currentRole);
+            
             updateUI(); 
-            // Alles neu laden, damit Admin-Rechte greifen
+            
             if (window.loadFeed) window.loadFeed(); 
             loadToursFromServer();                  
             if (getActivePage() === 'forum') renderForumHome();
@@ -199,7 +213,6 @@ function setupEventListeners() {
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
                     e.target.reset();
-                    // Auto-Update
                     await loadForumData(); 
                     await renderForumThreads(currentForumTopic, currentCategoryId); 
                 }
@@ -246,7 +259,11 @@ async function loadToursFromServer() {
             toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             renderTourTree();
         }
-    } catch (error) { console.warn("Tours offline", error); }
+    } catch (error) { 
+        console.warn("Tours offline", error); 
+        const container = document.getElementById('tours-tree-container');
+        if(container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
+    }
 }
 
 function initMap() {
@@ -550,7 +567,7 @@ window.renderForumSubCategory = function(catId) {
         const safeId = topic.id || topic.rowKey || topic.title;
         let deleteBtn = "";
         if (currentRole === 'admin') {
-             // WICHTIG: Typ 'topic'
+             // Typ 'topic'
              deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
         }
 
@@ -766,23 +783,14 @@ window.createPost = async () => {
         });
 
         if (response.ok) {
-            // --- NEU: SOFORT UPDATE ---
-            // Wir warten nicht auf loadFeed, sondern fügen es manuell ein, damit es sich "schneller" anfühlt.
-            // (Idealerweise kommt vom Backend das fertige Post-Objekt zurück)
-            const postData = await response.json(); // Backend sollte den Post zurückgeben
+            // Sofort-Update des Feeds
+            const postData = await response.json(); 
             if(postData && postData.id) {
                 allPostsCache.unshift(postData);
-                // Container leeren und neu rendern (etwas brute force, aber sicher)
-                const container = document.getElementById('feed-posts');
-                if(container) container.innerHTML = "";
-                // Wir rufen die Render-Logik von loadFeed manuell auf (da loadFeed fetcht)
-                // Um Code-Duplizierung zu vermeiden, rufen wir loadFeed auf, aber da wir
-                // optimistisch sein wollen:
-                loadFeed(); // Hier reicht das, da der Server schon geantwortet hat.
+                loadFeed(); // Rendern
             } else {
                 loadFeed();
             }
-            
             alert("Beitrag veröffentlicht!");
             textInput.value = ""; fileInput.value = "";
         } else {
@@ -799,7 +807,6 @@ window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
 
-    // Nur Spinner zeigen, wenn Cache leer ist
     if(allPostsCache.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
@@ -935,10 +942,11 @@ window.insertPostEmoji = function(emoji) {
 };
 
 /* ==========================================
-   PROFIL & USER INTERACTION (KOMPLETT)
+   PROFIL & USER INTERACTION
    ========================================== */
 
 window.openUserProfile = (userId, userName) => {
+    console.log("Öffne Profil für:", userId, userName);
     viewingUserProfile = { 
         uid: userId, 
         displayName: userName, 
@@ -951,9 +959,17 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // 1. Fallback prüfen
+    // 1. Fallback: Auf "MICH" zurückfallen
     if (!viewingUserProfile && currentUser) {
-        viewingUserProfile = { uid: currentUser.uid, displayName: currentUser.displayName, isMe: true };
+        viewingUserProfile = { 
+            uid: currentUser.uid, 
+            displayName: currentUser.displayName, 
+            isMe: true,
+            // Hier nutzen wir die geladenen DB-Daten
+            bio: currentUser.bio,
+            photoUrl: currentUser.photoUrl,
+            friends: currentUser.friends || []
+        };
     } else if (!viewingUserProfile) {
         container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
         return;
@@ -969,8 +985,6 @@ window.renderProfilePage = async () => {
 
     // 3. Bild setzen
     if(imgEl) {
-        // Falls ein echtes Bild existiert (hier simuliert via Avatar API oder DB Feld)
-        // viewingUserProfile könnte ein Feld 'photoUrl' haben
         const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
         imgEl.src = photo;
     }
@@ -979,9 +993,10 @@ window.renderProfilePage = async () => {
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
     if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
     
-    // Freunde-Zähler (Dummy)
+    // Freunde-Zähler
     if(friendsCount) {
-        friendsCount.innerText = `${myFriends.length} Freunde`;
+        const count = viewingUserProfile.friends ? viewingUserProfile.friends.length : 0;
+        friendsCount.innerText = `${count} Freunde`;
     }
 
     // 5. Buttons
@@ -1033,10 +1048,10 @@ window.renderProfilePage = async () => {
     }
 };
 
-// --- NEU: FUNKTIONEN FÜR FEATURES 1-3 ---
+// --- ECHTE FUNKTIONEN MIT BACKEND ---
 
 window.openEditProfile = () => {
-    // Vorbefüllen
+    // Vorbefüllen mit aktuellen Daten
     document.getElementById('editProfileBio').value = document.getElementById('profile-bio').innerText;
     new bootstrap.Modal(document.getElementById('editProfileModal')).show();
 };
@@ -1045,44 +1060,61 @@ window.saveProfile = async (e) => {
     e.preventDefault();
     const newBio = document.getElementById('editProfileBio').value;
     
-    // Hier müsste ein Backend-Call stehen (z.B. /updateUser)
-    // Wir simulieren es UI-seitig:
-    viewingUserProfile.bio = newBio;
+    // Bild Logik (optional für später, da wir noch keinen File-Upload Endpoint haben)
+    // Wir speichern vorerst nur Bio und ggf. eine Foto-URL (falls Text)
+    // Wenn du Bild-Upload willst, brauchst du einen Blob-Storage.
+    // Hier senden wir nur den Bio-Text an update User.
     
-    // Wenn ein Bild gewählt wurde (Logik für Base64 Vorschau)
-    const fileInput = document.getElementById('editProfilePic');
-    if (fileInput.files.length > 0) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            viewingUserProfile.photoUrl = e.target.result; // Base64
-            renderProfilePage(); // UI Refresh
-        }
-        reader.readAsDataURL(fileInput.files[0]);
-    } else {
-        renderProfilePage();
-    }
-    
-    bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
-    alert("Profil aktualisiert (Lokal simuliert)!");
-};
+    try {
+        const response = await fetch(`${API_URL}/updateUser`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                uid: currentUser.uid, 
+                bio: newBio 
+            })
+        });
 
-window.previewProfileImage = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('edit-preview-img').src = e.target.result;
+        if(response.ok) {
+            // UI sofort updaten
+            currentUser.bio = newBio;
+            viewingUserProfile.bio = newBio;
+            renderProfilePage();
+            bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+            alert("Profil gespeichert!");
+        } else {
+            alert("Fehler beim Speichern!");
         }
-        reader.readAsDataURL(file);
+    } catch(err) {
+        alert("Server Fehler: " + err.message);
     }
 };
 
-window.addFriend = (uid) => {
-    if(!myFriends.includes(uid)) {
-        myFriends.push(uid);
-        alert("Freund hinzugefügt!");
-    } else {
-        alert("Bereits befreundet.");
+window.addFriend = async (friendUid) => {
+    if(!currentUser) return alert("Bitte einloggen.");
+    
+    // Optimistisch UI
+    if(!currentUser.friends) currentUser.friends = [];
+    if(currentUser.friends.includes(friendUid)) return alert("Bereits befreundet.");
+    
+    try {
+        const response = await fetch(`${API_URL}/updateUser`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                uid: currentUser.uid, 
+                friendId: friendUid 
+            })
+        });
+
+        if(response.ok) {
+            currentUser.friends.push(friendUid);
+            alert("Freund hinzugefügt!");
+        } else {
+            alert("Fehler beim Hinzufügen.");
+        }
+    } catch(err) {
+        alert("Server Fehler: " + err.message);
     }
 };
 
@@ -1094,8 +1126,7 @@ window.openMessageModal = (recipientName) => {
 window.sendMessage = () => {
     const text = document.getElementById('msg-text').value;
     if(!text) return;
-    // Backend Call wäre hier: fetch('/sendMessage', ...)
-    alert("Nachricht gesendet!");
+    alert("Nachricht gesendet! (Funktion folgt)");
     document.getElementById('msg-text').value = "";
     bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
 };
