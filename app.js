@@ -1111,7 +1111,7 @@ window.openEditProfile = () => {
 };
 
 /* ==========================================
-   PROFIL SPEICHERN (REPARIERT)
+   PROFIL SPEICHERN (OPTION A - JSON FIX)
    ========================================== */
 window.saveProfile = async (e) => {
     e.preventDefault();
@@ -1120,41 +1120,52 @@ window.saveProfile = async (e) => {
     const newBio = document.getElementById('editProfileBio').value;
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
-    // 1. Größenprüfung für Cosmos DB (Max 1.5MB)
-    if (fileInput.files.length > 0) {
-        if (fileInput.files[0].size > 1.5 * 1024 * 1024) { 
-            alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1.5 MB.");
-            return;
-        }
-    }
-
     submitBtn.disabled = true;
     submitBtn.innerText = "Speichere...";
 
+    let photoUrl = currentUser.photoUrl; // Standardmäßig das alte Bild behalten
+
     try {
-        const formData = new FormData();
-        formData.append('uid', currentUser.uid);
-        formData.append('bio', newBio);
-        
+        // 1. Wenn ein neues Bild gewählt wurde, prüfen und umwandeln
         if (fileInput.files.length > 0) {
-            formData.append('profilePic', fileInput.files[0]);
+            const file = fileInput.files[0];
+            
+            // Strikte Größenprüfung (Max 1MB für Base64 Sicherheit)
+            if (file.size > 1024 * 1024) { 
+                alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1 MB.");
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Speichern";
+                return;
+            }
+            
+            // Datei in Base64 umwandeln
+            photoUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
         }
 
+        // 2. Daten als JSON an das Backend senden
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
-            body: formData // FormData automatisch mit richtigem Boundary senden
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                uid: currentUser.uid, 
+                bio: newBio, 
+                photoUrl: photoUrl 
+            })
         });
 
-        if(response.ok) {
+        if (response.ok) {
             const updatedUser = await response.json();
             
             // Lokale Daten aktualisieren
             currentUser.bio = updatedUser.bio || newBio;
-            if(updatedUser.photoUrl) {
-                currentUser.photoUrl = updatedUser.photoUrl;
-            }
+            currentUser.photoUrl = updatedUser.photoUrl || photoUrl;
             
-            // UI neu zeichnen
+            // Profil-Ansicht aktualisieren
             viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
             
@@ -1165,52 +1176,11 @@ window.saveProfile = async (e) => {
             const errorText = await response.text();
             alert("Fehler vom Server: " + errorText);
         }
-    } catch(err) {
+    } catch (err) {
         console.error("Speicherfehler:", err);
-        alert("Netzwerkfehler: " + err.message);
+        alert("Fehler: " + err.message);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
     }
-};
-
-/* ==========================================
-   FREUNDE & NACHRICHTEN
-   ========================================== */
-window.addFriend = async (friendUid) => {
-    if(!currentUser) return alert("Bitte einloggen.");
-    
-    if(!currentUser.friends) currentUser.friends = [];
-    if(currentUser.friends.includes(friendUid)) return alert("Bereits befreundet.");
-    
-    try {
-        const response = await fetch(`${API_URL}/updateUser`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                uid: currentUser.uid, 
-                friendId: friendUid 
-            })
-        });
-
-        if(response.ok) {
-            currentUser.friends.push(friendUid);
-            alert("Freund hinzugefügt!");
-        }
-    } catch(err) {
-        alert("Server Fehler: " + err.message);
-    }
-};
-
-window.openMessageModal = (recipientName) => {
-    document.getElementById('msg-recipient').innerText = recipientName;
-    new bootstrap.Modal(document.getElementById('messageModal')).show();
-};
-
-window.sendMessage = () => {
-    const text = document.getElementById('msg-text').value;
-    if(!text) return;
-    alert("Nachricht gesendet!");
-    document.getElementById('msg-text').value = "";
-    bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
 };
