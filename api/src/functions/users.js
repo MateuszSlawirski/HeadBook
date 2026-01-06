@@ -31,27 +31,28 @@ app.http('users', {
                 const { resource } = await container.item(uid, uid).read();
                 existingUser = resource;
             } catch (err) {
-                // User existiert noch nicht (404), kein Problem.
+                // User existiert noch nicht, kein Problem.
             }
 
-            // 2. Das User-Objekt vorbereiten - Vorhandene Daten schützen!
-const userToSave = {
-    id: uid,
-    email: email,
-    displayName: displayName || (existingUser ? existingUser.displayName : "Biker"),
-    lastLogin: new Date().toISOString(),
-    role: (existingUser && existingUser.role) ? existingUser.role : "user",
-    
-    // ZUSÄTZLICH: Diese Zeilen verhindern das Löschen beim Neuladen
-    bio: existingUser ? existingUser.bio : "",
-    photoUrl: existingUser ? existingUser.photoUrl : null,
-    friends: existingUser ? (existingUser.friends || []) : []
-};
+            // 2. Das User-Objekt vorbereiten - DATEN SCHÜTZEN
+            const userToSave = {
+                id: uid,
+                email: email,
+                displayName: displayName || (existingUser ? existingUser.displayName : "Biker"),
+                lastLogin: new Date().toISOString(),
+                role: (existingUser && existingUser.role) ? existingUser.role : "user",
+                
+                // HIER SIND DIE WICHTIGEN ZEILEN:
+                // Wenn Daten da sind, behalten. Wenn nicht, Standardwert setzen.
+                bio: existingUser ? (existingUser.bio || "") : "",
+                photoUrl: existingUser ? (existingUser.photoUrl || null) : null,
+                friends: existingUser ? (existingUser.friends || []) : []
+            };
 
             // 3. Speichern (Upsert)
             await container.items.upsert(userToSave);
 
-            // 4. UND WICHTIG: Den fertigen User (mit Rolle!) zurück ans Frontend schicken
+            // 4. Den fertigen User zurück ans Frontend schicken
             return { status: 200, jsonBody: userToSave };
 
         } catch (error) {

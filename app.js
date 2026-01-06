@@ -136,19 +136,25 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // WICHTIG: Hier überschreiben wir das lokale currentUser-Objekt 
-            // mit den echten Daten aus der Cosmos DB
+            // 1. Lokale Variablen mit echten Daten aus der Cosmos DB füllen
             currentUser.role = dbUser.role || "user";
             currentUser.bio = dbUser.bio || "";
             currentUser.photoUrl = dbUser.photoUrl || null;
             currentUser.friends = dbUser.friends || [];
+            
+            currentRole = currentUser.role; // Wichtig für Admin-Rechte
+            updateUI(); 
 
-            // Falls wir gerade auf der Profilseite sind, müssen wir sie neu zeichnen
-            if (typeof renderProfilePage === 'function' && document.getElementById('profile-page').classList.contains('active')) {
-                renderProfilePage();
+            // 2. Prüfen ob wir auf der Profilseite sind (ID: page-profile)
+            const profilePage = document.getElementById('page-profile');
+            if (getActivePage() === 'profile' || (profilePage && profilePage.classList.contains('active'))) {
+                viewingUserProfile = null; // Fokus auf "Mein Profil" setzen
+                if (typeof renderProfilePage === 'function') {
+                    renderProfilePage();
+                }
             }
             
-            console.log("Sync erfolgreich. Bio:", currentUser.bio);
+            console.log("Sync erfolgreich. Profil geladen.");
         }
     } catch (err) {
         console.warn("Backend Sync Fehler:", err);
@@ -1106,12 +1112,33 @@ window.openEditProfile = () => {
 
 window.saveProfile = async (e) => {
     e.preventDefault();
-    const newBio = document.getElementById('editProfileBio').value;
-    const fileInput = document.getElementById('editProfilePic');
-    const submitBtn = e.target.querySelector('button[type="submit"]');
     
+    const fileInput = document.getElementById('editProfilePic');
+    const newBio = document.getElementById('editProfileBio').value;
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    // --- NEU: GRÖSSENPRÜFUNG ---
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        if (file.size > 1.5 * 1024 * 1024) { // Limit auf 1.5 MB setzen zur Sicherheit
+            alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1.5 MB, da die Datenbank sonst den Dienst verweigert.");
+            return;
+        }
+    }
+    // ---------------------------
+
     submitBtn.disabled = true;
     submitBtn.innerText = "Speichere...";
+    
+    // ... restlicher Code (fileToBase64, fetch updateUser, etc.)
+}
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Speichere...";
+
+    if (photoUrl && photoUrl.length > 2000000) { 
+    alert("Das Bild ist zu groß für die Datenbank! Bitte wähle ein kleineres Bild.");
+    return;
+}
 
     try {
         const formData = new FormData();
