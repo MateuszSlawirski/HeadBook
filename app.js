@@ -58,7 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 viewingUserProfile = null; // Sicherstellen, dass es MEIN Profil ist
                 renderProfilePage();
             }
-            // ---------------------------------
         } else {
             currentRole = "guest";
             if (getActivePage() === 'profile') navigateTo('home');
@@ -154,6 +153,7 @@ async function syncUserWithBackend(firebaseUser) {
         console.warn("Backend Sync Fehler:", err);
     }
 }
+
 function updateUI() {
     const authBtn = document.getElementById('auth-btn');
     const logoutBtn = document.getElementById('logout-btn');
@@ -1013,78 +1013,7 @@ window.renderProfilePage = async () => {
         return;
     }
 
-  
-
-    // 2. DOM Elemente setzen
-const nameEl = document.getElementById('profile-name');
-const bioEl = document.getElementById('profile-bio');
-const actionArea = document.getElementById('profile-actions');
-const statsArea = document.getElementById('profile-stats-content');
-const imgEl = document.getElementById('profile-img');
-const friendsCount = document.getElementById('friend-count');
-
-// Bild sicher setzen
-if (imgEl && viewingUserProfile) { 
-    imgEl.src = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-}
-
-if (nameEl && viewingUserProfile) nameEl.innerText = viewingUserProfile.displayName;
-if (bioEl && viewingUserProfile) {
-    bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
-}
-
-if (friendsCount && viewingUserProfile) {
-    const count = viewingUserProfile.friends ? viewingUserProfile.friends.length : 0;
-    friendsCount.innerText = `${count} Freunde`;
-}
-
-    // 3. Statistiken und Aktivitäten
-    if (statsArea) {
-        statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
-        
-        const targetName = viewingUserProfile.displayName;
-        const myTours = toursData.filter(t => t.user === targetName);
-        const myPosts = allPostsCache.filter(p => p.user === targetName);
-        const myThreads = allThreadsCache.filter(t => t.user === targetName);
-
-        let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
-                        <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
-                        <div class="bg-light p-2 rounded px-3"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
-                        <div class="bg-light p-2 rounded px-3"><b>${myThreads.length}</b><br><small>Themen</small></div>
-                    </div>`;
-
-        if (myTours.length > 0) {
-            html += `<h6 class="fw-bold mt-3">🏍️ Touren</h6><div class="list-group mb-3">`;
-            myTours.forEach(t => {
-                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">${t.title} <small class="text-muted">(${t.km} km)</small></a>`;
-            });
-            html += `</div>`;
-        }
-        
-        if (myPosts.length > 0) {
-             html += `<h6 class="fw-bold mt-3">📸 Beiträge</h6><div class="list-group mb-3">`;
-             myPosts.forEach(p => {
-                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">${p.content || "Medien Inhalt"}</div>`;
-             });
-             html += `</div>`;
-        }
-
-        if (myThreads.length > 0) {
-             html += `<h6 class="fw-bold mt-3">💬 Community Themen</h6><div class="list-group mb-3">`;
-             myThreads.forEach(t => {
-                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">${t.title}</div>`;
-             });
-             html += `</div>`;
-        }
-
-        if(myTours.length === 0 && myPosts.length === 0 && myThreads.length === 0) {
-            html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
-        }
-        statsArea.innerHTML = html;
-    }
-}; 
-
-    // 2. DOM Elemente finden
+    // 2. DOM Elemente finden (NUR EINMAL DEFINIEREN!)
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
@@ -1094,6 +1023,7 @@ if (friendsCount && viewingUserProfile) {
 
     // 3. Bild setzen
     if(imgEl) {
+        // Sicherer Fallback, falls photoUrl null ist
         const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
         imgEl.src = photo;
     }
@@ -1127,7 +1057,6 @@ if (friendsCount && viewingUserProfile) {
         const targetName = viewingUserProfile.displayName;
         const myTours = toursData.filter(t => t.user === targetName);
         const myPosts = allPostsCache.filter(p => p.user === targetName);
-        // FIX: Community Threads im Profil anzeigen
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
 
         let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
@@ -1147,13 +1076,11 @@ if (friendsCount && viewingUserProfile) {
         if (myPosts.length > 0) {
              html += `<h6 class="fw-bold mt-3">📸 Beiträge</h6><div class="list-group mb-3">`;
              myPosts.forEach(p => {
-                 // FIX: Klick auf Beitrag springt zum Feed
                  html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">${p.content || "Medien Inhalt"}</div>`;
              });
              html += `</div>`;
         }
 
-        // FIX: Community Beiträge anzeigen
         if (myThreads.length > 0) {
              html += `<h6 class="fw-bold mt-3">💬 Community Themen</h6><div class="list-group mb-3">`;
              myThreads.forEach(t => {
@@ -1168,6 +1095,7 @@ if (friendsCount && viewingUserProfile) {
 
         statsArea.innerHTML = html;
     }
+};
 
 window.openEditProfile = () => {
     const bioText = document.getElementById('profile-bio')?.innerText || "";
@@ -1181,8 +1109,19 @@ window.openEditProfile = () => {
     }
 };
 
+window.previewProfileImage = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('edit-preview-img').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+};
+
 /* ==========================================
-   PROFIL SPEICHERN (OPTION B - BLOB STORAGE)
+   PROFIL SPEICHERN (BLOB STORAGE)
    ========================================== */
 window.saveProfile = async (e) => {
     e.preventDefault();
