@@ -1111,7 +1111,7 @@ window.openEditProfile = () => {
 };
 
 /* ==========================================
-   PROFIL SPEICHERN (OPTION A - JSON FIX)
+   PROFIL SPEICHERN (OPTION B - BLOB STORAGE)
    ========================================== */
 window.saveProfile = async (e) => {
     e.preventDefault();
@@ -1123,62 +1123,43 @@ window.saveProfile = async (e) => {
     submitBtn.disabled = true;
     submitBtn.innerText = "Speichere...";
 
-    let photoUrl = currentUser.photoUrl; // Standardmäßig das alte Bild behalten
-
     try {
-        // 1. Wenn ein neues Bild gewählt wurde, prüfen und umwandeln
+        const formData = new FormData();
+        formData.append('uid', currentUser.uid);
+        formData.append('bio', newBio);
+        
+        // Wenn eine Datei ausgewählt wurde, hängen wir sie an
         if (fileInput.files.length > 0) {
-            const file = fileInput.files[0];
-            
-            // Strikte Größenprüfung (Max 1MB für Base64 Sicherheit)
-            if (file.size > 1024 * 1024) { 
-                alert("Das Bild ist zu groß! Bitte wähle ein Bild unter 1 MB.");
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Speichern";
-                return;
-            }
-            
-            // Datei in Base64 umwandeln
-            photoUrl = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+            formData.append('profilePic', fileInput.files[0]);
         }
 
-        // 2. Daten als JSON an das Backend senden
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                uid: currentUser.uid, 
-                bio: newBio, 
-                photoUrl: photoUrl 
-            })
+            // WICHTIG: Bei FormData darf KEIN Content-Type Header gesetzt werden!
+            body: formData 
         });
 
         if (response.ok) {
             const updatedUser = await response.json();
             
-            // Lokale Daten aktualisieren
+            // Lokale Daten mit den neuen URLs vom Server aktualisieren
             currentUser.bio = updatedUser.bio || newBio;
-            currentUser.photoUrl = updatedUser.photoUrl || photoUrl;
+            if (updatedUser.photoUrl) {
+                currentUser.photoUrl = updatedUser.photoUrl;
+            }
             
-            // Profil-Ansicht aktualisieren
             viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
             
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editProfileModal'));
-            if (modal) modal.hide();
-            alert("Profil erfolgreich gespeichert!");
+            bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+            alert("Profil erfolgreich im Storage gespeichert!");
         } else {
             const errorText = await response.text();
-            alert("Fehler vom Server: " + errorText);
+            alert("Fehler: " + errorText);
         }
     } catch (err) {
-        console.error("Speicherfehler:", err);
-        alert("Fehler: " + err.message);
+        console.error("Storage-Upload Fehler:", err);
+        alert("Netzwerkfehler: " + err.message);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
