@@ -1,7 +1,7 @@
 /* ==========================================
-   VERSION FINAL FIX 
+   APP MIT TOAST NOTIFICATIONS (v2.5)
    ========================================== */
-console.log("%c STARTING APP - VERSION FINAL FIX ", "background: green; color: white; padding: 5px; font-weight: bold;");
+console.log("%c TOAST VERSION LOADED ", "background: blue; color: white; padding: 5px; font-weight: bold;");
 
 import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -38,6 +38,33 @@ let allThreadsCache = [];
 
 const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
+/* ==========================================
+   HELPER: TOAST NOTIFICATIONS
+   ========================================== */
+window.showToast = (message, isError = false) => {
+    const toastEl = document.getElementById('appToast');
+    const msgEl = document.getElementById('toast-message');
+    
+    if (!toastEl || !msgEl) {
+        console.warn("Toast Container fehlt!", message);
+        alert(message); // Fallback
+        return;
+    }
+
+    msgEl.innerText = message;
+
+    if (isError) {
+        toastEl.classList.remove('bg-success');
+        toastEl.classList.add('bg-danger');
+    } else {
+        toastEl.classList.remove('bg-danger');
+        toastEl.classList.add('bg-success');
+    }
+
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+};
+
 
 /* ==========================================
    APP START 
@@ -45,18 +72,15 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
-    // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         
         if (user) {
             updateUI(); 
-            // Daten aus DB holen
             await syncUserWithBackend(user); 
             
-            // Wenn wir auf der Profilseite sind, diese neu laden
             if (getActivePage() === 'profile') {
-                viewingUserProfile = null; // Reset auf "Mein Profil"
+                viewingUserProfile = null; 
                 renderProfilePage();
             }
         } else {
@@ -192,7 +216,11 @@ window.openAddTourModal = () => {
 
 function setupEventListeners() {
     const btnLogout = document.getElementById('logout-btn');
-    if(btnLogout) btnLogout.addEventListener('click', async () => { await signOut(auth); navigateTo('home'); });
+    if(btnLogout) btnLogout.addEventListener('click', async () => { 
+        await signOut(auth); 
+        window.showToast("Erfolgreich ausgeloggt.");
+        navigateTo('home'); 
+    });
 
     const authForm = document.getElementById('authForm');
     if(authForm) authForm.addEventListener('submit', (e) => {
@@ -205,7 +233,7 @@ function setupEventListeners() {
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            if (!currentUser) return alert("Bitte logge dich erst ein!");
+            if (!currentUser) return window.showToast("Bitte logge dich erst ein!", true);
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
             try {
@@ -219,8 +247,9 @@ function setupEventListeners() {
                     e.target.reset();
                     await loadForumData(); 
                     await renderForumThreads(currentForumTopic, currentCategoryId); 
+                    window.showToast("Thema erstellt!");
                 }
-            } catch (err) { alert(err.message); }
+            } catch (err) { window.showToast("Fehler: " + err.message, true); }
         });
     }
 
@@ -242,8 +271,9 @@ function setupEventListeners() {
                     e.target.reset();
                     await loadForumData();
                     renderForumSubCategory(mainCatId);
+                    window.showToast("Kategorie angelegt.");
                 }
-            } catch (err) { alert(err.message); }
+            } catch (err) { window.showToast("Fehler: " + err.message, true); }
         });
     }
 
@@ -400,7 +430,7 @@ function parseAndPreviewGpx(gpxText) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(gpxText, "text/xml");
     const trkpts = xmlDoc.getElementsByTagName("trkpt");
-    if (trkpts.length === 0) return alert("Fehler: Keine Wegpunkte in GPX.");
+    if (trkpts.length === 0) return window.showToast("Fehler: Keine Wegpunkte in GPX.", true);
 
     let coordinates = [];
     let totalDist = 0;
@@ -436,8 +466,8 @@ function deg2rad(deg) { return deg * (Math.PI / 180); }
 
 async function handleAddTour(e) {
     e.preventDefault();
-    if (!currentUser) return alert("Bitte einloggen.");
-    if (!tempGpxData) return alert("Bitte erst eine GPX Datei wählen.");
+    if (!currentUser) return window.showToast("Bitte einloggen.", true);
+    if (!tempGpxData) return window.showToast("Bitte erst eine GPX Datei wählen.", true);
 
     const newTour = {
         title: document.getElementById('newTitle').value,
@@ -469,9 +499,9 @@ async function handleAddTour(e) {
             tempGpxData = null;
             document.getElementById('btn-publish-tour').disabled = true;
             showTourOnMap(savedTour);
-            alert("Tour erfolgreich hochgeladen!");
+            window.showToast("Tour erfolgreich hochgeladen!");
         }
-    } catch (err) { alert("Fehler beim Speichern: " + err.message); }
+    } catch (err) { window.showToast("Fehler beim Speichern: " + err.message, true); }
 }
 
 /* ==========================================
@@ -490,7 +520,7 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
         });
 
         if (response.ok) {
-            alert("Gelöscht!");
+            window.showToast("Gelöscht!");
             if (type === 'tour') { loadToursFromServer(); }
             else if (type === 'post' || type === 'comment') { window.loadFeed(); }
             else if (type === 'thread' || type === 'reply') { 
@@ -502,9 +532,9 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
             }
         } else {
             const err = await response.text();
-            alert(`Fehler beim Löschen (${response.status}):\n${err}`);
+            window.showToast(`Fehler beim Löschen (${response.status}):\n${err}`, true);
         }
-    } catch (e) { console.error(e); alert("Server Fehler"); }
+    } catch (e) { console.error(e); window.showToast("Server Fehler", true); }
 };
 
 function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
@@ -522,7 +552,7 @@ function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=nul
 
 window.downloadGPX = (tourId) => {
     const tour = toursData.find(t => t.id === tourId);
-    if (!tour || !tour.routeGeometry) return alert("Keine Routendaten.");
+    if (!tour || !tour.routeGeometry) return window.showToast("Keine Routendaten.", true);
     let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Riderpoint"><trk><name>${tour.title}</name><trkseg>`;
     tour.routeGeometry.forEach(pt => { gpx += `\n<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`; });
     gpx += `\n</trkseg></trk></gpx>`;
@@ -703,7 +733,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
 
 window.sendReply = async function(threadId, topic, catId) {
     const text = document.getElementById('replyText').value;
-    if (!text.trim()) return alert("Bitte Text eingeben!");
+    if (!text.trim()) return window.showToast("Bitte Text eingeben!", true);
     try {
         const response = await fetch(`${API_URL}/addReply`, {
             method: 'POST',
@@ -711,7 +741,7 @@ window.sendReply = async function(threadId, topic, catId) {
             body: JSON.stringify({ id: threadId, topic, text, user: currentUser.displayName || "Unbekannt" })
         });
         if (response.ok) renderThreadDetail(threadId, topic, catId);
-    } catch (err) { alert(err.message); }
+    } catch (err) { window.showToast(err.message, true); }
 };
 
 // --- HELPER: THREAD ÖFFNEN VOM PROFIL AUS ---
@@ -795,12 +825,12 @@ window.openAddCategoryModal = (id) => { document.getElementById('mainCatIdInput'
 window.insertEmoji = (emoji, id = 'threadText') => { const el = document.getElementById(id); if(el) { el.value += emoji; el.focus(); } };
 
 window.createPost = async () => {
-    if (!auth.currentUser) { return alert("Bitte melde dich erst an, um zu posten!"); }
+    if (!auth.currentUser) { return window.showToast("Bitte melde dich erst an, um zu posten!", true); }
     const textInput = document.getElementById('postInputText');
     const fileInput = document.getElementById('postInputFile');
     const submitBtn = document.querySelector('button[onclick="window.createPost()"]');
 
-    if (!textInput.value.trim() && fileInput.files.length === 0) { return alert("Bitte schreibe etwas."); }
+    if (!textInput.value.trim() && fileInput.files.length === 0) { return window.showToast("Bitte schreibe etwas.", true); }
 
     const oldText = submitBtn.innerText;
     submitBtn.innerText = "Sende...";
@@ -827,7 +857,7 @@ window.createPost = async () => {
             } else {
                 loadFeed();
             }
-            alert("Beitrag veröffentlicht!");
+            window.showToast("Beitrag veröffentlicht!");
             textInput.value = ""; fileInput.value = "";
         } else {
             console.error("Server Fehler:", await response.text());
@@ -930,7 +960,7 @@ window.loadFeed = async function() {
 };
 
 window.toggleLike = async (postId) => {
-    if (!auth.currentUser) return alert("Bitte erst einloggen!");
+    if (!auth.currentUser) return window.showToast("Bitte erst einloggen!", true);
     const btn = document.getElementById(`btn-like-${postId}`);
     const countSpan = document.getElementById(`like-count-${postId}`);
     const isLiked = btn.classList.contains('liked');
@@ -949,7 +979,7 @@ window.toggleLike = async (postId) => {
 };
 
 window.postComment = async (postId) => {
-    if (!auth.currentUser) return alert("Bitte erst einloggen!");
+    if (!auth.currentUser) return window.showToast("Bitte erst einloggen!", true);
     const input = document.getElementById(`input-comment-${postId}`);
     const text = input.value.trim();
     if (!text) return;
@@ -1164,36 +1194,13 @@ window.saveProfile = async (e) => {
             window.showToast("✅ Profil erfolgreich gespeichert!");
         } else {
             const errorText = await response.text();
-            window.showToast("❌ Fehler: " + errorText, true); // Das 'true' macht es rot
+            window.showToast("❌ Fehler: " + errorText, true);
         }
     } catch (err) {
         console.error("Storage-Upload Fehler:", err);
-        alert("Netzwerkfehler: " + err.message);
+        window.showToast("❌ Netzwerkfehler: " + err.message, true);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
     }
-};
-// Globale Funktion für Benachrichtigungen
-window.showToast = (message, isError = false) => {
-    const toastEl = document.getElementById('appToast');
-    const msgEl = document.getElementById('toast-message');
-    
-    if (!toastEl || !msgEl) return;
-
-    // Text setzen
-    msgEl.innerText = message;
-
-    // Farbe ändern (Grün für Erfolg, Rot für Fehler)
-    if (isError) {
-        toastEl.classList.remove('bg-success');
-        toastEl.classList.add('bg-danger');
-    } else {
-        toastEl.classList.remove('bg-danger');
-        toastEl.classList.add('bg-success');
-    }
-
-    // Anzeigen (Bootstrap Funktion)
-    const toast = new bootstrap.Toast(toastEl);
-    toast.show();
-};
+}
