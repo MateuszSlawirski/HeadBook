@@ -1003,21 +1003,26 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // 1. Fallback prüfen
+    // WICHTIG: Wenn kein fremdes Profil gewählt ist, nimm das eigene
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
-            displayName: currentUser.displayName, 
+            displayName: currentUser.displayName || currentUser.email.split('@')[0], 
             isMe: true,
-            // Hier nutzen wir die geladenen DB-Daten
-            bio: currentUser.bio,
-            photoUrl: currentUser.photoUrl,
+            bio: currentUser.bio || "",
+            photoUrl: currentUser.photoUrl || null,
             friends: currentUser.friends || []
         };
-    } else if (!viewingUserProfile) {
+    } 
+
+    // Jetzt erst prüfen: Wenn immer noch kein Profil da ist, DANN Fehlermeldung
+    if (!viewingUserProfile) {
         container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
         return;
     }
+
+   
+};
 
     // 2. DOM Elemente finden
     const nameEl = document.getElementById('profile-name');
