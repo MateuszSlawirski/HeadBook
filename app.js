@@ -38,7 +38,7 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
 
 /* ==========================================
-   APP START 
+   APP START (v2.4 Fix)
    ========================================== */
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
@@ -1175,3 +1175,4 @@ window.saveProfile = async (e) => {
         submitBtn.innerText = "Speichern";
     }
 };
+// ENDE DER DATEI
