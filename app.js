@@ -1161,10 +1161,10 @@ window.saveProfile = async (e) => {
             renderProfilePage();
             
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
-            alert("Profil erfolgreich im Storage gespeichert!");
+            window.showToast("✅ Profil erfolgreich gespeichert!");
         } else {
             const errorText = await response.text();
-            alert("Fehler: " + errorText);
+            window.showToast("❌ Fehler: " + errorText, true); // Das 'true' macht es rot
         }
     } catch (err) {
         console.error("Storage-Upload Fehler:", err);
@@ -1173,4 +1173,27 @@ window.saveProfile = async (e) => {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
     }
+};
+// Globale Funktion für Benachrichtigungen
+window.showToast = (message, isError = false) => {
+    const toastEl = document.getElementById('appToast');
+    const msgEl = document.getElementById('toast-message');
+    
+    if (!toastEl || !msgEl) return;
+
+    // Text setzen
+    msgEl.innerText = message;
+
+    // Farbe ändern (Grün für Erfolg, Rot für Fehler)
+    if (isError) {
+        toastEl.classList.remove('bg-success');
+        toastEl.classList.add('bg-danger');
+    } else {
+        toastEl.classList.remove('bg-danger');
+        toastEl.classList.add('bg-success');
+    }
+
+    // Anzeigen (Bootstrap Funktion)
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
 };
