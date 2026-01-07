@@ -1,7 +1,7 @@
 /* ==========================================
-   APP COMPLETE (V3.1 - RESTORED & NEW FEATURES)
+   APP COMPLETE (V3.2 - UNCOMPRESSED & FIXED)
    ========================================== */
-console.log("%c FULL APP RESTORED ", "background: darkblue; color: white; padding: 5px; font-weight: bold;");
+console.log("%c APP V3.2 LOADED - SAFE MODE ", "background: darkgreen; color: white; padding: 5px; font-weight: bold;");
 
 import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -29,6 +29,7 @@ let viewingUserProfile = null;
 // MAP STATE
 let map = null;
 let currentRouteLayer = null; 
+let tempGpxData = null; // Für den Upload
 
 // FORUM STATE
 let currentForumTopic = null; 
@@ -46,7 +47,8 @@ window.showToast = (message, isError = false) => {
     const msgEl = document.getElementById('toast-message');
     
     if (!toastEl || !msgEl) {
-        alert(message); // Fallback
+        // Fallback falls HTML fehlt
+        console.log(message);
         return;
     }
     msgEl.innerText = message;
@@ -67,6 +69,7 @@ window.showToast = (message, isError = false) => {
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
+    // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         
@@ -74,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateUI(); 
             await syncUserWithBackend(user); 
             
+            // Profil neu laden falls aktiv
             if (getActivePage() === 'profile') {
                 viewingUserProfile = null; 
                 renderProfilePage();
@@ -85,9 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // WICHTIG: Funktionen aufrufen, die unten definiert sind
     loadToursFromServer();
     loadForumData(); 
-    if(window.loadFeed) window.loadFeed();
+    if(typeof window.loadFeed === 'function') window.loadFeed();
+    
     setupEventListeners();
     
     const startPage = window.location.hash.replace('#', '') || 'home';
@@ -197,45 +203,72 @@ window.openAddTourModal = () => {
 };
 
 /* ==========================================
-   FREUNDE & INTERAKTION (NEU)
+   DATA LOADING FUNCTIONS (WICHTIG!)
+   ========================================== */
+
+// 1. Touren laden
+async function loadToursFromServer() {
+    try {
+        const response = await fetch(`${API_URL}/GetTours`);
+        if (response.ok) {
+            toursData = await response.json();
+            toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            renderTourTree();
+        }
+    } catch (error) { 
+        console.warn("Tours offline", error); 
+        const container = document.getElementById('tours-tree-container');
+        if (container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
+    }
+}
+
+// 2. Forum Daten laden
+async function loadForumData() {
+    try {
+        const catResponse = await fetch(`${API_URL}/forum`);
+        allForumData = await catResponse.json();
+        
+        const threadResponse = await fetch(`${API_URL}/getThreads`); 
+        if (threadResponse.ok) allThreadsCache = await threadResponse.json();
+        
+        if (!currentCategoryId && !currentForumTopic && getActivePage() === 'forum') {
+            renderForumHome();
+        }
+    } catch (error) { 
+        console.error("Forum Ladefehler:", error); 
+    }
+}
+
+/* ==========================================
+   PROFIL & FREUNDE
    ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
     if (targetUid === currentUser.uid) return window.showToast("Du kannst dich nicht selbst adden", true);
 
     if (!currentUser.friends) currentUser.friends = [];
+    
     if (!currentUser.friends.includes(targetUid)) {
         currentUser.friends.push(targetUid);
+        window.showToast("Freund hinzugefügt (Lokal)");
         
-        // Backend Update simulieren (da kein expliziter Endpoint existiert, nutzen wir UpdateUser Logik)
-        // In einer echten App: await fetch('/api/addFriend', ...)
-        window.showToast("Freundschaftsanfrage gesendet (Simuliert)");
+        // Simuliertes Backend-Update via updateUser
+        try {
+            // Da wir nur updateUser haben und keine dedizierte addFriend route:
+            // Hinweis: Das hier speichert nur lokal im currentUser Objekt für die Session,
+            // um es permanent zu machen, müsste man das ganze Array ans Backend senden.
+            // Das ist komplex ohne dedizierten Endpoint.
+        } catch (e) { console.error(e); }
         
-        // UI aktualisieren, falls wir auf dem Profil sind
+        // UI aktualisieren
         const btn = document.querySelector('button[onclick*="addFriend"]');
-        if(btn) { btn.disabled = true; btn.innerText = "Angefragt"; }
+        if(btn) { btn.disabled = true; btn.innerText = "Befreundet"; }
+        
     } else {
         window.showToast("Bereits befreundet.");
     }
 };
 
-window.openMessageModal = (recipientName) => {
-    const modalEl = document.getElementById('messageModal');
-    document.getElementById('msg-recipient').innerText = recipientName;
-    new bootstrap.Modal(modalEl).show();
-};
-
-window.sendMessage = () => {
-    const text = document.getElementById('msg-text').value;
-    if(!text) return;
-    window.showToast("Nachricht gesendet!");
-    bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
-    document.getElementById('msg-text').value = "";
-};
-
-/* ==========================================
-   PROFIL & RENDER LOGIK
-   ========================================== */
 window.openUserProfile = (userId, userName) => {
     viewingUserProfile = { 
         uid: userId, 
@@ -249,6 +282,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
+    // Daten vorbereiten
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -265,7 +299,7 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // HTML Gerüst wiederherstellen
+    // HTML Gerüst prüfen und ggf. wiederherstellen
     if (!document.getElementById('profile-name')) {
         container.innerHTML = `
         <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
@@ -311,7 +345,7 @@ window.renderProfilePage = async () => {
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
     if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
 
-    // Freundesliste
+    // Freundesliste rendern
     if (friendsContainer) {
         let friends = viewingUserProfile.friends || [];
         let friendsHtml = '<div class="small text-muted mb-1 fw-bold">Freunde (' + friends.length + ')</div>';
@@ -448,13 +482,30 @@ window.saveProfile = async (e) => {
     }
 };
 
+window.openMessageModal = (recipientName) => {
+    const modalEl = document.getElementById('messageModal');
+    document.getElementById('msg-recipient').innerText = recipientName;
+    new bootstrap.Modal(modalEl).show();
+};
+
+window.sendMessage = () => {
+    const text = document.getElementById('msg-text').value;
+    if(!text) return;
+    window.showToast("Nachricht gesendet!");
+    bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
+    document.getElementById('msg-text').value = "";
+};
+
 /* ==========================================
-   FEED / POSTS / LÖSCHEN / FORUM (RESTORED)
+   FEED / POSTS
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
-    if(allPostsCache.length === 0) container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+    
+    if(allPostsCache.length === 0) {
+        container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
+    }
 
     try {
         const response = await fetch(`${API_URL}/getPosts`);
@@ -462,7 +513,10 @@ window.loadFeed = async function() {
         const posts = await response.json();
         allPostsCache = posts;
         container.innerHTML = ""; 
-        if (posts.length === 0) { container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge.</div>'; return; }
+        if (posts.length === 0) { 
+            container.innerHTML = '<div class="text-center p-4 text-muted">Noch keine Beiträge.</div>'; 
+            return; 
+        }
 
         posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         posts.forEach(post => {
@@ -596,7 +650,9 @@ function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=nul
     return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" onclick="event.stopPropagation(); deleteItem('${type}', ${formatArg(id)}, ${formatArg(partitionKey)}, ${formatArg(parentId)}, ${formatArg(text)}, ${formatArg(user)})">🗑️</button>`;
 }
 
-// Forum Logic Re-Added
+/* ==========================================
+   FORUM FUNCTIONS
+   ========================================== */
 window.renderForumHome = function() {
     currentCategoryId = null; currentForumTopic = null;
     renderBreadcrumbs([]); 
@@ -708,25 +764,173 @@ function setupEventListeners() {
     if(btnLogout) btnLogout.addEventListener('click', async () => { await signOut(auth); window.showToast("Erfolgreich ausgeloggt."); navigateTo('home'); });
     const authForm = document.getElementById('authForm');
     if(authForm) authForm.addEventListener('submit', (e) => { e.preventDefault(); const isReg = document.getElementById('authNameContainer').style.display === 'block'; if (isReg) handleRegister(); else handleLogin(e); });
+    
+    // Forum Event Listeners
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) { createThreadForm.addEventListener('submit', async (e) => { e.preventDefault(); if (!currentUser) return window.showToast("Bitte logge dich erst ein!", true); const title = document.getElementById('threadTitle').value; const text = document.getElementById('threadText').value; try { const response = await fetch(`${API_URL}/createThread`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic: currentForumTopic, title, text, user: currentUser.displayName || "Unbekannt" }) }); if (response.ok) { bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide(); e.target.reset(); await loadForumData(); await renderForumThreads(currentForumTopic, currentCategoryId); window.showToast("Thema erstellt!"); } } catch (err) { window.showToast("Fehler: " + err.message, true); } }); }
+    
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) { addCategoryForm.addEventListener('submit', async (e) => { e.preventDefault(); const mainCatId = document.getElementById('mainCatIdInput').value; const title = document.getElementById('newCatTitle').value; const desc = document.getElementById('newCatDesc').value; try { const response = await fetch(`${API_URL}/addCategory`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mainCatId, title, desc }) }); if (response.ok) { bootstrap.Modal.getInstance(document.getElementById('addCategoryModal')).hide(); e.target.reset(); await loadForumData(); renderForumSubCategory(mainCatId); window.showToast("Kategorie angelegt."); } } catch (err) { window.showToast("Fehler: " + err.message, true); } }); }
+    
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
 
-// Map helpers
-function initMap() { if (map) return; const mapContainer = document.getElementById('map'); if (!mapContainer) return; map = L.map('map').setView([51.16, 10.45], 6); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map); }
-async function loadToursFromServer() { try { const response = await fetch(`${API_URL}/GetTours`); if (response.ok) { toursData = await response.json(); toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); renderTourTree(); } } catch (error) { console.warn("Tours offline", error); document.getElementById('tours-tree-container').innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>'; } }
-function renderTourTree() { const container = document.getElementById('tours-tree-container'); if (!container) return; container.innerHTML = ''; if (toursData.length === 0) { container.innerHTML = '<div class="p-4 text-center text-muted">Noch keine Touren vorhanden.</div>'; return; } const groups = {}; toursData.forEach(tour => { const region = tour.category || "Sonstiges"; const country = tour.country || "Unbekannt"; if (!groups[region]) groups[region] = {}; if (!groups[region][country]) groups[region][country] = []; groups[region][country].push(tour); }); let html = `<div class="accordion accordion-flush" id="accordionRegions">`; Object.keys(groups).sort().forEach((region, index) => { const regionId = `heading${index}`; const collapseId = `collapse${index}`; html += `<div class="accordion-item bg-transparent"><h2 class="accordion-header" id="${regionId}"><button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">🌍 ${region}</button></h2><div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" data-bs-parent="#accordionRegions"><div class="accordion-body p-0">`; const countries = groups[region]; Object.keys(countries).sort().forEach(country => { const tours = countries[country]; html += `<div class="bg-light p-2 ps-3 fw-bold text-secondary border-bottom border-top"><small>🏳️ ${country}</small></div><div class="list-group list-group-flush">`; tours.forEach(tour => { html += createTourListItem(tour); }); html += `</div>`; }); html += `</div></div></div>`; }); html += `</div>`; container.innerHTML = html; }
-function createTourListItem(tour) { let actionBtn = ""; if (tour.routeGeometry) { actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`; } const deleteBtn = getDeleteBtn('tour', tour.id, tour.id); return `<div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;"><div class="d-flex justify-content-between"><h6 class="fw-bold mb-1 text-primary text-truncate">${tour.title}</h6><small class="text-muted text-nowrap">${tour.km} km</small></div><p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p><div class="d-flex justify-content-between align-items-center"><div><span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span><small class="text-muted" style="font-size:0.8em">von <b style="cursor:pointer" class="text-primary" onclick="event.stopPropagation(); openUserProfile('${tour.userId}', '${tour.user}')">${tour.user || "Unbekannt"}</b></small></div><div>${actionBtn + deleteBtn}</div></div></div>`; }
-window.selectTour = (tourId) => { document.querySelectorAll('.tour-item-card').forEach(el => el.classList.remove('tour-card-active')); const activeCard = document.getElementById(`tour-card-${tourId}`); if(activeCard) activeCard.classList.add('tour-card-active'); showTourOnMap(tourId); if(window.innerWidth < 768) { document.getElementById('map').scrollIntoView({behavior: 'smooth'}); } };
-window.showTourOnMap = (tourId) => { const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId; if (!tour) return; if (currentRouteLayer) map.removeLayer(currentRouteLayer); if (tour.coords) map.flyTo(tour.coords, 11); if (tour.routeGeometry && tour.routeGeometry.length > 0) { currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map); map.fitBounds(currentRouteLayer.getBounds()); } };
-window.handleGpxFileSelect = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => parseAndPreviewGpx(e.target.result); reader.readAsText(file); };
-function parseAndPreviewGpx(gpxText) { const parser = new DOMParser(); const xmlDoc = parser.parseFromString(gpxText, "text/xml"); const trkpts = xmlDoc.getElementsByTagName("trkpt"); if (trkpts.length === 0) return alert("Fehler: Keine Wegpunkte in GPX."); let coordinates = []; let totalDist = 0; for (let i = 0; i < trkpts.length; i++) { const lat = parseFloat(trkpts[i].getAttribute("lat")); const lon = parseFloat(trkpts[i].getAttribute("lon")); coordinates.push([lat, lon]); if (i > 0) { const prev = coordinates[i - 1]; totalDist += getDistanceFromLatLonInKm(prev[0], prev[1], lat, lon); } } const km = totalDist.toFixed(1); const hours = Math.floor(km / 60); const minutes = Math.round((km % 60)); document.getElementById('newKm').value = km; document.getElementById('newTime').value = `${hours}h ${minutes}min`; document.getElementById('btn-publish-tour').disabled = false; tempGpxData = { routeGeometry: coordinates, coords: coordinates[0], km: km }; }
-let tempGpxData = null;
-function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) { var R = 6371; var dLat = deg2rad(lat2 - lat1); var dLon = deg2rad(lon2 - lon1); var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat1)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return R * c; }
+// Map helpers (Uncompressed)
+function initMap() { 
+    if (map) return; 
+    const mapContainer = document.getElementById('map'); 
+    if (!mapContainer) return; 
+    map = L.map('map').setView([51.16, 10.45], 6); 
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map); 
+}
+
+function renderTourTree() { 
+    const container = document.getElementById('tours-tree-container'); 
+    if (!container) return; 
+    container.innerHTML = ''; 
+    if (toursData.length === 0) { container.innerHTML = '<div class="p-4 text-center text-muted">Noch keine Touren vorhanden.</div>'; return; } 
+    const groups = {}; 
+    toursData.forEach(tour => { 
+        const region = tour.category || "Sonstiges"; 
+        const country = tour.country || "Unbekannt"; 
+        if (!groups[region]) groups[region] = {}; 
+        if (!groups[region][country]) groups[region][country] = []; 
+        groups[region][country].push(tour); 
+    }); 
+    let html = `<div class="accordion accordion-flush" id="accordionRegions">`; 
+    Object.keys(groups).sort().forEach((region, index) => { 
+        const regionId = `heading${index}`; 
+        const collapseId = `collapse${index}`; 
+        html += `<div class="accordion-item bg-transparent"><h2 class="accordion-header" id="${regionId}"><button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">🌍 ${region}</button></h2><div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" data-bs-parent="#accordionRegions"><div class="accordion-body p-0">`; 
+        const countries = groups[region]; 
+        Object.keys(countries).sort().forEach(country => { 
+            const tours = countries[country]; 
+            html += `<div class="bg-light p-2 ps-3 fw-bold text-secondary border-bottom border-top"><small>🏳️ ${country}</small></div><div class="list-group list-group-flush">`; 
+            tours.forEach(tour => { html += createTourListItem(tour); }); 
+            html += `</div>`; 
+        }); 
+        html += `</div></div></div>`; 
+    }); 
+    html += `</div>`; 
+    container.innerHTML = html; 
+}
+
+function createTourListItem(tour) { 
+    let actionBtn = ""; 
+    if (tour.routeGeometry) { actionBtn = `<button class="btn btn-link btn-sm text-decoration-none p-0" onclick="event.stopPropagation(); downloadGPX('${tour.id}')">💾 GPX</button>`; } 
+    const deleteBtn = getDeleteBtn('tour', tour.id, tour.id); 
+    return `<div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;"><div class="d-flex justify-content-between"><h6 class="fw-bold mb-1 text-primary text-truncate">${tour.title}</h6><small class="text-muted text-nowrap">${tour.km} km</small></div><p class="mb-2 text-muted small text-truncate" style="max-width: 95%;">${tour.desc || "Keine Beschreibung"}</p><div class="d-flex justify-content-between align-items-center"><div><span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span><small class="text-muted" style="font-size:0.8em">von <b style="cursor:pointer" class="text-primary" onclick="event.stopPropagation(); openUserProfile('${tour.userId}', '${tour.user}')">${tour.user || "Unbekannt"}</b></small></div><div>${actionBtn + deleteBtn}</div></div></div>`; 
+}
+
+window.selectTour = (tourId) => { 
+    document.querySelectorAll('.tour-item-card').forEach(el => el.classList.remove('tour-card-active')); 
+    const activeCard = document.getElementById(`tour-card-${tourId}`); 
+    if(activeCard) activeCard.classList.add('tour-card-active'); 
+    showTourOnMap(tourId); 
+    if(window.innerWidth < 768) { document.getElementById('map').scrollIntoView({behavior: 'smooth'}); } 
+};
+
+window.showTourOnMap = (tourId) => { 
+    const tour = (typeof tourId === 'string') ? toursData.find(t => t.id === tourId) : tourId; 
+    if (!tour) return; 
+    if (currentRouteLayer) map.removeLayer(currentRouteLayer); 
+    if (tour.coords) map.flyTo(tour.coords, 11); 
+    if (tour.routeGeometry && tour.routeGeometry.length > 0) { 
+        currentRouteLayer = L.polyline(tour.routeGeometry, { color: 'red', weight: 5 }).addTo(map); 
+        map.fitBounds(currentRouteLayer.getBounds()); 
+    } 
+};
+
+window.handleGpxFileSelect = (event) => { 
+    const file = event.target.files[0]; 
+    if (!file) return; 
+    const reader = new FileReader(); 
+    reader.onload = (e) => parseAndPreviewGpx(e.target.result); 
+    reader.readAsText(file); 
+};
+
+function parseAndPreviewGpx(gpxText) { 
+    const parser = new DOMParser(); 
+    const xmlDoc = parser.parseFromString(gpxText, "text/xml"); 
+    const trkpts = xmlDoc.getElementsByTagName("trkpt"); 
+    if (trkpts.length === 0) return alert("Fehler: Keine Wegpunkte in GPX."); 
+    let coordinates = []; 
+    let totalDist = 0; 
+    for (let i = 0; i < trkpts.length; i++) { 
+        const lat = parseFloat(trkpts[i].getAttribute("lat")); 
+        const lon = parseFloat(trkpts[i].getAttribute("lon")); 
+        coordinates.push([lat, lon]); 
+        if (i > 0) { 
+            const prev = coordinates[i - 1]; 
+            totalDist += getDistanceFromLatLonInKm(prev[0], prev[1], lat, lon); 
+        } 
+    } 
+    const km = totalDist.toFixed(1); 
+    const hours = Math.floor(km / 60); 
+    const minutes = Math.round((km % 60)); 
+    document.getElementById('newKm').value = km; 
+    document.getElementById('newTime').value = `${hours}h ${minutes}min`; 
+    document.getElementById('btn-publish-tour').disabled = false; 
+    tempGpxData = { routeGeometry: coordinates, coords: coordinates[0], km: km }; 
+}
+
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) { 
+    var R = 6371; var dLat = deg2rad(lat2 - lat1); var dLon = deg2rad(lon2 - lon1); 
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat1)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+    return R * c; 
+}
+
 function deg2rad(deg) { return deg * (Math.PI / 180); }
-async function handleAddTour(e) { e.preventDefault(); if (!currentUser) return alert("Bitte einloggen."); if (!tempGpxData) return alert("Bitte erst eine GPX Datei wählen."); const newTour = { title: document.getElementById('newTitle').value, category: document.getElementById('newRegion').value, country: document.getElementById('newCountry').value, state: document.getElementById('newState').value, desc: document.getElementById('newDesc').value, time: document.getElementById('newTime').value, km: tempGpxData.km, coords: tempGpxData.coords, routeGeometry: tempGpxData.routeGeometry, user: currentUser.displayName || "Unbekannt", createdAt: new Date().toISOString(), }; try { const response = await fetch(API_URL + '/addTour', { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newTour) }); if (response.ok) { const savedTour = await response.json(); toursData.push(savedTour); toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); renderTourTree(); bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); e.target.reset(); tempGpxData = null; document.getElementById('btn-publish-tour').disabled = true; showTourOnMap(savedTour); alert("Tour erfolgreich hochgeladen!"); } } catch (err) { alert("Fehler beim Speichern: " + err.message); } }
-window.downloadGPX = (tourId) => { const tour = toursData.find(t => t.id === tourId); if (!tour || !tour.routeGeometry) return alert("Keine Routendaten."); let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Riderpoint"><trk><name>${tour.title}</name><trkseg>`; tour.routeGeometry.forEach(pt => { gpx += `\n<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`; }); gpx += `\n</trkseg></trk></gpx>`; const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${tour.title}.gpx`; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
+
+async function handleAddTour(e) { 
+    e.preventDefault(); 
+    if (!currentUser) return alert("Bitte einloggen."); 
+    if (!tempGpxData) return alert("Bitte erst eine GPX Datei wählen."); 
+    const newTour = { 
+        title: document.getElementById('newTitle').value, 
+        category: document.getElementById('newRegion').value, 
+        country: document.getElementById('newCountry').value, 
+        state: document.getElementById('newState').value, 
+        desc: document.getElementById('newDesc').value, 
+        time: document.getElementById('newTime').value, 
+        km: tempGpxData.km, coords: tempGpxData.coords, 
+        routeGeometry: tempGpxData.routeGeometry, 
+        user: currentUser.displayName || "Unbekannt", 
+        createdAt: new Date().toISOString(), 
+    }; 
+    try { 
+        const response = await fetch(API_URL + '/addTour', { 
+            method: "POST", headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(newTour) 
+        }); 
+        if (response.ok) { 
+            const savedTour = await response.json(); 
+            toursData.push(savedTour); 
+            toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); 
+            renderTourTree(); 
+            bootstrap.Modal.getInstance(document.getElementById('addTourModal')).hide(); 
+            e.target.reset(); 
+            tempGpxData = null; 
+            document.getElementById('btn-publish-tour').disabled = true; 
+            showTourOnMap(savedTour); 
+            alert("Tour erfolgreich hochgeladen!"); 
+        } 
+    } catch (err) { alert("Fehler beim Speichern: " + err.message); } 
+}
+
+window.downloadGPX = (tourId) => { 
+    const tour = toursData.find(t => t.id === tourId); 
+    if (!tour || !tour.routeGeometry) return alert("Keine Routendaten."); 
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Riderpoint"><trk><name>${tour.title}</name><trkseg>`; 
+    tour.routeGeometry.forEach(pt => { gpx += `\n<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`; }); 
+    gpx += `\n</trkseg></trk></gpx>`; 
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' }); 
+    const url = URL.createObjectURL(blob); 
+    const a = document.createElement('a'); 
+    a.href = url; a.download = `${tour.title}.gpx`; 
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a); 
+};
