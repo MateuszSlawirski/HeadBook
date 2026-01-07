@@ -1108,7 +1108,6 @@ window.renderProfilePage = async () => {
 
         statsArea.innerHTML = html;
     }
-};
 
 window.openEditProfile = () => {
     document.getElementById('editProfileBio').value = document.getElementById('profile-bio').innerText;
