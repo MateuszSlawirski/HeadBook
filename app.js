@@ -1,7 +1,7 @@
 /* ==========================================
-   APP MIT TOAST NOTIFICATIONS (v2.5)
+   APP FIX: PROFIL RELOAD (HTML WIEDERHERSTELLUNG)
    ========================================== */
-console.log("%c TOAST VERSION LOADED ", "background: blue; color: white; padding: 5px; font-weight: bold;");
+console.log("%c PROFIL RELOAD FIX LOADED ", "background: purple; color: white; padding: 5px; font-weight: bold;");
 
 import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -1025,7 +1025,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // Sicherstellen, dass ein Profil zum Anzeigen da ist
+    // 1. Daten Vorbereiten
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1042,7 +1042,40 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // 2. DOM Elemente finden (NUR EINMAL DEFINIEREN!)
+    // 2. CHECK: Ist das HTML-Gerüst noch da?
+    // Wenn "Lade Profil" angezeigt wurde, ist das HTML weg. Wir müssen es wiederherstellen!
+    if (!document.getElementById('profile-name')) {
+        container.innerHTML = `
+        <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
+        <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
+            <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
+                <div class="card-body p-4">
+                    <div class="row align-items-end">
+                        <div class="col-auto">
+                            <div class="profile-pic-container">
+                                <img src="" id="profile-img" class="rounded-circle border border-4 border-white shadow bg-white" 
+                                     style="width: 120px; height: 120px; object-fit: cover; background: #eee;">
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
+                            <h2 class="fw-bold mb-0 text-dark" id="profile-name"></h2>
+                            <p class="text-muted mb-0" id="profile-bio"></p>
+                            <div class="mt-2 small text-muted">
+                                <span id="friend-count">0 Freunde</span>
+                            </div>
+                        </div>
+                        <div class="col-md text-md-end pb-2" id="profile-actions"></div>
+                    </div>
+                    <hr class="my-4">
+                    <div id="profile-stats-content">
+                        <div class="text-center p-4 text-muted">Lade Aktivitäten...</div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // 3. Jetzt können wir sicher auf die Elemente zugreifen
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
@@ -1050,14 +1083,13 @@ window.renderProfilePage = async () => {
     const imgEl = document.getElementById('profile-img');
     const friendsCount = document.getElementById('friend-count');
 
-    // 3. Bild setzen
+    // 4. Bild setzen
     if(imgEl) {
-        // Sicherer Fallback, falls photoUrl null ist
         const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
         imgEl.src = photo;
     }
 
-    // 4. Texte setzen
+    // 5. Texte setzen
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
     if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
     
@@ -1067,7 +1099,7 @@ window.renderProfilePage = async () => {
         friendsCount.innerText = `${count} Freunde`;
     }
 
-    // 5. Buttons
+    // 6. Buttons
     if (actionArea) {
         if (viewingUserProfile.isMe) {
             actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
@@ -1079,7 +1111,7 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // 6. Inhalte laden (Community + Touren)
+    // 7. Inhalte laden (Community + Touren)
     if (statsArea) {
         statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
         
@@ -1203,4 +1235,4 @@ window.saveProfile = async (e) => {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
     }
-}
+};
