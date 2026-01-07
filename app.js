@@ -122,6 +122,8 @@ window.openMyProfile = () => {
    ========================================== */
 
 async function syncUserWithBackend(firebaseUser) {
+    if (!firebaseUser) return; // Sicherheit: Abbrechen, wenn kein User da
+    
     try {
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
@@ -136,25 +138,18 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // 1. Lokale Variablen mit echten Daten aus der Cosmos DB füllen
-            currentUser.role = dbUser.role || "user";
-            currentUser.bio = dbUser.bio || "";
-            currentUser.photoUrl = dbUser.photoUrl || null;
-            currentUser.friends = dbUser.friends || [];
-            
-            currentRole = currentUser.role; // Wichtig für Admin-Rechte
-            updateUI(); 
-
-            // 2. Prüfen ob wir auf der Profilseite sind (ID: page-profile)
-            const profilePage = document.getElementById('page-profile');
-            if (getActivePage() === 'profile' || (profilePage && profilePage.classList.contains('active'))) {
-                viewingUserProfile = null; // Fokus auf "Mein Profil" setzen
-                if (typeof renderProfilePage === 'function') {
-                    renderProfilePage();
-                }
+            // NUR setzen, wenn currentUser existiert
+            if (currentUser) {
+                currentUser.role = dbUser.role || "user";
+                currentUser.bio = dbUser.bio || "";
+                currentUser.photoUrl = dbUser.photoUrl || null;
+                currentUser.friends = dbUser.friends || [];
+                currentRole = currentUser.role;
             }
             
-            console.log("Sync erfolgreich. Profil geladen.");
+            updateUI(); 
+            if (getActivePage() === 'profile') renderProfilePage();
+            console.log("Sync erfolgreich geladen.");
         }
     } catch (err) {
         console.warn("Backend Sync Fehler:", err);
