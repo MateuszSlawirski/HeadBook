@@ -1,7 +1,7 @@
 /* ==========================================
-   APP COMPLETE (V3.2 - FINAL RESTORE)
+   APP V3.3 - FRIEND LIST & SYNC FIX
    ========================================== */
-console.log("%c APP V3.2 LOADED - FULL VERSION ", "background: darkgreen; color: white; padding: 5px; font-weight: bold;");
+console.log("%c APP V3.3 LOADED ", "background: purple; color: white; padding: 5px; font-weight: bold;");
 
 import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -29,7 +29,7 @@ let viewingUserProfile = null;
 // MAP STATE
 let map = null;
 let currentRouteLayer = null; 
-let tempGpxData = null; // Für den Upload
+let tempGpxData = null;
 
 // FORUM STATE
 let currentForumTopic = null; 
@@ -47,7 +47,7 @@ window.showToast = (message, isError = false) => {
     const msgEl = document.getElementById('toast-message');
     
     if (!toastEl || !msgEl) {
-        console.log(message); // Fallback
+        console.log(message);
         return;
     }
     msgEl.innerText = message;
@@ -68,15 +68,16 @@ window.showToast = (message, isError = false) => {
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
-    // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         
         if (user) {
             updateUI(); 
+            // Erst Daten holen, damit Profil vollständig ist
+            await loadToursFromServer();
+            await loadFeed(); 
             await syncUserWithBackend(user); 
             
-            // Profil neu laden falls aktiv
             if (getActivePage() === 'profile') {
                 viewingUserProfile = null; 
                 renderProfilePage();
@@ -88,11 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // WICHTIG: Funktionen aufrufen, die unten definiert sind
-    loadToursFromServer();
     loadForumData(); 
-    if(typeof window.loadFeed === 'function') window.loadFeed();
-    
     setupEventListeners();
     
     const startPage = window.location.hash.replace('#', '') || 'home';
@@ -159,7 +156,8 @@ async function syncUserWithBackend(firebaseUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.bio = dbUser.bio || "";
                 currentUser.photoUrl = dbUser.photoUrl || null;
-                currentUser.friends = dbUser.friends || [];
+                // Sicherstellen, dass friends ein Array ist
+                currentUser.friends = Array.isArray(dbUser.friends) ? dbUser.friends : [];
                 currentRole = currentUser.role;
             }
             updateUI(); 
@@ -202,73 +200,87 @@ window.openAddTourModal = () => {
 };
 
 /* ==========================================
-   DATA LOADING FUNCTIONS (HIER WAREN DIE FEHLER)
+   HELPER: DATEN FINDEN (NAMEN & BILDER)
    ========================================== */
+function findUserInfo(uid) {
+    // 1. Suche in Posts
+    const postUser = allPostsCache.find(p => p.userId === uid);
+    if (postUser) return { name: postUser.user, photo: null }; // Posts haben oft kein Foto URL Feld direkt
 
-// 1. Touren laden
-async function loadToursFromServer() {
-    try {
-        const response = await fetch(`${API_URL}/GetTours`);
-        if (response.ok) {
-            toursData = await response.json();
-            toursData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            renderTourTree();
-        }
-    } catch (error) { 
-        console.warn("Tours offline", error); 
-        const container = document.getElementById('tours-tree-container');
-        if (container) container.innerHTML = '<div class="alert alert-danger m-3">Konnte Touren nicht laden.</div>';
-    }
-}
+    // 2. Suche in Touren
+    const tourUser = toursData.find(t => t.userId === uid);
+    if (tourUser) return { name: tourUser.user, photo: null };
 
-// 2. Forum Daten laden
-async function loadForumData() {
-    try {
-        const catResponse = await fetch(`${API_URL}/forum`);
-        allForumData = await catResponse.json();
-        
-        const threadResponse = await fetch(`${API_URL}/getThreads`); 
-        if (threadResponse.ok) allThreadsCache = await threadResponse.json();
-        
-        if (!currentCategoryId && !currentForumTopic && getActivePage() === 'forum') {
-            renderForumHome();
-        }
-    } catch (error) { 
-        console.error("Forum Ladefehler:", error); 
-    }
+    // 3. Fallback
+    return { name: "Biker " + uid.substring(0, 4), photo: null };
 }
 
 /* ==========================================
-   PROFIL & FREUNDE
+   PROFIL & FREUNDE (FIXED)
    ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
     if (targetUid === currentUser.uid) return window.showToast("Du kannst dich nicht selbst adden", true);
 
+    // Initialisieren falls null
     if (!currentUser.friends) currentUser.friends = [];
     
-    if (!currentUser.friends.includes(targetUid)) {
+    // Prüfen ob schon vorhanden (String Vergleich zur Sicherheit)
+    if (!currentUser.friends.some(id => id === targetUid)) {
         currentUser.friends.push(targetUid);
-        window.showToast("Freund hinzugefügt (Lokal)");
         
+        // UI sofort updaten
         const btn = document.querySelector('button[onclick*="addFriend"]');
-        if(btn) { btn.disabled = true; btn.innerText = "Befreundet"; }
-        
-        // Speichern via updateUser (Workaround)
+        if(btn) { 
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-success');
+            btn.innerHTML = "✔ Befreundet";
+            btn.disabled = true;
+        }
+
+        // SPEICHERN IM BACKEND
         try {
-             // Da addFriend Endpoint fehlt, nutzen wir updateUser Logik wäre hier ideal
-        } catch (e) { console.error(e); }
+            const formData = new FormData();
+            formData.append('uid', currentUser.uid);
+            // Wir senden die Freundesliste als JSON String mit
+            formData.append('friends', JSON.stringify(currentUser.friends));
+            
+            // Da wir Bio nicht ändern, senden wir die aktuelle mit, damit sie nicht gelöscht wird
+            formData.append('bio', currentUser.bio || "");
+
+            const response = await fetch(`${API_URL}/updateUser`, {
+                method: 'POST',
+                body: formData 
+            });
+
+            if(response.ok) {
+                window.showToast("Freund hinzugefügt & gespeichert!");
+            } else {
+                console.warn("Backend update failed");
+                window.showToast("Lokal hinzugefügt (Fehler beim Speichern)", true);
+            }
+        } catch (e) { 
+            console.error(e);
+            window.showToast("Netzwerkfehler beim Speichern", true);
+        }
 
     } else {
-        window.showToast("Bereits befreundet.");
+        window.showToast("Ihr seid bereits befreundet!");
     }
 };
 
 window.openUserProfile = (userId, userName) => {
+    // Wenn kein Name übergeben wurde, versuchen wir ihn zu finden
+    let display = userName;
+    if(!display || display === 'undefined') {
+        const info = findUserInfo(userId);
+        display = info.name;
+    }
+
     viewingUserProfile = { 
         uid: userId, 
-        displayName: userName, 
-        isMe: (currentUser && currentUser.displayName === userName) 
+        displayName: display, 
+        isMe: (currentUser && currentUser.uid === userId) 
     };
     navigateTo('profile');
 };
@@ -277,7 +289,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // Daten vorbereiten
+    // Fallback auf eigenes Profil
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -294,7 +306,7 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // HTML Gerüst prüfen und ggf. wiederherstellen
+    // HTML Gerüst sicherstellen
     if (!document.getElementById('profile-name')) {
         container.innerHTML = `
         <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
@@ -311,9 +323,14 @@ window.renderProfilePage = async () => {
                         <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
                             <h2 class="fw-bold mb-0 text-dark" id="profile-name"></h2>
                             <p class="text-muted mb-0" id="profile-bio"></p>
-                            <div class="mt-3">
-                                <div id="friends-list-container" class="d-flex flex-column gap-2"></div>
+                            
+                            <div class="mt-4 pt-3 border-top">
+                                <h6 class="fw-bold small text-uppercase text-muted mb-3">Freunde</h6>
+                                <div id="friends-list-container" class="d-flex flex-wrap gap-2">
+                                    <div class="spinner-border spinner-border-sm text-muted"></div>
+                                </div>
                             </div>
+
                         </div>
                         <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                     </div>
@@ -333,6 +350,7 @@ window.renderProfilePage = async () => {
     const imgEl = document.getElementById('profile-img');
     const friendsContainer = document.getElementById('friends-list-container');
 
+    // Profilbild und Text
     if(imgEl) {
         const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
         imgEl.src = photo;
@@ -340,44 +358,72 @@ window.renderProfilePage = async () => {
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
     if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
 
-    // Freundesliste rendern
+    // --- FREUNDESLISTE RENDERN ---
     if (friendsContainer) {
         let friends = viewingUserProfile.friends || [];
-        let friendsHtml = '<div class="small text-muted mb-1 fw-bold">Freunde (' + friends.length + ')</div>';
         
-        if (friends.length === 0) {
-            friendsHtml += '<small class="text-muted">Noch keine Freunde</small>';
-        } else {
-            const topFriends = friends.slice(0, 5);
-            topFriends.forEach(friend => {
-                let fId = typeof friend === 'string' ? friend : friend.uid;
-                let fName = typeof friend === 'object' && friend.displayName ? friend.displayName : "User " + fId.substring(0, 4);
-                let fImg = typeof friend === 'object' && friend.photoUrl ? friend.photoUrl : `https://ui-avatars.com/api/?name=${fName}&size=32&background=random`;
+        // Wenn es mein Profil ist, zeig meine echten Freunde an (auch wenn viewingUserProfile veraltet sein könnte)
+        if(viewingUserProfile.isMe && currentUser.friends) {
+            friends = currentUser.friends;
+        }
 
-                friendsHtml += `
-                <div class="d-flex align-items-center p-1 rounded hover-bg" style="cursor:pointer; width:fit-content;" onclick="openUserProfile('${fId}', '${fName}')">
-                    <img src="${fImg}" class="rounded-circle me-2" width="24" height="24">
-                    <span class="small fw-bold text-dark">${fName}</span>
-                </div>`;
+        if (!friends || friends.length === 0) {
+            friendsContainer.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
+        } else {
+            friendsContainer.innerHTML = '';
+            // Nur die ersten 5 anzeigen
+            const topFriends = friends.slice(0, 5);
+            
+            topFriends.forEach(friendId => {
+                // Wir haben nur die ID, wir müssen "raten" wer das ist aus dem Cache
+                const info = findUserInfo(friendId);
+                const fName = info.name;
+                const fImg = `https://ui-avatars.com/api/?name=${fName}&size=64&background=random&color=fff`;
+
+                const friendBadge = document.createElement('div');
+                friendBadge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border';
+                friendBadge.style.cursor = 'pointer';
+                friendBadge.onclick = () => openUserProfile(friendId, fName);
+                friendBadge.innerHTML = `
+                    <img src="${fImg}" class="rounded-circle me-2" width="30" height="30">
+                    <span class="small fw-bold text-dark" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fName}</span>
+                `;
+                friendsContainer.appendChild(friendBadge);
             });
+
             if (friends.length > 5) {
-                friendsHtml += `<a href="#" class="small text-primary ms-1 text-decoration-none">...und ${friends.length - 5} weitere</a>`;
+                const moreBadge = document.createElement('span');
+                moreBadge.className = 'badge bg-secondary rounded-pill align-self-center';
+                moreBadge.innerText = `+${friends.length - 5}`;
+                friendsContainer.appendChild(moreBadge);
             }
         }
-        friendsContainer.innerHTML = friendsHtml;
     }
 
+    // Buttons
     if (actionArea) {
+        actionArea.innerHTML = '';
         if (viewingUserProfile.isMe) {
             actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
         } else {
+            // Checken ob wir schon befreundet sind
+            const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(viewingUserProfile.uid);
+            
+            let friendBtn = '';
+            if (isFriend) {
+                friendBtn = `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`;
+            } else {
+                friendBtn = `<button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>`;
+            }
+
             actionArea.innerHTML = `
-                <button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>
+                ${friendBtn}
                 <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>
             `;
         }
     }
 
+    // Statistiken & Content
     if (statsArea) {
         const targetName = viewingUserProfile.displayName;
         const myTours = toursData.filter(t => t.user === targetName);
@@ -498,6 +544,7 @@ window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
     
+    // Keine Ladeanzeige wenn wir nur refreshen und schon daten haben
     if(allPostsCache.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
