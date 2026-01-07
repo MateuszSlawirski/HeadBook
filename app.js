@@ -122,7 +122,7 @@ window.openMyProfile = () => {
    ========================================== */
 
 async function syncUserWithBackend(firebaseUser) {
-    if (!firebaseUser) return; // Sicherheit: Abbrechen, wenn kein User da
+    if (!firebaseUser) return; 
     
     try {
         const response = await fetch(`${API_URL}/users`, {
@@ -138,7 +138,7 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // NUR setzen, wenn currentUser existiert
+            // WICHTIG: Nur setzen, wenn currentUser nicht null ist (verhindert TypeError)
             if (currentUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.bio = dbUser.bio || "";
@@ -998,7 +998,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // WICHTIG: Wenn kein fremdes Profil gewählt ist, nimm das eigene
+    // 1. Profil-Daten vorbereiten
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1010,14 +1010,86 @@ window.renderProfilePage = async () => {
         };
     } 
 
-    // Jetzt erst prüfen: Wenn immer noch kein Profil da ist, DANN Fehlermeldung
     if (!viewingUserProfile) {
         container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
         return;
     }
 
-   
-};
+    // 2. DOM Elemente setzen
+    const nameEl = document.getElementById('profile-name');
+    const bioEl = document.getElementById('profile-bio');
+    const actionArea = document.getElementById('profile-actions');
+    const statsArea = document.getElementById('profile-stats-content');
+    const imgEl = document.getElementById('profile-img');
+    const friendsCount = document.getElementById('friend-count');
+
+    if(imgEl) {
+        imgEl.src = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+    }
+
+    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
+    if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
+    
+    if(friendsCount) {
+        const count = viewingUserProfile.friends ? viewingUserProfile.friends.length : 0;
+        friendsCount.innerText = `${count} Freunde`;
+    }
+
+    if (actionArea) {
+        if (viewingUserProfile.isMe) {
+            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
+        } else {
+            actionArea.innerHTML = `
+                <button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>
+                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>`;
+        }
+    }
+
+    // 3. Statistiken und Aktivitäten
+    if (statsArea) {
+        statsArea.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-danger"></div></div>';
+        
+        const targetName = viewingUserProfile.displayName;
+        const myTours = toursData.filter(t => t.user === targetName);
+        const myPosts = allPostsCache.filter(p => p.user === targetName);
+        const myThreads = allThreadsCache.filter(t => t.user === targetName);
+
+        let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                        <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
+                        <div class="bg-light p-2 rounded px-3"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
+                        <div class="bg-light p-2 rounded px-3"><b>${myThreads.length}</b><br><small>Themen</small></div>
+                    </div>`;
+
+        if (myTours.length > 0) {
+            html += `<h6 class="fw-bold mt-3">🏍️ Touren</h6><div class="list-group mb-3">`;
+            myTours.forEach(t => {
+                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">${t.title} <small class="text-muted">(${t.km} km)</small></a>`;
+            });
+            html += `</div>`;
+        }
+        
+        if (myPosts.length > 0) {
+             html += `<h6 class="fw-bold mt-3">📸 Beiträge</h6><div class="list-group mb-3">`;
+             myPosts.forEach(p => {
+                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">${p.content || "Medien Inhalt"}</div>`;
+             });
+             html += `</div>`;
+        }
+
+        if (myThreads.length > 0) {
+             html += `<h6 class="fw-bold mt-3">💬 Community Themen</h6><div class="list-group mb-3">`;
+             myThreads.forEach(t => {
+                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">${t.title}</div>`;
+             });
+             html += `</div>`;
+        }
+
+        if(myTours.length === 0 && myPosts.length === 0 && myThreads.length === 0) {
+            html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
+        }
+        statsArea.innerHTML = html;
+    }
+}; 
 
     // 2. DOM Elemente finden
     const nameEl = document.getElementById('profile-name');
