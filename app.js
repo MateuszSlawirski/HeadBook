@@ -138,7 +138,7 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // WICHTIG: Nur setzen, wenn currentUser nicht null ist (verhindert TypeError)
+            // WICHTIG: Prüfen, ob currentUser existiert, bevor Werte gesetzt werden
             if (currentUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.bio = dbUser.bio || "";
@@ -149,13 +149,11 @@ async function syncUserWithBackend(firebaseUser) {
             
             updateUI(); 
             if (getActivePage() === 'profile') renderProfilePage();
-            console.log("Sync erfolgreich geladen.");
         }
     } catch (err) {
         console.warn("Backend Sync Fehler:", err);
     }
 }
-
 function updateUI() {
     const authBtn = document.getElementById('auth-btn');
     const logoutBtn = document.getElementById('logout-btn');
@@ -998,7 +996,7 @@ window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // 1. Profil-Daten vorbereiten
+    // Sicherstellen, dass ein Profil zum Anzeigen da ist
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1011,39 +1009,34 @@ window.renderProfilePage = async () => {
     } 
 
     if (!viewingUserProfile) {
-        container.innerHTML = '<div class="p-5 text-center">Bitte erst einloggen oder Nutzer wählen.</div>';
+        container.innerHTML = '<div class="p-5 text-center">Lade Profil...</div>';
         return;
     }
 
+  
+
     // 2. DOM Elemente setzen
-    const nameEl = document.getElementById('profile-name');
-    const bioEl = document.getElementById('profile-bio');
-    const actionArea = document.getElementById('profile-actions');
-    const statsArea = document.getElementById('profile-stats-content');
-    const imgEl = document.getElementById('profile-img');
-    const friendsCount = document.getElementById('friend-count');
+const nameEl = document.getElementById('profile-name');
+const bioEl = document.getElementById('profile-bio');
+const actionArea = document.getElementById('profile-actions');
+const statsArea = document.getElementById('profile-stats-content');
+const imgEl = document.getElementById('profile-img');
+const friendsCount = document.getElementById('friend-count');
 
-    if(imgEl) {
-        imgEl.src = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-    }
+// Bild sicher setzen
+if (imgEl && viewingUserProfile) { 
+    imgEl.src = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+}
 
-    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
-    if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
-    
-    if(friendsCount) {
-        const count = viewingUserProfile.friends ? viewingUserProfile.friends.length : 0;
-        friendsCount.innerText = `${count} Freunde`;
-    }
+if (nameEl && viewingUserProfile) nameEl.innerText = viewingUserProfile.displayName;
+if (bioEl && viewingUserProfile) {
+    bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
+}
 
-    if (actionArea) {
-        if (viewingUserProfile.isMe) {
-            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
-        } else {
-            actionArea.innerHTML = `
-                <button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>
-                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>`;
-        }
-    }
+if (friendsCount && viewingUserProfile) {
+    const count = viewingUserProfile.friends ? viewingUserProfile.friends.length : 0;
+    friendsCount.innerText = `${count} Freunde`;
+}
 
     // 3. Statistiken und Aktivitäten
     if (statsArea) {
@@ -1177,8 +1170,15 @@ window.renderProfilePage = async () => {
     }
 
 window.openEditProfile = () => {
-    document.getElementById('editProfileBio').value = document.getElementById('profile-bio').innerText;
-    new bootstrap.Modal(document.getElementById('editProfileModal')).show();
+    const bioText = document.getElementById('profile-bio')?.innerText || "";
+    const bioInput = document.getElementById('editProfileBio');
+    if (bioInput) bioInput.value = bioText;
+    
+    const modalElement = document.getElementById('editProfileModal');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    }
 };
 
 /* ==========================================
