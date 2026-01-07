@@ -1,6 +1,8 @@
 /* ==========================================
-   IMPORTS & KONFIGURATION
+   VERSION FINAL FIX 
    ========================================== */
+console.log("%c STARTING APP - VERSION FINAL FIX ", "background: green; color: white; padding: 5px; font-weight: bold;");
+
 import { firebaseConfig } from './config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
@@ -38,12 +40,12 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
 
 /* ==========================================
-   APP START (v2.4 Fix)
+   APP START 
    ========================================== */
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
-    // Auth Listener: Feuert, sobald Firebase weiß, wer du bist
+    // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
         
@@ -52,10 +54,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Daten aus DB holen
             await syncUserWithBackend(user); 
             
-            // --- FIX FÜR DEN LEEREN SCREEN ---
-            // Wenn wir gerade auf der Profilseite sind, laden wir sie jetzt neu!
+            // Wenn wir auf der Profilseite sind, diese neu laden
             if (getActivePage() === 'profile') {
-                viewingUserProfile = null; // Sicherstellen, dass es MEIN Profil ist
+                viewingUserProfile = null; // Reset auf "Mein Profil"
                 renderProfilePage();
             }
         } else {
@@ -110,7 +111,6 @@ function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
 }
 
-// Reset auf MEIN Profil beim Klick in der Nav
 window.openMyProfile = () => {
     viewingUserProfile = null; 
     navigateTo('profile');
@@ -137,7 +137,6 @@ async function syncUserWithBackend(firebaseUser) {
         if(response.ok) {
             const dbUser = await response.json();
             
-            // WICHTIG: Prüfen, ob currentUser existiert, bevor Werte gesetzt werden
             if (currentUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.bio = dbUser.bio || "";
@@ -1175,4 +1174,3 @@ window.saveProfile = async (e) => {
         submitBtn.innerText = "Speichern";
     }
 };
-// ENDE DER DATEI
