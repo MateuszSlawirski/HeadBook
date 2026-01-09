@@ -38,7 +38,7 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
 
 /* ==========================================
-   APP START 
+   APP START (Ersetzen)
    ========================================== */
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
@@ -49,16 +49,23 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (user) {
             updateUI(); 
-            // Daten aus DB holen
+            // 1. Erst User-Rolle und Freunde vom Server holen
             await syncUserWithBackend(user); 
             
-            // Profil neu laden
+            // 2. JETZT erst Feed laden (damit Admin-Buttons da sind)
+            if (getActivePage() === 'home') {
+                loadFeed();
+            }
+
+            // 3. Profil laden falls wir dort sind
             if (getActivePage() === 'profile') {
-                viewingUserProfile = null; // Reset auf "Mein Profil"
+                viewingUserProfile = null; 
                 renderProfilePage();
             }
         } else {
+            // Wenn ausgeloggt -> Gastmodus
             currentRole = "guest";
+            if (getActivePage() === 'home') loadFeed();
             if (getActivePage() === 'profile') navigateTo('home');
             updateUI();
         }
@@ -66,18 +73,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadToursFromServer();
     loadForumData(); 
-    if(window.loadFeed) window.loadFeed();
+    
+    
     setupEventListeners();
     
     const startPage = window.location.hash.replace('#', '') || 'home';
-    navigateTo(startPage);
+    // Nur navigieren wenn noch kein Auth-Event gefeuert hat (vermeidet doppeltes Laden)
+    if (!currentUser) navigateTo(startPage);
 });
 
 /* ==========================================
-   ROUTER & NAVIGATION 
+   NAVIGATION MIT AUTO-REFRESH (Ersetzen)
    ========================================== */
-
-function navigateTo(pageId) {
+async function navigateTo(pageId) {
+    // UI umschalten
     document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
 
@@ -88,31 +97,45 @@ function navigateTo(pageId) {
         if(navLink) navLink.classList.add('active');
         window.location.hash = pageId;
 
-        if (pageId === 'forum') renderForumHome();
+        // --- HIER IST DER FIX FÜR DIE SYNCHRO ---
         
-        if (pageId === 'profile') {
-            if (typeof renderProfilePage === 'function') renderProfilePage();
+        // A) Home: Immer neu laden für aktuelle Posts/Admin-Rechte
+        if (pageId === 'home') {
+            await loadFeed(); 
         }
         
-        if (pageId === 'tours' && map) {
-            setTimeout(() => { 
-                map.invalidateSize(); 
-                map.setView([51.16, 10.45], 6); 
-                if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-            }, 200);
+        // B) Profil: Immer User-Daten frisch vom Server holen
+        if (pageId === 'profile') {
+            // Wenn ich auf "Mein Profil" klicke (oder reset), lade meine Daten neu
+            if (!viewingUserProfile || viewingUserProfile.isMe) {
+                if(auth.currentUser) {
+                    // Das holt die aktuelle Freundesliste aus der DB!
+                    await syncUserWithBackend(auth.currentUser); 
+                }
+                viewingUserProfile = null; // Reset auf "Ich"
+            }
+            renderProfilePage();
+        }
+
+        // C) Touren & Map
+        if (pageId === 'tours') {
+            loadToursFromServer();
+            if (map) {
+                setTimeout(() => { 
+                    map.invalidateSize(); 
+                    map.setView([51.16, 10.45], 6); 
+                    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+                }, 200);
+            }
+        }
+
+        // D) Forum
+        if (pageId === 'forum') {
+            renderForumHome();
         }
     }
 }
 window.navigateTo = navigateTo;
-
-function getActivePage() {
-    return window.location.hash.replace('#', '') || 'home';
-}
-
-window.openMyProfile = () => {
-    viewingUserProfile = null; 
-    navigateTo('profile');
-};
 
 /* ==========================================
    AUTH & UI
@@ -1013,43 +1036,54 @@ function findUserInfo(uid) {
     return { name: "User " + uid.substring(0, 5), pic: null };
 }
 
+/* ==========================================
+   FREUND HINZUFÜGEN (Ersetzen)
+   ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
     if (targetUid === currentUser.uid) return window.showToast("Du kannst dich nicht selbst adden", true);
 
+    // Sicherstellen, dass Array existiert
     if (!currentUser.friends) currentUser.friends = [];
     
+    // Prüfen ob schon da
     if (!currentUser.friends.includes(targetUid)) {
+        
+        // 1. Lokal hinzufügen (für sofortiges Feedback)
         currentUser.friends.push(targetUid);
         
-        // UI sofort updaten
+        // Button sofort aktualisieren
         const btn = document.querySelector('button[onclick*="addFriend"]');
         if(btn) { 
             btn.classList.remove('btn-danger');
             btn.classList.add('btn-success');
-            btn.innerHTML = "✔ Befreundet";
+            btn.innerHTML = "✔ Gespeichert";
             btn.disabled = true;
         }
 
-        // SPEICHERN
+        // 2. An Backend senden
         try {
             const formData = new FormData();
             formData.append('uid', currentUser.uid);
             formData.append('friends', JSON.stringify(currentUser.friends));
-            formData.append('bio', currentUser.bio || "");
+            formData.append('bio', currentUser.bio || ""); // Bio mitsenden, damit sie nicht gelöscht wird
 
-            await fetch(`${API_URL}/updateUser`, { method: 'POST', body: formData });
-            window.showToast("Freund hinzugefügt!");
+            const response = await fetch(`${API_URL}/updateUser`, { method: 'POST', body: formData });
+            
+            if(response.ok) {
+                window.showToast("Freund hinzugefügt!");
+            } else {
+                throw new Error("Speicherfehler");
+            }
         } catch (e) { 
             console.error(e);
-            window.showToast("Lokal hinzugefügt (Fehler beim Speichern)", true);
+            window.showToast("Fehler beim Speichern - Bitte neu laden", true);
         }
 
     } else {
         window.showToast("Ihr seid bereits befreundet!");
     }
 };
-
 window.openUserProfile = (userId, userName) => {
     let display = userName;
     if(!display || display === 'undefined') {
