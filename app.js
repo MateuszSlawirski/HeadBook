@@ -83,56 +83,65 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ==========================================
-   NAVIGATION MIT AUTO-REFRESH (Ersetzen)
+   NAVIGATION (FIX: Erst laden, dann zeigen)
    ========================================== */
 async function navigateTo(pageId) {
-    // UI umschalten
-    document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+    // 1. UI vorbereiten (Nav-Leiste aktiv setzen)
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    const navLink = document.getElementById(`nav-${pageId}`);
+    if(navLink) navLink.classList.add('active');
 
+    // 2. Seite wechseln (Visuell)
+    document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
     const target = document.getElementById(`page-${pageId}`);
     if (target) {
         target.classList.add('active');
-        const navLink = document.getElementById(`nav-${pageId}`);
-        if(navLink) navLink.classList.add('active');
         window.location.hash = pageId;
+    }
 
-        // --- HIER IST DER FIX FÜR DIE SYNCHRO ---
+    // 3. SPEZIAL-LOGIK PRO SEITE
+    
+    // A) PROFIL: Hier war das Problem!
+    if (pageId === 'profile') {
+        const container = document.getElementById('page-profile');
         
-        // A) Home: Immer neu laden für aktuelle Posts/Admin-Rechte
-        if (pageId === 'home') {
-            await loadFeed(); 
-        }
-        
-        // B) Profil: Immer User-Daten frisch vom Server holen
-        if (pageId === 'profile') {
-            // Wenn ich auf "Mein Profil" klicke (oder reset), lade meine Daten neu
-            if (!viewingUserProfile || viewingUserProfile.isMe) {
-                if(auth.currentUser) {
-                    // Das holt die aktuelle Freundesliste aus der DB!
-                    await syncUserWithBackend(auth.currentUser); 
-                }
-                viewingUserProfile = null; // Reset auf "Ich"
-            }
-            renderProfilePage();
-        }
-
-        // C) Touren & Map
-        if (pageId === 'tours') {
-            loadToursFromServer();
-            if (map) {
-                setTimeout(() => { 
-                    map.invalidateSize(); 
-                    map.setView([51.16, 10.45], 6); 
-                    if (currentRouteLayer) map.removeLayer(currentRouteLayer);
-                }, 200);
+        // Wenn ich mein eigenes Profil ansehe (oder noch keins gesetzt ist)
+        if (!viewingUserProfile || (currentUser && viewingUserProfile.uid === currentUser.uid)) {
+            
+            // Lade-Animation anzeigen, damit du nicht "0 Freunde" siehst
+            if(container) container.innerHTML = '<div class="text-center p-5 mt-5"><div class="spinner-border text-primary"></div><div class="mt-2">Lade Profil & Freunde...</div></div>';
+            
+            if(auth.currentUser) {
+                // WARTEN bis Sync fertig ist
+                await syncUserWithBackend(auth.currentUser);
+                // Reset auf "Ich" mit den frischen Daten
+                viewingUserProfile = null; 
             }
         }
+        // Jetzt erst rendern (mit den frischen Daten)
+        renderProfilePage();
+    }
 
-        // D) Forum
-        if (pageId === 'forum') {
-            renderForumHome();
+    // B) HOME: Feed aktualisieren
+    if (pageId === 'home') {
+        await loadFeed(); 
+    }
+
+    // C) TOUREN
+    if (pageId === 'tours') {
+        loadToursFromServer();
+        if (map) {
+            setTimeout(() => { 
+                map.invalidateSize(); 
+                map.setView([51.16, 10.45], 6); 
+                if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+            }, 200);
         }
+    }
+
+    // D) FORUM
+    if (pageId === 'forum') {
+        renderForumHome();
     }
 }
 window.navigateTo = navigateTo;
@@ -158,6 +167,7 @@ async function syncUserWithBackend(firebaseUser) {
     if (!firebaseUser) return; 
     
     try {
+        console.log("Synchronisiere User mit Backend..."); // Log für Debugging
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -170,21 +180,25 @@ async function syncUserWithBackend(firebaseUser) {
 
         if(response.ok) {
             const dbUser = await response.json();
-            
+            console.log("Daten vom Server erhalten:", dbUser); // Log der Server-Antwort
+
             if (currentUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.bio = dbUser.bio || "";
                 currentUser.photoUrl = dbUser.photoUrl || null;
-                // Sicherstellen, dass friends ein Array ist
+                // WICHTIG: Sicherstellen, dass friends übernommen wird!
                 currentUser.friends = Array.isArray(dbUser.friends) ? dbUser.friends : [];
                 currentRole = currentUser.role;
             }
             
             updateUI(); 
+            // Falls wir gerade auf dem Profil sind, sofort aktualisieren
             if (getActivePage() === 'profile') renderProfilePage();
+        } else {
+            console.error("Server Fehler beim Sync:", await response.text());
         }
     } catch (err) {
-        console.warn("Backend Sync Fehler:", err);
+        console.warn("Backend Sync Fehler (Netzwerk?):", err);
     }
 }
 
@@ -1113,6 +1127,7 @@ window.openUserProfile = (userId, userName) => {
 };
 
 window.renderProfilePage = async () => {
+    if(allPostsCache.length === 0) await loadFeed();
     const container = document.getElementById('page-profile');
     if (!container) return;
     
