@@ -138,6 +138,19 @@ async function navigateTo(pageId) {
 window.navigateTo = navigateTo;
 
 /* ==========================================
+   HELPER FUNKTIONEN 
+   ========================================== */
+
+function getActivePage() {
+    return window.location.hash.replace('#', '') || 'home';
+}
+
+window.openMyProfile = () => {
+    viewingUserProfile = null; 
+    navigateTo('profile');
+};
+
+/* ==========================================
    AUTH & UI
    ========================================== */
 
