@@ -896,22 +896,24 @@ window.createPost = async () => {
 };
 
 /* ==========================================
-   FEED / POSTS
+   FEED / POSTS (Mit Profilbildern)
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
 
+    // Lade-Spinner nur zeigen, wenn Cache leer ist
     if(allPostsCache.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
 
     try {
+        // Wir laden die Posts neu
         const response = await fetch(`${API_URL}/getPosts`);
         if (!response.ok) throw new Error("Fehler beim Laden");
 
         const posts = await response.json();
-        allPostsCache = posts;
+        allPostsCache = posts; // Cache updaten
         container.innerHTML = ""; 
 
         if (posts.length === 0) {
@@ -929,6 +931,16 @@ window.loadFeed = async function() {
             const isLiked = myUid && likes.includes(myUid);
             const likeClass = isLiked ? 'liked' : '';
             
+            // --- AVATAR LOGIK (Das ist NEU) ---
+            // Standard: Ein Bild mit den Initialen des Namens generieren
+            let avatarUrl = `https://ui-avatars.com/api/?name=${post.user}&background=random&color=fff&size=128`;
+            
+            // Wenn es MEIN Post ist und ich ein Foto habe -> Zeige mein echtes Foto
+            if (currentUser && post.userId === currentUser.uid && currentUser.photoUrl) {
+                avatarUrl = currentUser.photoUrl;
+            }
+            // ----------------------------------
+
             let mediaHtml = "";
             if (post.mediaUrl) {
                 if (post.mediaType === 'video') mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
@@ -951,7 +963,12 @@ window.loadFeed = async function() {
             <div class="card mb-4 border-0 shadow-sm" id="post-${postId}">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
                     <div class="d-flex align-items-center">
-                        <div style="width:40px; height:40px; background:#f0f2f5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:1.2rem;">👤</div>
+                        
+                        <img src="${avatarUrl}" class="rounded-circle border me-2" 
+                             style="width:40px; height:40px; object-fit:cover; cursor:pointer;" 
+                             onclick="openUserProfile('${post.userId}', '${post.user}')"
+                             onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'">
+
                         <div>
                             <div class="fw-bold text-dark" style="cursor:pointer;" onclick="openUserProfile('${post.userId}', '${post.user}')">
                             ${post.user || "Unbekannt"}
