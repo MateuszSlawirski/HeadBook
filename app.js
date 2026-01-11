@@ -1280,21 +1280,45 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // Statistiken & Content
+   // Statistiken & Ränge & Content
     if (statsArea) {
         const targetName = viewingUserProfile.displayName;
+        
+        // Daten filtern
         const myTours = toursData.filter(t => t.user === targetName);
         const myPosts = allPostsCache.filter(p => p.user === targetName);
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
 
-        let html = `<div class="d-flex gap-3 mb-4 justify-content-center text-center">
-                        <div class="bg-light p-2 rounded px-3"><b>${myTours.length}</b><br><small>Touren</small></div>
-                        <div class="bg-light p-2 rounded px-3"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
-                        <div class="bg-light p-2 rounded px-3"><b>${myThreads.length}</b><br><small>Themen</small></div>
+        // --- NEU: RANG BERECHNUNG ---
+        const totalActivity = myTours.length + myPosts.length + myThreads.length;
+        
+        let rank = "Starter";       // Standard Name
+        let badgeColor = "secondary"; // Grau
+        let rankIcon = "🥚"; 
+
+        if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
+        if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
+        if (totalActivity >= 100) { rank = "Meilen Fresser";badgeColor = "success"; rankIcon = "🌍"; }
+        if (totalActivity >= 250) { rank = "Road King";     badgeColor = "danger";  rankIcon = "👑"; }
+
+        // HTML für den Rang-Badge (wird gleich unten eingebaut)
+        const rankBadgeHtml = `<span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span>`;
+        // -----------------------------
+
+        // Statistik-Balken (Mit Rang-Anzeige jetzt!)
+        let html = `<div class="text-center mb-3">
+                        ${rankBadgeHtml}
+                        <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
+                    </div>
+                    <div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                        <div class="bg-light p-2 rounded px-3 border"><b>${myTours.length}</b><br><small>Touren</small></div>
+                        <div class="bg-light p-2 rounded px-3 border"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
+                        <div class="bg-light p-2 rounded px-3 border"><b>${myThreads.length}</b><br><small>Themen</small></div>
                     </div>`;
 
+        // Listen Rendern (wie vorher, nur Code verkürzt dargestellt)
         if (myTours.length > 0) {
-            html += `<h6 class="fw-bold mt-3">🏍️ Touren</h6><div class="list-group mb-3">`;
+            html += `<h6 class="fw-bold mt-3">🗺️ Touren</h6><div class="list-group mb-3">`;
             myTours.forEach(t => {
                 html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">${t.title} <small class="text-muted">(${t.km} km)</small></a>`;
             });
@@ -1317,8 +1341,8 @@ window.renderProfilePage = async () => {
              html += `</div>`;
         }
 
-        if(myTours.length === 0 && myPosts.length === 0 && myThreads.length === 0) {
-            html += `<p class="text-center text-muted">Keine öffentlichen Aktivitäten.</p>`;
+        if(totalActivity === 0) {
+            html += `<p class="text-center text-muted py-3">Noch keine öffentlichen Aktivitäten.</p>`;
         }
         statsArea.innerHTML = html;
     }
