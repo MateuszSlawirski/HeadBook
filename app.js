@@ -22,7 +22,10 @@ import {
     onSnapshot, 
     orderBy,
     getDocs,
-    limit 
+    limit,
+    doc,        
+    getDoc,     
+    setDoc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
@@ -1226,7 +1229,23 @@ window.renderProfilePage = async () => {
     const friendsContainer = document.getElementById('friends-list-container');
 
     if(imgEl) {
-        const photo = viewingUserProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+        // Standard Avatar
+        let photo = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+        
+        // 1. Habe ich das Bild schon im Objekt? (z.B. weil ich es bin)
+        if (viewingUserProfile.photoUrl) {
+            photo = viewingUserProfile.photoUrl;
+        } 
+        // 2. Wenn nicht ICH es bin -> Versuche es aus Firestore zu holen
+        else if (!viewingUserProfile.isMe) {
+            // Asynchron laden ohne zu warten (damit die Seite nicht stockt)
+            getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
+                if(snap.exists() && snap.data().photoUrl) {
+                    imgEl.src = snap.data().photoUrl;
+                }
+            });
+        }
+        
         imgEl.src = photo;
     }
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
@@ -1412,6 +1431,14 @@ window.saveProfile = async (e) => {
 
         if (response.ok) {
             const updatedUser = await response.json();
+            try {
+                if(updatedUser.photoUrl) {
+                    await setDoc(doc(db, "users", currentUser.uid), {
+                        photoUrl: updatedUser.photoUrl,
+                        displayName: currentUser.displayName
+                    }, { merge: true });
+                }
+            } catch(e) { console.log("Firestore Sync Warnung", e); }
             
             currentUser.bio = updatedUser.bio || newBio;
             if (updatedUser.photoUrl) {
@@ -1447,42 +1474,43 @@ function getChatId(uid1, uid2) {
     return [uid1, uid2].sort().join("_");
 }
 
-window.openMessageModal = (name) => {
+/* ==========================================
+   CHAT MODAL (FIX: Akzeptiert jetzt direkt eine ID)
+   ========================================== */
+window.openMessageModal = (name, targetUid = null) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
-    if (!viewingUserProfile) return;
+    
+    // Fallback: Wenn keine ID übergeben wurde, nimm den User vom aktuellen Profil
+    const chatPartnerId = targetUid || (viewingUserProfile ? viewingUserProfile.uid : null);
+    
+    if (!chatPartnerId) return window.showToast("Fehler: Kein Chat-Partner gefunden.", true);
 
     const modalEl = document.getElementById('messageModal');
     document.getElementById('msg-recipient').innerText = name;
     
-    // Chat-Bereich leeren
-    const body = modalEl.querySelector('.modal-body');
-    
-    // Wir bauen das Modal kurz um, damit es wie ein Chat aussieht
+    // Chat-ID generieren
+    const chatId = getChatId(currentUser.uid, chatPartnerId);
+
+    // Chat UI vorbereiten (Textarea kleiner, History rein)
+    const txtArea = document.getElementById('msg-text');
     if(!document.getElementById('chat-history')) {
         const chatArea = document.createElement('div');
         chatArea.id = 'chat-history';
         chatArea.style.cssText = "height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; background: #f9f9f9; display: flex; flex-direction: column;";
-        
-        // Altes Textarea Feld finden und Chat-Area davor einfügen
-        const txtArea = document.getElementById('msg-text');
         txtArea.parentNode.insertBefore(chatArea, txtArea);
-        txtArea.rows = 2; // Kleiner machen
+        txtArea.rows = 2;
         txtArea.placeholder = "Schreibe eine Nachricht...";
     }
-
-    // --- ECHTZEIT DATEN LADEN ---
-    const chatId = getChatId(currentUser.uid, viewingUserProfile.uid);
-    const chatRef = collection(db, "messages");
     
-    // Nur Nachrichten für diesen Chat laden, sortiert nach Zeit
-    const q = query(chatRef, where("chatId", "==", chatId), orderBy("createdAt", "asc"));
+    // Alten Listener stoppen, falls vorhanden
+    if (unsubscribeChat) unsubscribeChat();
 
-    // Listener starten (feuert jedes Mal, wenn eine neue Nachricht kommt)
-    if (unsubscribeChat) unsubscribeChat(); // Alten Listener stoppen
+    // Nachrichten laden
+    const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("createdAt", "asc"));
     
     unsubscribeChat = onSnapshot(q, (snapshot) => {
         const historyDiv = document.getElementById('chat-history');
-        historyDiv.innerHTML = ""; // Reset
+        historyDiv.innerHTML = ""; 
         
         if (snapshot.empty) {
             historyDiv.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
@@ -1492,14 +1520,9 @@ window.openMessageModal = (name) => {
             const msg = doc.data();
             const isMe = msg.senderId === currentUser.uid;
             
-            // Chat-Blase bauen
             const bubble = document.createElement('div');
             bubble.style.cssText = `
-                max-width: 80%; 
-                padding: 8px 12px; 
-                margin-bottom: 5px; 
-                border-radius: 15px; 
-                font-size: 0.9rem;
+                max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem;
                 align-self: ${isMe ? 'flex-end' : 'flex-start'};
                 background-color: ${isMe ? '#0d6efd' : '#e9ecef'};
                 color: ${isMe ? '#fff' : '#000'};
@@ -1507,12 +1530,40 @@ window.openMessageModal = (name) => {
             bubble.innerText = msg.text;
             historyDiv.appendChild(bubble);
         });
-        
-        // Nach unten scrollen
         historyDiv.scrollTop = historyDiv.scrollHeight;
     });
 
+    // Wir speichern die Partner-ID im Button, damit sendMessage sie nutzen kann
+    window.currentChatPartnerId = chatPartnerId; 
+
     new bootstrap.Modal(modalEl).show();
+};
+
+// Senden Funktion anpassen
+window.sendMessage = async () => {
+    const textInput = document.getElementById('msg-text');
+    const text = textInput.value.trim();
+    // Partner ID aus Variable holen oder Fallback
+    const partnerId = window.currentChatPartnerId || (viewingUserProfile ? viewingUserProfile.uid : null);
+    
+    if(!text || !partnerId) return;
+
+    try {
+        const chatId = getChatId(currentUser.uid, partnerId);
+        
+        await addDoc(collection(db, "messages"), {
+            text: text,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName,
+            receiverId: partnerId,
+            chatId: chatId,
+            createdAt: Date.now()
+        });
+        textInput.value = ""; 
+    } catch (e) {
+        console.error(e);
+        window.showToast("Senden fehlgeschlagen", true);
+    }
 };
 
 window.sendMessage = async () => {
@@ -1689,12 +1740,11 @@ window.renderNotifications = async () => {
                     type: 'message',
                     user: msg.senderName || "Unbekannt",
                     text: `schrieb: "${msg.text}"`,
-                    // Klick öffnet das Profil & Chat Modal
+                    // FIX: Direktes Öffnen mit ID und Name
                     linkAction: () => { 
-                        openUserProfile(msg.senderId, msg.senderName); 
-                        setTimeout(() => openMessageModal(msg.senderName), 500); 
+                        openMessageModal(msg.senderName, msg.senderId); 
                     },
-                    date: new Date(msg.createdAt).toISOString() // Zeitstempel für Sortierung
+                    date: new Date(msg.createdAt).toISOString()
                 });
             }
         });
