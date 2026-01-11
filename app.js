@@ -12,10 +12,24 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// NEU: Imports für den Chat (Datenbank)
+import { 
+    getFirestore, 
+    collection, 
+    addDoc, 
+    query, 
+    where, 
+    onSnapshot, 
+    orderBy,
+    getDocs,
+    limit 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app); // Die Chat-Datenbank starten
 
 // STATE VARIABLES
 let allPostsCache = []; 
@@ -1422,19 +1436,118 @@ window.saveProfile = async (e) => {
     }
 };
 
+/* ==========================================
+   ECHTZEIT CHAT (Private Nachrichten)
+   ========================================== */
+let unsubscribeChat = null; // Um den Chat zu stoppen wenn man das Fenster schließt
+
+// Hilfsfunktion: Erzeugt eine eindeutige ID für das Gespräch zwischen zwei Usern
+function getChatId(uid1, uid2) {
+    // Sortieren, damit A->B und B->A die gleiche ID haben
+    return [uid1, uid2].sort().join("_");
+}
+
 window.openMessageModal = (name) => {
+    if (!currentUser) return window.showToast("Bitte einloggen", true);
+    if (!viewingUserProfile) return;
+
     const modalEl = document.getElementById('messageModal');
     document.getElementById('msg-recipient').innerText = name;
+    
+    // Chat-Bereich leeren
+    const body = modalEl.querySelector('.modal-body');
+    
+    // Wir bauen das Modal kurz um, damit es wie ein Chat aussieht
+    if(!document.getElementById('chat-history')) {
+        const chatArea = document.createElement('div');
+        chatArea.id = 'chat-history';
+        chatArea.style.cssText = "height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; background: #f9f9f9; display: flex; flex-direction: column;";
+        
+        // Altes Textarea Feld finden und Chat-Area davor einfügen
+        const txtArea = document.getElementById('msg-text');
+        txtArea.parentNode.insertBefore(chatArea, txtArea);
+        txtArea.rows = 2; // Kleiner machen
+        txtArea.placeholder = "Schreibe eine Nachricht...";
+    }
+
+    // --- ECHTZEIT DATEN LADEN ---
+    const chatId = getChatId(currentUser.uid, viewingUserProfile.uid);
+    const chatRef = collection(db, "messages");
+    
+    // Nur Nachrichten für diesen Chat laden, sortiert nach Zeit
+    const q = query(chatRef, where("chatId", "==", chatId), orderBy("createdAt", "asc"));
+
+    // Listener starten (feuert jedes Mal, wenn eine neue Nachricht kommt)
+    if (unsubscribeChat) unsubscribeChat(); // Alten Listener stoppen
+    
+    unsubscribeChat = onSnapshot(q, (snapshot) => {
+        const historyDiv = document.getElementById('chat-history');
+        historyDiv.innerHTML = ""; // Reset
+        
+        if (snapshot.empty) {
+            historyDiv.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
+        }
+
+        snapshot.forEach((doc) => {
+            const msg = doc.data();
+            const isMe = msg.senderId === currentUser.uid;
+            
+            // Chat-Blase bauen
+            const bubble = document.createElement('div');
+            bubble.style.cssText = `
+                max-width: 80%; 
+                padding: 8px 12px; 
+                margin-bottom: 5px; 
+                border-radius: 15px; 
+                font-size: 0.9rem;
+                align-self: ${isMe ? 'flex-end' : 'flex-start'};
+                background-color: ${isMe ? '#0d6efd' : '#e9ecef'};
+                color: ${isMe ? '#fff' : '#000'};
+            `;
+            bubble.innerText = msg.text;
+            historyDiv.appendChild(bubble);
+        });
+        
+        // Nach unten scrollen
+        historyDiv.scrollTop = historyDiv.scrollHeight;
+    });
+
     new bootstrap.Modal(modalEl).show();
 };
 
-window.sendMessage = () => {
-    const text = document.getElementById('msg-text').value;
-    if(!text) return;
-    window.showToast("Nachricht gesendet!");
-    bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
-    document.getElementById('msg-text').value = "";
+window.sendMessage = async () => {
+    const textInput = document.getElementById('msg-text');
+    const text = textInput.value.trim();
+    if(!text || !viewingUserProfile) return;
+
+    try {
+        const chatId = getChatId(currentUser.uid, viewingUserProfile.uid);
+        
+        // Nachricht in Firestore speichern
+        await addDoc(collection(db, "messages"), {
+            text: text,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName,
+            receiverId: viewingUserProfile.uid,
+            chatId: chatId,
+            createdAt: Date.now()
+        });
+
+        textInput.value = ""; // Feld leeren (Chat aktualisiert sich automatisch durch onSnapshot!)
+        
+    } catch (e) {
+        console.error("Chat Error", e);
+        window.showToast("Konnte Nachricht nicht senden (Datenbankfehler)", true);
+    }
 };
+
+// Wenn Modal geschlossen wird, Listener stoppen (Performance)
+const msgModal = document.getElementById('messageModal');
+if(msgModal) {
+    msgModal.addEventListener('hidden.bs.modal', () => {
+        if (unsubscribeChat) unsubscribeChat();
+    });
+}
 
 window.showToast = (message, isError = false) => {
     const toastEl = document.getElementById('appToast');
@@ -1497,46 +1610,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 2. Die Logik: Sammelt alle Likes und Kommentare ein
+//  Die Logik: Sammelt alle Likes und Kommentare ein
+/* ==========================================
+    NOTIFICATIONS MIT CHAT
+   ========================================== */
 window.renderNotifications = async () => {
     const list = document.getElementById('notification-list');
     if(!list) return;
     
-    // Falls Feed noch leer, erst laden
+    list.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+
+    // 1. Feed laden (für Likes/Kommentare)
     if(allPostsCache.length === 0) await loadFeed();
 
     const myUid = currentUser ? currentUser.uid : null;
+    if(!myUid) return;
+
     let notifs = [];
 
-    // A) Scanne meine Posts nach Interaktionen
+    // --- A) FEED INTERAKTIONEN (Likes & Kommentare) ---
     allPostsCache.forEach(post => {
         if (post.userId === myUid) {
-            // Kommentare checken
+            // Kommentare
             if (post.comments) {
                 post.comments.forEach(c => {
-                    // Ignoriere meine eigenen Kommentare
                     if (c.user !== currentUser.displayName) { 
                         notifs.push({
                             type: 'comment',
                             user: c.user,
                             text: `hat kommentiert: "${c.text}"`,
-                            postId: post.id,
-                            date: post.createdAt // Kommentare haben leider kein Datum, wir nehmen Post-Datum als Referenz oder sortieren unten
+                            linkAction: () => { navigateTo('home'); setTimeout(()=>document.getElementById(`post-${post.id}`).scrollIntoView(), 500); },
+                            date: post.createdAt 
                         });
                     }
                 });
             }
-            // Likes checken
+            // Likes
             if (post.likes) {
                 post.likes.forEach(likerUid => {
                     if (likerUid !== myUid) {
-                        // Wir versuchen den Namen aufzulösen
-                        const info = findUserInfo(likerUid);
+                        const info = findUserInfo(likerUid); // Name auflösen
                         notifs.push({
                             type: 'like',
                             user: info.name,
                             text: `gefällt dein Beitrag.`,
-                            postId: post.id,
+                            linkAction: () => { navigateTo('home'); setTimeout(()=>document.getElementById(`post-${post.id}`).scrollIntoView(), 500); },
                             date: post.createdAt 
                         });
                     }
@@ -1545,34 +1663,80 @@ window.renderNotifications = async () => {
         }
     });
 
-    // B) Freunde Check (Wer hat mich geaddet?)
-    // Das ist der Trick: Wir schauen, ob jemand UNS in seiner Liste hat.
-    // (Geht nur begrenzt, da wir nicht alle User laden können, aber wir checken die bekannten User aus dem Feed)
-    // *** HINWEIS: Das ist eine Simulation, da das Backend keine echte "Anfrage" speichert ***
-    
-    // Rendering
+    // --- B) NEU: PRIVATE NACHRICHTEN (Firestore Check) ---
+    try {
+        // Suche Nachrichten, wo ICH der Empfänger bin
+        // Wir holen die letzten 20 Nachrichten an mich
+        const qMsg = query(
+            collection(db, "messages"), 
+            where("receiverId", "==", myUid), 
+            orderBy("createdAt", "desc"),
+            limit(20)
+        );
+        
+        const snapshot = await getDocs(qMsg);
+        
+        // Wir wollen pro User nur die NEUESTE Nachricht anzeigen (kein Spam)
+        const sendersSeen = new Set();
+
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            // Wenn wir von diesem Absender schon eine neuere Nachricht haben -> überspringen
+            if (!sendersSeen.has(msg.senderId)) {
+                sendersSeen.add(msg.senderId);
+                
+                notifs.push({
+                    type: 'message',
+                    user: msg.senderName || "Unbekannt",
+                    text: `schrieb: "${msg.text}"`,
+                    // Klick öffnet das Profil & Chat Modal
+                    linkAction: () => { 
+                        openUserProfile(msg.senderId, msg.senderName); 
+                        setTimeout(() => openMessageModal(msg.senderName), 500); 
+                    },
+                    date: new Date(msg.createdAt).toISOString() // Zeitstempel für Sortierung
+                });
+            }
+        });
+
+    } catch (e) {
+        console.error("Fehler beim Laden der Nachrichten:", e);
+        // Kein Abbruch, wir zeigen zumindest die Likes an
+    }
+
+    // --- RENDERING ---
     list.innerHTML = '';
     if (notifs.length === 0) {
         list.innerHTML = '<div class="text-center p-5 text-muted">Keine neuen Benachrichtigungen.</div>';
         return;
     }
 
-    // Sortieren (Da wir keine echten Zeitstempel für Likes haben, ist das etwas chaotisch, aber besser als nichts)
-    // Wir drehen es einfach um, damit "Posts die weit oben sind" (neu) zuerst kommen.
-    // (Beste Näherung ohne Backend-Update)
+    // Sortieren (Neueste zuerst) - Wir nutzen das Datum string als groben Vergleich
+    notifs.sort((a, b) => (b.date > a.date) ? 1 : -1);
     
     notifs.forEach(n => {
-        const icon = n.type === 'comment' ? '💬' : '❤️';
-        const html = `
-        <div class="list-group-item list-group-item-action p-3" onclick="navigateTo('home'); setTimeout(()=>document.getElementById('post-${n.postId}').scrollIntoView(), 500)" style="cursor:pointer;">
+        let icon = '🔔';
+        let color = 'bg-light';
+        
+        if (n.type === 'comment') { icon = '💬'; }
+        if (n.type === 'like') { icon = '❤️'; color = 'bg-danger-subtle'; }
+        if (n.type === 'message') { icon = '📩'; color = 'bg-primary-subtle'; } // Blaue Färbung für Nachrichten
+
+        // HTML Element bauen
+        const item = document.createElement('div');
+        item.className = `list-group-item list-group-item-action p-3 ${n.type === 'message' ? 'border-start border-4 border-primary' : ''}`;
+        item.style.cursor = "pointer";
+        item.onclick = n.linkAction; // Die Funktion, die wir oben definiert haben
+        
+        item.innerHTML = `
             <div class="d-flex align-items-center">
                 <div class="me-3 fs-4">${icon}</div>
                 <div>
-                    <div class="fw-bold">${n.user}</div>
-                    <div class="text-muted small">${n.text}</div>
+                    <div class="fw-bold text-dark">${n.user}</div>
+                    <div class="text-muted small text-truncate" style="max-width: 250px;">${n.text}</div>
                 </div>
-            </div>
-        </div>`;
-        list.innerHTML += html;
+            </div>`;
+            
+        list.appendChild(item);
     });
 };
