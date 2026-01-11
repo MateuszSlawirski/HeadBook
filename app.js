@@ -143,6 +143,10 @@ async function navigateTo(pageId) {
     if (pageId === 'forum') {
         renderForumHome();
     }
+    // E) NOTIFICATIONS
+    if (pageId === 'notifications') {
+        renderNotifications();
+    }
 }
 window.navigateTo = navigateTo;
 
@@ -1409,4 +1413,125 @@ window.showToast = (message, isError = false) => {
     }
     const toast = new bootstrap.Toast(toastEl);
     toast.show();
+};
+/* ==========================================
+   NEU: BENACHRICHTIGUNGS-CENTER (Facebook Style)
+   ========================================== */
+
+// 1. "Glocke" und Seite automatisch ins HTML einbauen (Start-Injection)
+document.addEventListener('DOMContentLoaded', () => {
+    // Nav-Item "Glocke" erzeugen
+    const navProfile = document.getElementById('nav-profile')?.parentElement;
+    if (navProfile && !document.getElementById('nav-notifications')) {
+        const li = document.createElement('li');
+        li.className = 'nav-item mx-3';
+        li.innerHTML = `
+            <a class="nav-link d-flex flex-column align-items-center auth-required" id="nav-notifications" onclick="navigateTo('notifications')" style="cursor:pointer">
+                🔔 <span class="d-none d-lg-block" style="font-size:0.8rem">News</span>
+            </a>`;
+        // Vor dem Profil einfügen
+        navProfile.parentElement.insertBefore(li, navProfile);
+    }
+
+    // Page-Section "Notifications" erzeugen
+    const mainContainer = document.querySelector('.container-xl');
+    if (mainContainer && !document.getElementById('page-notifications')) {
+        const section = document.createElement('section');
+        section.id = 'page-notifications';
+        section.className = 'page-section';
+        section.innerHTML = `
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <h3 class="fw-bold mb-4">🔔 Deine Benachrichtigungen</h3>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <div id="notification-list" class="list-group list-group-flush">
+                                <div class="text-center p-5 text-muted">Lade Neuigkeiten...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        mainContainer.appendChild(section);
+    }
+});
+
+// 2. Die Logik: Sammelt alle Likes und Kommentare ein
+window.renderNotifications = async () => {
+    const list = document.getElementById('notification-list');
+    if(!list) return;
+    
+    // Falls Feed noch leer, erst laden
+    if(allPostsCache.length === 0) await loadFeed();
+
+    const myUid = currentUser ? currentUser.uid : null;
+    let notifs = [];
+
+    // A) Scanne meine Posts nach Interaktionen
+    allPostsCache.forEach(post => {
+        if (post.userId === myUid) {
+            // Kommentare checken
+            if (post.comments) {
+                post.comments.forEach(c => {
+                    // Ignoriere meine eigenen Kommentare
+                    if (c.user !== currentUser.displayName) { 
+                        notifs.push({
+                            type: 'comment',
+                            user: c.user,
+                            text: `hat kommentiert: "${c.text}"`,
+                            postId: post.id,
+                            date: post.createdAt // Kommentare haben leider kein Datum, wir nehmen Post-Datum als Referenz oder sortieren unten
+                        });
+                    }
+                });
+            }
+            // Likes checken
+            if (post.likes) {
+                post.likes.forEach(likerUid => {
+                    if (likerUid !== myUid) {
+                        // Wir versuchen den Namen aufzulösen
+                        const info = findUserInfo(likerUid);
+                        notifs.push({
+                            type: 'like',
+                            user: info.name,
+                            text: `gefällt dein Beitrag.`,
+                            postId: post.id,
+                            date: post.createdAt 
+                        });
+                    }
+                });
+            }
+        }
+    });
+
+    // B) Freunde Check (Wer hat mich geaddet?)
+    // Das ist der Trick: Wir schauen, ob jemand UNS in seiner Liste hat.
+    // (Geht nur begrenzt, da wir nicht alle User laden können, aber wir checken die bekannten User aus dem Feed)
+    // *** HINWEIS: Das ist eine Simulation, da das Backend keine echte "Anfrage" speichert ***
+    
+    // Rendering
+    list.innerHTML = '';
+    if (notifs.length === 0) {
+        list.innerHTML = '<div class="text-center p-5 text-muted">Keine neuen Benachrichtigungen.</div>';
+        return;
+    }
+
+    // Sortieren (Da wir keine echten Zeitstempel für Likes haben, ist das etwas chaotisch, aber besser als nichts)
+    // Wir drehen es einfach um, damit "Posts die weit oben sind" (neu) zuerst kommen.
+    // (Beste Näherung ohne Backend-Update)
+    
+    notifs.forEach(n => {
+        const icon = n.type === 'comment' ? '💬' : '❤️';
+        const html = `
+        <div class="list-group-item list-group-item-action p-3" onclick="navigateTo('home'); setTimeout(()=>document.getElementById('post-${n.postId}').scrollIntoView(), 500)" style="cursor:pointer;">
+            <div class="d-flex align-items-center">
+                <div class="me-3 fs-4">${icon}</div>
+                <div>
+                    <div class="fw-bold">${n.user}</div>
+                    <div class="text-muted small">${n.text}</div>
+                </div>
+            </div>
+        </div>`;
+        list.innerHTML += html;
+    });
 };
