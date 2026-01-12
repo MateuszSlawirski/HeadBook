@@ -1571,8 +1571,7 @@ function getChatId(uid1, uid2) {
     return [uid1, uid2].sort().join("_");
 }
 
-// Update-Funktion importieren (falls noch nicht geschehen, macht nichts wenn doppelt)
-import { updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 
 // 1. DAS POSTFACH
 window.openInbox = async () => {
