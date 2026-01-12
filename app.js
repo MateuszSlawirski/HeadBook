@@ -1335,23 +1335,24 @@ window.renderProfilePage = async () => {
         }
     }
 
-    if (actionArea) {
+   if (actionArea) {
         actionArea.innerHTML = '';
         if (viewingUserProfile.isMe) {
-            actionArea.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>`;
+            // HIER IST DER NEUE BUTTON FÜR DICH:
+            actionArea.innerHTML = `
+                <button class="btn btn-primary btn-sm me-2" onclick="openInbox()">📬 Mein Postfach</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>
+            `;
         } else {
+            // FÜR ANDERE USER (Sicht auf dich):
             const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(viewingUserProfile.uid);
-            
-            let friendBtn = '';
-            if (isFriend) {
-                friendBtn = `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`;
-            } else {
-                friendBtn = `<button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>`;
-            }
+            let friendBtn = isFriend 
+                ? `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`
+                : `<button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>`;
 
             actionArea.innerHTML = `
                 ${friendBtn}
-                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}')">💬 Nachricht</button>
+                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}', '${viewingUserProfile.uid}')">💬 Nachricht senden</button>
             `;
         }
     }
@@ -1506,10 +1507,7 @@ window.saveProfile = async (e) => {
     }
 };
 
-/* ==========================================
-   ECHTZEIT CHAT (Private Nachrichten)
-   ========================================== */
-let unsubscribeChat = null; // Um den Chat zu stoppen wenn man das Fenster schließt
+
 
 // Hilfsfunktion: Erzeugt eine eindeutige ID für das Gespräch zwischen zwei Usern
 function getChatId(uid1, uid2) {
@@ -1518,51 +1516,149 @@ function getChatId(uid1, uid2) {
 }
 
 /* ==========================================
-   CHAT MODAL (FIX: Akzeptiert jetzt direkt eine ID)
+   NEU: MESSENGER & POSTFACH (Inbox)
    ========================================== */
-window.openMessageModal = (name, targetUid = null) => {
+let unsubscribeChat = null; 
+
+// Hilfsfunktion: ID generieren
+function getChatId(uid1, uid2) {
+    return [uid1, uid2].sort().join("_");
+}
+
+// 1. DAS POSTFACH (Übersicht aller Chats & Freunde)
+window.openInbox = async () => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
+
+    // Modal dynamsich erzeugen, falls nicht da
+    let inboxModal = document.getElementById('inboxModal');
+    if (!inboxModal) {
+        const modalHtml = `
+        <div class="modal fade" id="inboxModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">📬 Mein Postfach</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <ul class="nav nav-tabs nav-justified" id="inboxTabs" role="tablist">
+                            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-chats">💬 Letzte Chats</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-friends">👥 Freunde</button></li>
+                        </ul>
+                        <div class="tab-content p-3">
+                            <div class="tab-pane fade show active" id="tab-chats">
+                                <div id="inbox-chats-list" class="list-group list-group-flush"><div class="text-center p-3"><div class="spinner-border text-primary"></div></div></div>
+                            </div>
+                            <div class="tab-pane fade" id="tab-friends">
+                                <div id="inbox-friends-list" class="list-group list-group-flush"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        inboxModal = document.getElementById('inboxModal');
+    }
+
+    const modal = new bootstrap.Modal(inboxModal);
+    modal.show();
+
+    // A) Letzte Chats laden (aus Firestore)
+    const chatListEl = document.getElementById('inbox-chats-list');
+    chatListEl.innerHTML = '';
     
-    // Fallback: Wenn keine ID übergeben wurde, nimm den User vom aktuellen Profil
-    const chatPartnerId = targetUid || (viewingUserProfile ? viewingUserProfile.uid : null);
+    // Wir suchen Nachrichten, wo ich Sender ODER Empfänger war
+    // (Vereinfacht: Wir suchen Chats, in denen ich involviert bin. Firestore ist hier limitiert, daher der Trick über Benachrichtigungen oder einfach 'letzte Nachrichten an mich')
+    try {
+        // Wir laden die letzten Nachrichten AN MICH als Basis für die Chat-Liste
+        const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(50));
+        const snapshot = await getDocs(q);
+        const chatPartners = new Set();
+        
+        if(snapshot.empty) {
+             chatListEl.innerHTML = '<div class="text-center text-muted mt-3">Noch keine Nachrichten erhalten.</div>';
+        } else {
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                if (!chatPartners.has(msg.senderId)) {
+                    chatPartners.add(msg.senderId);
+                    // Eintrag rendern
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item list-group-item-action d-flex align-items-center p-2';
+                    item.style.cursor = 'pointer';
+                    item.onclick = () => { modal.hide(); openMessageModal(msg.senderName, msg.senderId); };
+                    item.innerHTML = `
+                        <div style="width:40px; height:40px; background:#eee; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px;">👤</div>
+                        <div class="flex-grow-1">
+                            <div class="fw-bold">${msg.senderName}</div>
+                            <small class="text-muted text-truncate" style="max-width:200px; display:block;">${msg.text}</small>
+                        </div>
+                        <small class="text-muted">${new Date(msg.createdAt).toLocaleDateString()}</small>
+                    `;
+                    chatListEl.appendChild(item);
+                }
+            });
+        }
+    } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Fehler beim Laden.</div>'; }
+
+    // B) Freundesliste laden (zum Starten neuer Chats)
+    const friendsListEl = document.getElementById('inbox-friends-list');
+    friendsListEl.innerHTML = '';
     
-    if (!chatPartnerId) return window.showToast("Fehler: Kein Chat-Partner gefunden.", true);
+    if (currentUser.friends && currentUser.friends.length > 0) {
+        currentUser.friends.forEach(fid => {
+            const info = findUserInfo(fid);
+            const item = document.createElement('div');
+            item.className = 'list-group-item list-group-item-action d-flex align-items-center p-2';
+            item.onclick = () => { modal.hide(); openMessageModal(info.name, fid); };
+            item.innerHTML = `
+                <div class="me-3 fs-4">🟢</div>
+                <div class="fw-bold">${info.name}</div>
+            `;
+            friendsListEl.appendChild(item);
+        });
+    } else {
+        friendsListEl.innerHTML = '<div class="text-muted text-center p-3">Du hast noch keine Freunde hinzugefügt.</div>';
+    }
+};
+
+// 2. CHAT FENSTER ÖFFNEN (Repariert & Firestore Integriert)
+window.openMessageModal = (name, targetUid) => {
+    if (!currentUser) return window.showToast("Bitte einloggen", true);
+    // Fallback ID finden
+    const partnerId = targetUid || (viewingUserProfile ? viewingUserProfile.uid : null);
+    if (!partnerId) return window.showToast("Fehler: Chat-Partner unbekannt", true);
 
     const modalEl = document.getElementById('messageModal');
     document.getElementById('msg-recipient').innerText = name;
     
-    // Chat-ID generieren
-    const chatId = getChatId(currentUser.uid, chatPartnerId);
-
-    // Chat UI vorbereiten (Textarea kleiner, History rein)
+    // UI Setup (History Bereich einfügen falls fehlt)
     const txtArea = document.getElementById('msg-text');
-    if(!document.getElementById('chat-history')) {
-        const chatArea = document.createElement('div');
-        chatArea.id = 'chat-history';
-        chatArea.style.cssText = "height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; background: #f9f9f9; display: flex; flex-direction: column;";
-        txtArea.parentNode.insertBefore(chatArea, txtArea);
-        txtArea.rows = 2;
-        txtArea.placeholder = "Schreibe eine Nachricht...";
+    let chatHistory = document.getElementById('chat-history');
+    if(!chatHistory) {
+        chatHistory = document.createElement('div');
+        chatHistory.id = 'chat-history';
+        chatHistory.style.cssText = "height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; background: #f9f9f9; display: flex; flex-direction: column;";
+        txtArea.parentNode.insertBefore(chatHistory, txtArea);
+        txtArea.rows = 2; 
+        txtArea.placeholder = "Nachricht schreiben...";
     }
     
-    // Alten Listener stoppen, falls vorhanden
+    // Alten Listener stoppen
     if (unsubscribeChat) unsubscribeChat();
 
-    // Nachrichten laden
+    // Firestore Listener Starten
+    const chatId = getChatId(currentUser.uid, partnerId);
     const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("createdAt", "asc"));
     
     unsubscribeChat = onSnapshot(q, (snapshot) => {
-        const historyDiv = document.getElementById('chat-history');
-        historyDiv.innerHTML = ""; 
-        
-        if (snapshot.empty) {
-            historyDiv.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
-        }
+        chatHistory.innerHTML = ""; 
+        if (snapshot.empty) chatHistory.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
 
         snapshot.forEach((doc) => {
             const msg = doc.data();
             const isMe = msg.senderId === currentUser.uid;
-            
             const bubble = document.createElement('div');
             bubble.style.cssText = `
                 max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem;
@@ -1571,29 +1667,26 @@ window.openMessageModal = (name, targetUid = null) => {
                 color: ${isMe ? '#fff' : '#000'};
             `;
             bubble.innerText = msg.text;
-            historyDiv.appendChild(bubble);
+            chatHistory.appendChild(bubble);
         });
-        historyDiv.scrollTop = historyDiv.scrollHeight;
+        chatHistory.scrollTop = chatHistory.scrollHeight;
     });
 
-    // Wir speichern die Partner-ID im Button, damit sendMessage sie nutzen kann
-    window.currentChatPartnerId = chatPartnerId; 
-
+    // ID für Senden-Funktion speichern
+    window.currentChatPartnerId = partnerId; 
     new bootstrap.Modal(modalEl).show();
 };
 
-// Senden Funktion anpassen
+// 3. NACHRICHT SENDEN (In Datenbank speichern)
 window.sendMessage = async () => {
     const textInput = document.getElementById('msg-text');
     const text = textInput.value.trim();
-    // Partner ID aus Variable holen oder Fallback
-    const partnerId = window.currentChatPartnerId || (viewingUserProfile ? viewingUserProfile.uid : null);
+    const partnerId = window.currentChatPartnerId;
     
     if(!text || !partnerId) return;
 
     try {
         const chatId = getChatId(currentUser.uid, partnerId);
-        
         await addDoc(collection(db, "messages"), {
             text: text,
             senderId: currentUser.uid,
@@ -1605,43 +1698,24 @@ window.sendMessage = async () => {
         textInput.value = ""; 
     } catch (e) {
         console.error(e);
-        window.showToast("Senden fehlgeschlagen", true);
+        window.showToast("Sendefehler: " + e.message, true);
     }
 };
 
-window.sendMessage = async () => {
-    const textInput = document.getElementById('msg-text');
-    const text = textInput.value.trim();
-    if(!text || !viewingUserProfile) return;
-
-    try {
-        const chatId = getChatId(currentUser.uid, viewingUserProfile.uid);
-        
-        // Nachricht in Firestore speichern
-        await addDoc(collection(db, "messages"), {
-            text: text,
-            senderId: currentUser.uid,
-            senderName: currentUser.displayName,
-            receiverId: viewingUserProfile.uid,
-            chatId: chatId,
-            createdAt: Date.now()
-        });
-
-        textInput.value = ""; // Feld leeren (Chat aktualisiert sich automatisch durch onSnapshot!)
-        
-    } catch (e) {
-        console.error("Chat Error", e);
-        window.showToast("Konnte Nachricht nicht senden (Datenbankfehler)", true);
-    }
-};
-
-// Wenn Modal geschlossen wird, Listener stoppen (Performance)
+// Listener aufräumen
 const msgModal = document.getElementById('messageModal');
 if(msgModal) {
     msgModal.addEventListener('hidden.bs.modal', () => {
         if (unsubscribeChat) unsubscribeChat();
     });
 }
+
+
+
+
+
+
+
 
 window.showToast = (message, isError = false) => {
     const toastEl = document.getElementById('appToast');
