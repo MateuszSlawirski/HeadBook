@@ -20,12 +20,14 @@ import {
     query, 
     where, 
     onSnapshot, 
-    orderBy,
-    getDocs,
-    limit,
-    doc,        
-    getDoc,     
-    setDoc
+    orderBy, 
+    getDocs, 
+    limit, 
+    doc, 
+    getDoc, 
+    setDoc, 
+    updateDoc, 
+    arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
@@ -184,52 +186,75 @@ window.openMyProfile = () => {
    AUTH & UI
    ========================================== */
 
+/* ==========================================
+   SYNC USER (Korrigierte Version)
+   ========================================== */
 async function syncUserWithBackend(firebaseUser) {
-    if (!firebaseUser) return; 
-    
+    if (!firebaseUser) return;
+
     try {
-        console.log("Synchronisiere User mit Backend..."); // Log für Debugging
+        console.log("Synchronisiere User mit Backend...");
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                uid: firebaseUser.uid, 
+            body: JSON.stringify({
+                uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                displayName: firebaseUser.displayName 
+                displayName: firebaseUser.displayName
             })
         });
 
-        if(response.ok) {
+        if (response.ok) {
+            // 1. Erst die Daten vom Azure-Server holen
             const dbUser = await response.json();
-            try {
-                    if (dbUser.photoUrl) {
-                        const userRef = doc(db, "users", firebaseUser.uid);
-                        // Wir nutzen setDoc mit merge, das repariert/erstellt den Eintrag lautlos
-                        await setDoc(userRef, {
-                            photoUrl: dbUser.photoUrl,
-                            displayName: dbUser.displayName || firebaseUser.displayName
-                        }, { merge: true });
-                    }
-                } catch(e) { console.log("Auto-Sync Info:", e); }
-            console.log("Daten vom Server erhalten:", dbUser); // Log der Server-Antwort
 
+            // 2. Auto-Sync: Bild in Firestore speichern (im Hintergrund)
+            try {
+                if (dbUser.photoUrl) {
+                    const userRef = doc(db, "users", firebaseUser.uid);
+                    await setDoc(userRef, {
+                        photoUrl: dbUser.photoUrl,
+                        displayName: dbUser.displayName || firebaseUser.displayName
+                    }, { merge: true });
+                }
+            } catch(e) { console.log("Auto-Sync Info:", e); }
+
+            // 3. WICHTIG: Jetzt Freunde aus Firestore laden und in das User-Objekt mischen
+            // Das muss HIER stehen, nachdem dbUser geladen wurde!
+            try {
+                const mySnap = await getDoc(doc(db, "users", firebaseUser.uid));
+                if (mySnap.exists()) {
+                    const myData = mySnap.data();
+                    if (myData.friends && Array.isArray(myData.friends)) {
+                        // Wir packen die Freunde aus der Datenbank in unser User-Objekt
+                        dbUser.friends = myData.friends;
+                    }
+                }
+            } catch(e) { console.log("Konnte Freunde nicht laden", e); }
+            // -------------------------------------------------------------
+
+            console.log("Daten vom Server erhalten (inkl. Freunde):", dbUser);
+
+            // 4. Jetzt erst den globalen currentUser setzen
             if (currentUser) {
+                // Falls schon eingeloggt, Daten aktualisieren
                 currentUser.role = dbUser.role || "user";
-                currentUser.bio = dbUser.bio || "";
-                currentUser.photoUrl = dbUser.photoUrl || null;
-                // WICHTIG: Sicherstellen, dass friends übernommen wird!
-                currentUser.friends = Array.isArray(dbUser.friends) ? dbUser.friends : [];
-                currentRole = currentUser.role;
+                currentUser.friends = dbUser.friends || []; 
+                currentUser.photoUrl = dbUser.photoUrl || currentUser.photoUrl;
+            } else {
+                // Falls erster Login
+                currentUser = dbUser;
             }
-            
-            updateUI(); 
-            // Falls wir gerade auf dem Profil sind, sofort aktualisieren
-            if (getActivePage() === 'profile') renderProfilePage();
+
+            // UI Updates
+            updateUIForLogin();
+            if(window.location.hash === '#profile') renderProfilePage();
+
         } else {
-            console.error("Server Fehler beim Sync:", await response.text());
+            console.error("Backend Error:", await response.text());
         }
-    } catch (err) {
-        console.warn("Backend Sync Fehler (Netzwerk?):", err);
+    } catch (error) {
+        console.error("Sync Error:", error);
     }
 }
 
@@ -1136,37 +1161,47 @@ function findUserInfo(uid) {
 }
 
 /* ==========================================
-   FREUNDE HINZUFÜGEN (FIX: UI Update)
+   FREUNDE HINZUFÜGEN (Firestore Lösung)
    ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
 
     try {
-        const response = await fetch(`${API_URL}/addFriend`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.uid, friendId: targetUid })
+        // Wir speichern den Freund direkt in DEINER Datenbank-Akte
+        const myUserRef = doc(db, "users", currentUser.uid);
+
+        // arrayUnion fügt hinzu, verhindert aber Doppelte automatisch
+        await updateDoc(myUserRef, {
+            friends: arrayUnion(targetUid)
         });
 
-        if (response.ok) {
-            window.showToast("Freund hinzugefügt! 🎉");
-            
-            // --- FIX: Lokale Liste sofort aktualisieren ---
-            if (!currentUser.friends) currentUser.friends = [];
+        window.showToast("Freund hinzugefügt! 🎉");
+        
+        // Sofortige Anzeige-Aktualisierung (damit der Button grün wird)
+        if (!currentUser.friends) currentUser.friends = [];
+        if (!currentUser.friends.includes(targetUid)) {
             currentUser.friends.push(targetUid);
-            
-            // Profilseite neu laden, damit der Button zu "✔ Befreundet" wird
-            if (viewingUserProfile && viewingUserProfile.uid === targetUid) {
-                renderProfilePage(); 
-            }
-            // ---------------------------------------------
-        } else {
-            const err = await response.text();
-            window.showToast("Fehler: " + err, true);
         }
+        
+        // Wenn wir gerade auf dem Profil dieses Users sind -> Seite neu malen
+        if (viewingUserProfile && viewingUserProfile.uid === targetUid) {
+            renderProfilePage(); 
+        }
+
     } catch (error) {
-        console.error(error);
-        window.showToast("Netzwerkfehler beim Hinzufügen.", true);
+        console.error("Fehler:", error);
+        // Fallback: Falls dein User-Dokument noch nicht existiert
+        if (error.code === 'not-found') {
+             await setDoc(doc(db, "users", currentUser.uid), { 
+                 friends: [targetUid],
+                 displayName: currentUser.displayName,
+                 photoUrl: currentUser.photoUrl || ""
+             }, { merge: true });
+             window.showToast("Freund hinzugefügt! 🎉");
+             renderProfilePage();
+        } else {
+            window.showToast("Fehler beim Speichern.", true);
+        }
     }
 };
 
