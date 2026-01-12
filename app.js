@@ -247,7 +247,6 @@ async function syncUserWithBackend(firebaseUser) {
             }
 
             // UI Updates
-            updateUIForLogin();
             if(window.location.hash === '#profile') renderProfilePage();
 
         } else {
