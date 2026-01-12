@@ -201,6 +201,16 @@ async function syncUserWithBackend(firebaseUser) {
 
         if(response.ok) {
             const dbUser = await response.json();
+            try {
+                    if (dbUser.photoUrl) {
+                        const userRef = doc(db, "users", firebaseUser.uid);
+                        // Wir nutzen setDoc mit merge, das repariert/erstellt den Eintrag lautlos
+                        await setDoc(userRef, {
+                            photoUrl: dbUser.photoUrl,
+                            displayName: dbUser.displayName || firebaseUser.displayName
+                        }, { merge: true });
+                    }
+                } catch(e) { console.log("Auto-Sync Info:", e); }
             console.log("Daten vom Server erhalten:", dbUser); // Log der Server-Antwort
 
             if (currentUser) {
