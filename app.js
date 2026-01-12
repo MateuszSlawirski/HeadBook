@@ -1509,11 +1509,7 @@ window.saveProfile = async (e) => {
 
 
 
-// Hilfsfunktion: Erzeugt eine eindeutige ID für das Gespräch zwischen zwei Usern
-function getChatId(uid1, uid2) {
-    // Sortieren, damit A->B und B->A die gleiche ID haben
-    return [uid1, uid2].sort().join("_");
-}
+
 
 /* ==========================================
    NEU: MESSENGER & POSTFACH (Inbox)
