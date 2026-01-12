@@ -1335,16 +1335,38 @@ window.renderProfilePage = async () => {
         }
     }
 
-   if (actionArea) {
+ if (actionArea) {
         actionArea.innerHTML = '';
+        
         if (viewingUserProfile.isMe) {
-            // HIER IST DER NEUE BUTTON FÜR DICH:
+            // HIER IST DER NEUE BUTTON MIT ID "btn-inbox"
             actionArea.innerHTML = `
-                <button class="btn btn-primary btn-sm me-2" onclick="openInbox()">📬 Mein Postfach</button>
+                <button id="btn-inbox" class="btn btn-primary btn-sm me-2 position-relative" onclick="openInbox()">
+                    📬 Mein Postfach
+                    <span id="inbox-badge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle d-none">
+                        <span class="visually-hidden">Neue Nachrichten</span>
+                    </span>
+                </button>
                 <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>
             `;
+
+            // --- NEU: PRÜFEN OB NACHRICHTEN DA SIND ---
+            // Wir schauen kurz in die Datenbank, ob es Nachrichten für mich gibt
+            try {
+                // Wir holen nur EINE Nachricht, um zu sehen ob überhaupt was da ist
+                const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), limit(1));
+                getDocs(qCheck).then(snap => {
+                    if (!snap.empty) {
+                        // Roter Punkt ANZEIGEN
+                        const badge = document.getElementById('inbox-badge');
+                        if(badge) badge.classList.remove('d-none');
+                    }
+                });
+            } catch(e) { console.log("Badge Check Fehler", e); }
+            // ------------------------------------------
+
         } else {
-            // FÜR ANDERE USER (Sicht auf dich):
+            // FÜR ANDERE USER
             const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(viewingUserProfile.uid);
             let friendBtn = isFriend 
                 ? `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`
