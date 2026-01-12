@@ -1706,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 //  Die Logik: Sammelt alle Likes und Kommentare ein
 /* ==========================================
-    NOTIFICATIONS MIT CHAT
+   ALL-IN-ONE NOTIFICATIONS (Feed, Forum, Chat, Freunde)
    ========================================== */
 window.renderNotifications = async () => {
     const list = document.getElementById('notification-list');
@@ -1714,25 +1714,27 @@ window.renderNotifications = async () => {
     
     list.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
 
-    // 1. Feed laden (für Likes/Kommentare)
-    if(allPostsCache.length === 0) await loadFeed();
-
     const myUid = currentUser ? currentUser.uid : null;
+    const myName = currentUser ? currentUser.displayName : null;
     if(!myUid) return;
+
+    // 1. Alle Daten laden, falls noch nicht da
+    if(allPostsCache.length === 0) await loadFeed();
+    if(allThreadsCache.length === 0) await loadForumData(); // WICHTIG für Forum-News
 
     let notifs = [];
 
-    // --- A) FEED INTERAKTIONEN (Likes & Kommentare) ---
+    // --- A) FEED: Kommentare & Likes auf MEINE Posts ---
     allPostsCache.forEach(post => {
         if (post.userId === myUid) {
             // Kommentare
             if (post.comments) {
                 post.comments.forEach(c => {
-                    if (c.user !== currentUser.displayName) { 
+                    if (c.user !== myName) { 
                         notifs.push({
                             type: 'comment',
                             user: c.user,
-                            text: `hat kommentiert: "${c.text}"`,
+                            text: `hat deinen Beitrag kommentiert.`,
                             linkAction: () => { navigateTo('home'); setTimeout(()=>document.getElementById(`post-${post.id}`).scrollIntoView(), 500); },
                             date: post.createdAt 
                         });
@@ -1743,7 +1745,7 @@ window.renderNotifications = async () => {
             if (post.likes) {
                 post.likes.forEach(likerUid => {
                     if (likerUid !== myUid) {
-                        const info = findUserInfo(likerUid); // Name auflösen
+                        const info = findUserInfo(likerUid);
                         notifs.push({
                             type: 'like',
                             user: info.name,
@@ -1755,47 +1757,76 @@ window.renderNotifications = async () => {
                 });
             }
         }
+        
+        // --- B) NEU: FREUNDE POSTS (Wenn ein Freund was neues postet) ---
+        // Prüfen ob der Poster in meiner Freundesliste ist
+        if (currentUser.friends && currentUser.friends.includes(post.userId)) {
+             // Nur anzeigen, wenn der Post neuer als 3 Tage ist (damit die Liste nicht explodiert)
+             const daysOld = (new Date() - new Date(post.createdAt)) / (1000 * 60 * 60 * 24);
+             if (daysOld < 3) {
+                 notifs.push({
+                    type: 'friend_post',
+                    user: post.user,
+                    text: `hat etwas Neues gepostet: "${post.content.substring(0, 20)}..."`,
+                    linkAction: () => { navigateTo('home'); setTimeout(()=>document.getElementById(`post-${post.id}`).scrollIntoView(), 500); },
+                    date: post.createdAt
+                 });
+             }
+        }
     });
 
-    // --- B) NEU: PRIVATE NACHRICHTEN (Firestore Check) ---
+    // --- C) NEU: FORUM ANTWORTEN (Wenn jemand in meinem Thema schreibt) ---
+    allThreadsCache.forEach(thread => {
+        // Wenn es MEIN Thema ist
+        if (thread.user === myName || thread.userId === myUid) {
+            if (thread.repliesList) {
+                thread.repliesList.forEach(reply => {
+                    // Wenn die Antwort nicht von mir ist
+                    if (reply.user !== myName) {
+                        notifs.push({
+                            type: 'forum_reply',
+                            user: reply.user,
+                            text: `antwortete im Thema "${thread.title}".`,
+                            // Trick: Wir öffnen das Thema direkt
+                            linkAction: () => { openThreadFromProfile(thread.id, thread.topic); }, 
+                            date: reply.date // Forum Datum ist oft nur String, aber wir versuchen es
+                        });
+                    }
+                });
+            }
+        }
+    });
+
+    // --- D) PRIVATE NACHRICHTEN (Firestore) ---
     try {
-        // Suche Nachrichten, wo ICH der Empfänger bin
-        // Wir holen die letzten 20 Nachrichten an mich
         const qMsg = query(
             collection(db, "messages"), 
             where("receiverId", "==", myUid), 
             orderBy("createdAt", "desc"),
             limit(20)
         );
-        
         const snapshot = await getDocs(qMsg);
-        
-        // Wir wollen pro User nur die NEUESTE Nachricht anzeigen (kein Spam)
         const sendersSeen = new Set();
 
         snapshot.forEach(doc => {
             const msg = doc.data();
-            // Wenn wir von diesem Absender schon eine neuere Nachricht haben -> überspringen
             if (!sendersSeen.has(msg.senderId)) {
                 sendersSeen.add(msg.senderId);
-                
                 notifs.push({
                     type: 'message',
                     user: msg.senderName || "Unbekannt",
                     text: `schrieb: "${msg.text}"`,
-                    // FIX: Direktes Öffnen mit ID und Name
                     linkAction: () => { 
-                        openMessageModal(msg.senderName, msg.senderId); 
+                        // ZUERST zum Profil navigieren (damit viewingUserProfile gesetzt wird)
+                        openUserProfile(msg.senderId, msg.senderName); 
+                        // DANN Chat öffnen
+                        setTimeout(() => openMessageModal(msg.senderName, msg.senderId), 500); 
                     },
                     date: new Date(msg.createdAt).toISOString()
                 });
             }
         });
-
-    } catch (e) {
-        console.error("Fehler beim Laden der Nachrichten:", e);
-        // Kein Abbruch, wir zeigen zumindest die Likes an
-    }
+    } catch (e) { console.error("Fehler Messages:", e); }
 
     // --- RENDERING ---
     list.innerHTML = '';
@@ -1804,22 +1835,32 @@ window.renderNotifications = async () => {
         return;
     }
 
-    // Sortieren (Neueste zuerst) - Wir nutzen das Datum string als groben Vergleich
-    notifs.sort((a, b) => (b.date > a.date) ? 1 : -1);
+    // Sortieren (Versuch Datum zu parsen, Fallback auf heute)
+    notifs.sort((a, b) => {
+        const dateA = new Date(a.date || Date.now());
+        const dateB = new Date(b.date || Date.now());
+        return dateB - dateA;
+    });
     
     notifs.forEach(n => {
         let icon = '🔔';
-        let color = 'bg-light';
-        
-        if (n.type === 'comment') { icon = '💬'; }
-        if (n.type === 'like') { icon = '❤️'; color = 'bg-danger-subtle'; }
-        if (n.type === 'message') { icon = '📩'; color = 'bg-primary-subtle'; } // Blaue Färbung für Nachrichten
+        let colorClass = 'list-group-item-action'; // Standard weiß/grau beim Hover
+        let borderClass = '';
 
-        // HTML Element bauen
+        if (n.type === 'comment') { icon = '💬'; }
+        if (n.type === 'like') { icon = '❤️'; }
+        if (n.type === 'friend_post') { icon = '📰'; colorClass = 'bg-light'; } // Leichte Färbung für News
+        if (n.type === 'forum_reply') { icon = '🔧'; }
+        if (n.type === 'message') { 
+            icon = '📩'; 
+            colorClass = 'bg-primary-subtle'; // Blau für Nachrichten
+            borderClass = 'border-start border-4 border-primary';
+        }
+
         const item = document.createElement('div');
-        item.className = `list-group-item list-group-item-action p-3 ${n.type === 'message' ? 'border-start border-4 border-primary' : ''}`;
+        item.className = `list-group-item ${colorClass} p-3 ${borderClass}`;
         item.style.cursor = "pointer";
-        item.onclick = n.linkAction; // Die Funktion, die wir oben definiert haben
+        item.onclick = n.linkAction;
         
         item.innerHTML = `
             <div class="d-flex align-items-center">
@@ -1827,6 +1868,7 @@ window.renderNotifications = async () => {
                 <div>
                     <div class="fw-bold text-dark">${n.user}</div>
                     <div class="text-muted small text-truncate" style="max-width: 250px;">${n.text}</div>
+                    <div class="text-muted" style="font-size:0.7rem">${n.date ? new Date(n.date).toLocaleDateString() : ''}</div>
                 </div>
             </div>`;
             
