@@ -1136,53 +1136,40 @@ function findUserInfo(uid) {
 }
 
 /* ==========================================
-   FREUND HINZUFÜGEN (Ersetzen)
+   FREUNDE HINZUFÜGEN (FIX: UI Update)
    ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
-    if (targetUid === currentUser.uid) return window.showToast("Du kannst dich nicht selbst adden", true);
 
-    // Sicherstellen, dass Array existiert
-    if (!currentUser.friends) currentUser.friends = [];
-    
-    // Prüfen ob schon da
-    if (!currentUser.friends.includes(targetUid)) {
-        
-        // 1. Lokal hinzufügen (für sofortiges Feedback)
-        currentUser.friends.push(targetUid);
-        
-        // Button sofort aktualisieren
-        const btn = document.querySelector('button[onclick*="addFriend"]');
-        if(btn) { 
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-success');
-            btn.innerHTML = "✔ Gespeichert";
-            btn.disabled = true;
-        }
+    try {
+        const response = await fetch(`${API_URL}/addFriend`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.uid, friendId: targetUid })
+        });
 
-        // 2. An Backend senden
-        try {
-            const formData = new FormData();
-            formData.append('uid', currentUser.uid);
-            formData.append('friends', JSON.stringify(currentUser.friends));
-            formData.append('bio', currentUser.bio || ""); // Bio mitsenden, damit sie nicht gelöscht wird
-
-            const response = await fetch(`${API_URL}/updateUser`, { method: 'POST', body: formData });
+        if (response.ok) {
+            window.showToast("Freund hinzugefügt! 🎉");
             
-            if(response.ok) {
-                window.showToast("Freund hinzugefügt!");
-            } else {
-                throw new Error("Speicherfehler");
+            // --- FIX: Lokale Liste sofort aktualisieren ---
+            if (!currentUser.friends) currentUser.friends = [];
+            currentUser.friends.push(targetUid);
+            
+            // Profilseite neu laden, damit der Button zu "✔ Befreundet" wird
+            if (viewingUserProfile && viewingUserProfile.uid === targetUid) {
+                renderProfilePage(); 
             }
-        } catch (e) { 
-            console.error(e);
-            window.showToast("Fehler beim Speichern - Bitte neu laden", true);
+            // ---------------------------------------------
+        } else {
+            const err = await response.text();
+            window.showToast("Fehler: " + err, true);
         }
-
-    } else {
-        window.showToast("Ihr seid bereits befreundet!");
+    } catch (error) {
+        console.error(error);
+        window.showToast("Netzwerkfehler beim Hinzufügen.", true);
     }
 };
+
 window.openUserProfile = (userId, userName) => {
     let display = userName;
     if(!display || display === 'undefined') {
@@ -1352,9 +1339,16 @@ window.renderProfilePage = async () => {
 
             // --- NEU: PRÜFEN OB NACHRICHTEN DA SIND ---
             // Wir schauen kurz in die Datenbank, ob es Nachrichten für mich gibt
+          // --- NEU: PRÜFEN OB UNGELESENE NACHRICHTEN DA SIND ---
             try {
-                // Wir holen nur EINE Nachricht, um zu sehen ob überhaupt was da ist
-                const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), limit(1));
+                // Suche nach Nachrichten AN MICH, die NICHT GELESEN sind (read == false)
+                const qCheck = query(
+                    collection(db, "messages"), 
+                    where("receiverId", "==", currentUser.uid), 
+                    where("read", "==", false), 
+                    limit(1)
+                );
+                
                 getDocs(qCheck).then(snap => {
                     if (!snap.empty) {
                         // Roter Punkt ANZEIGEN
@@ -1362,8 +1356,8 @@ window.renderProfilePage = async () => {
                         if(badge) badge.classList.remove('d-none');
                     }
                 });
-            } catch(e) { console.log("Badge Check Fehler", e); }
-            // ------------------------------------------
+            } catch(e) { console.log("Badge Check Fehler (ggf. Index fehlt)", e); }
+           
 
         } else {
             // FÜR ANDERE USER
@@ -1532,9 +1526,8 @@ window.saveProfile = async (e) => {
 
 
 
-
 /* ==========================================
-   NEU: MESSENGER & POSTFACH (Inbox)
+   NEU: MESSENGER & POSTFACH (Mit Zeitstempel & Gelesen-Status)
    ========================================== */
 let unsubscribeChat = null; 
 
@@ -1543,11 +1536,13 @@ function getChatId(uid1, uid2) {
     return [uid1, uid2].sort().join("_");
 }
 
-// 1. DAS POSTFACH (Übersicht aller Chats & Freunde)
+// Update-Funktion importieren (falls noch nicht geschehen, macht nichts wenn doppelt)
+import { updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// 1. DAS POSTFACH
 window.openInbox = async () => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
 
-    // Modal dynamsich erzeugen, falls nicht da
     let inboxModal = document.getElementById('inboxModal');
     if (!inboxModal) {
         const modalHtml = `
@@ -1582,14 +1577,11 @@ window.openInbox = async () => {
     const modal = new bootstrap.Modal(inboxModal);
     modal.show();
 
-    // A) Letzte Chats laden (aus Firestore)
+    // A) Letzte Chats laden
     const chatListEl = document.getElementById('inbox-chats-list');
     chatListEl.innerHTML = '';
     
-    // Wir suchen Nachrichten, wo ich Sender ODER Empfänger war
-    // (Vereinfacht: Wir suchen Chats, in denen ich involviert bin. Firestore ist hier limitiert, daher der Trick über Benachrichtigungen oder einfach 'letzte Nachrichten an mich')
     try {
-        // Wir laden die letzten Nachrichten AN MICH als Basis für die Chat-Liste
         const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(50));
         const snapshot = await getDocs(q);
         const chatPartners = new Set();
@@ -1601,7 +1593,10 @@ window.openInbox = async () => {
                 const msg = doc.data();
                 if (!chatPartners.has(msg.senderId)) {
                     chatPartners.add(msg.senderId);
-                    // Eintrag rendern
+                    
+                    // Fettgedruckt wenn ungelesen
+                    const fontWeight = (msg.read === false) ? 'fw-bolder text-primary' : 'fw-normal';
+                    
                     const item = document.createElement('div');
                     item.className = 'list-group-item list-group-item-action d-flex align-items-center p-2';
                     item.style.cursor = 'pointer';
@@ -1610,17 +1605,17 @@ window.openInbox = async () => {
                         <div style="width:40px; height:40px; background:#eee; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px;">👤</div>
                         <div class="flex-grow-1">
                             <div class="fw-bold">${msg.senderName}</div>
-                            <small class="text-muted text-truncate" style="max-width:200px; display:block;">${msg.text}</small>
+                            <div class="${fontWeight} text-truncate" style="max-width:200px;">${msg.text}</div>
                         </div>
-                        <small class="text-muted">${new Date(msg.createdAt).toLocaleDateString()}</small>
+                        <small class="text-muted" style="font-size:0.75rem">${new Date(msg.createdAt).toLocaleDateString()}</small>
                     `;
                     chatListEl.appendChild(item);
                 }
             });
         }
-    } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Fehler beim Laden.</div>'; }
+    } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Laden fehlgeschlagen. Ggf. Index erstellen!</div>'; }
 
-    // B) Freundesliste laden (zum Starten neuer Chats)
+    // B) Freundesliste
     const friendsListEl = document.getElementById('inbox-friends-list');
     friendsListEl.innerHTML = '';
     
@@ -1641,17 +1636,15 @@ window.openInbox = async () => {
     }
 };
 
-// 2. CHAT FENSTER ÖFFNEN (Repariert & Firestore Integriert)
+// 2. CHAT FENSTER (Mit Zeitstempel & Gelesen-Logik)
 window.openMessageModal = (name, targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
-    // Fallback ID finden
     const partnerId = targetUid || (viewingUserProfile ? viewingUserProfile.uid : null);
     if (!partnerId) return window.showToast("Fehler: Chat-Partner unbekannt", true);
 
     const modalEl = document.getElementById('messageModal');
     document.getElementById('msg-recipient').innerText = name;
     
-    // UI Setup (History Bereich einfügen falls fehlt)
     const txtArea = document.getElementById('msg-text');
     let chatHistory = document.getElementById('chat-history');
     if(!chatHistory) {
@@ -1663,10 +1656,8 @@ window.openMessageModal = (name, targetUid) => {
         txtArea.placeholder = "Nachricht schreiben...";
     }
     
-    // Alten Listener stoppen
     if (unsubscribeChat) unsubscribeChat();
 
-    // Firestore Listener Starten
     const chatId = getChatId(currentUser.uid, partnerId);
     const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("createdAt", "asc"));
     
@@ -1674,28 +1665,44 @@ window.openMessageModal = (name, targetUid) => {
         chatHistory.innerHTML = ""; 
         if (snapshot.empty) chatHistory.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
 
-        snapshot.forEach((doc) => {
-            const msg = doc.data();
+        snapshot.forEach((docSnapshot) => {
+            const msg = docSnapshot.data();
             const isMe = msg.senderId === currentUser.uid;
+            
+            // --- NEU: Zeitstempel formatieren (z.B. 14:30) ---
+            const timeStr = new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            // --- NEU: Nachricht als GELESEN markieren (wenn sie von anderen ist und noch ungelesen) ---
+            if (!isMe && msg.read === false) {
+                // Wir updaten das Dokument in der Datenbank
+                try {
+                    updateDoc(docSnapshot.ref, { read: true });
+                } catch(e) { console.log("Konnte nicht als gelesen markieren", e); }
+            }
+
             const bubble = document.createElement('div');
             bubble.style.cssText = `
-                max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem;
+                max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem; position: relative;
                 align-self: ${isMe ? 'flex-end' : 'flex-start'};
                 background-color: ${isMe ? '#0d6efd' : '#e9ecef'};
                 color: ${isMe ? '#fff' : '#000'};
             `;
-            bubble.innerText = msg.text;
+            
+            // Text + kleine Uhrzeit
+            bubble.innerHTML = `
+                <div>${msg.text}</div>
+                <div style="font-size: 0.7em; opacity: 0.7; text-align: right; margin-top: 2px;">${timeStr}</div>
+            `;
             chatHistory.appendChild(bubble);
         });
         chatHistory.scrollTop = chatHistory.scrollHeight;
     });
 
-    // ID für Senden-Funktion speichern
     window.currentChatPartnerId = partnerId; 
     new bootstrap.Modal(modalEl).show();
 };
 
-// 3. NACHRICHT SENDEN (In Datenbank speichern)
+// 3. SENDEN (Mit read: false)
 window.sendMessage = async () => {
     const textInput = document.getElementById('msg-text');
     const text = textInput.value.trim();
@@ -1711,12 +1718,13 @@ window.sendMessage = async () => {
             senderName: currentUser.displayName,
             receiverId: partnerId,
             chatId: chatId,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            read: false  // <--- NEU: Standardmäßig ungelesen
         });
         textInput.value = ""; 
     } catch (e) {
         console.error(e);
-        window.showToast("Sendefehler: " + e.message, true);
+        window.showToast("Sendefehler", true);
     }
 };
 
@@ -1725,10 +1733,12 @@ const msgModal = document.getElementById('messageModal');
 if(msgModal) {
     msgModal.addEventListener('hidden.bs.modal', () => {
         if (unsubscribeChat) unsubscribeChat();
+        // Beim Schließen prüfen wir den Badge nochmal neu
+        if(window.renderProfilePage && viewingUserProfile && viewingUserProfile.isMe) {
+             renderProfilePage(); 
+        }
     });
 }
-
-
 
 
 
