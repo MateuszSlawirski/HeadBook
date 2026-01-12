@@ -1205,57 +1205,56 @@ window.addFriend = async (targetUid) => {
 };
 
 /* ==========================================
-   PROFIL ÖFFNEN (Mit Datenbank-Check für Freunde)
+   PROFIL ÖFFNEN (Fix für Freunde & Bio & Bild)
    ========================================== */
 window.openUserProfile = async (uid, name) => {
-    console.log("Öffne Profil von:", name);
-
-    // 1. Basis-Daten setzen (damit die Seite sofort aufgeht)
+    console.log("Öffne Profil:", name, uid);
+    
+    // 1. Standard-Daten setzen
     viewingUserProfile = { 
         uid: uid, 
         displayName: name, 
         isMe: (currentUser && currentUser.uid === uid),
-        friends: [] // Starten wir leer (zeigt kurz "0" an)
+        friends: [],   // Startwert
+        bio: "..."     // Platzhalter
     };
 
-    // 2. Wenn ich es selbst bin -> Meine Daten sofort nehmen
-    if (viewingUserProfile.isMe && currentUser.friends) {
-        viewingUserProfile.friends = currentUser.friends;
-        viewingUserProfile.photoUrl = currentUser.photoUrl;
+    // 2. Wenn ich es bin -> Meine lokalen Daten nehmen
+    if (viewingUserProfile.isMe) {
+        if(currentUser.friends) viewingUserProfile.friends = currentUser.friends;
+        if(currentUser.photoUrl) viewingUserProfile.photoUrl = currentUser.photoUrl;
+        if(currentUser.bio) viewingUserProfile.bio = currentUser.bio;
     }
 
-    // 3. Navigation zur Profilseite
+    // 3. Seite sofort anzeigen (damit es schnell wirkt)
     navigateTo('profile');
-    renderProfilePage(); // Zeigt erstmal das an, was wir haben
+    renderProfilePage();
 
-    // 4. WICHTIG: Wenn es ein ANDERER User ist -> Daten aus Firestore nachladen!
-    if (!viewingUserProfile.isMe) {
-        try {
-            // Wir holen das "Aktenblatt" dieses Users aus der Datenbank
-            const userSnap = await getDoc(doc(db, "users", uid));
+    // 4. DATENBANK CHECK (Egal ob ich es bin oder ein anderer)
+    // Wir holen immer die frischesten Daten (Freunde, Bio, Bild)
+    try {
+        const userSnap = await getDoc(doc(db, "users", uid));
+        if (userSnap.exists()) {
+            const data = userSnap.data();
             
-            if (userSnap.exists()) {
-                const data = userSnap.data();
-                
-                // Jetzt haben wir seine ECHTE Freundesliste
-                if (data.friends && Array.isArray(data.friends)) {
-                    viewingUserProfile.friends = data.friends;
-                }
-                
-                // Auch sein Bild aktualisieren, falls wir es noch nicht hatten
-                if (data.photoUrl) {
-                    viewingUserProfile.photoUrl = data.photoUrl;
-                }
-
-                // 5. Seite NEU malen mit den geladenen Daten
-                // Jetzt springt die "0" auf die richtige Zahl um!
-                renderProfilePage();
+            // Daten aktualisieren
+            if (data.friends) viewingUserProfile.friends = data.friends;
+            if (data.bio) viewingUserProfile.bio = data.bio;
+            if (data.photoUrl) viewingUserProfile.photoUrl = data.photoUrl;
+            
+            // Wenn ich es selbst bin, aktualisiere ich auch gleich mein globales Objekt
+            if (viewingUserProfile.isMe) {
+                currentUser.bio = data.bio;
+                currentUser.friends = data.friends;
             }
-        } catch(e) { 
-            console.log("Konnte Profil-Details nicht laden:", e); 
+
+            // 5. Seite NEU malen mit den echten Daten
+            console.log("Daten geladen:", viewingUserProfile);
+            renderProfilePage();
         }
-    }
+    } catch(e) { console.log("Fehler beim Laden der Profil-Details", e); }
 };
+
 window.renderProfilePage = async () => {
     if(allPostsCache.length === 0) await loadFeed();
     const container = document.getElementById('page-profile');
@@ -1537,7 +1536,7 @@ window.previewProfileImage = (event) => {
 
 window.saveProfile = async (e) => {
     e.preventDefault();
-    
+
     const fileInput = document.getElementById('editProfilePic');
     const newBio = document.getElementById('editProfileBio').value;
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -1549,36 +1548,42 @@ window.saveProfile = async (e) => {
         const formData = new FormData();
         formData.append('uid', currentUser.uid);
         formData.append('bio', newBio);
-        
-        // Wenn eine Datei ausgewählt wurde, hängen wir sie an
+
         if (fileInput.files.length > 0) {
             formData.append('profilePic', fileInput.files[0]);
         }
 
         const response = await fetch(`${API_URL}/updateUser`, {
             method: 'POST',
-            body: formData 
+            body: formData
         });
 
         if (response.ok) {
-            const updatedUser = await response.json();
+            // --- HIER WAR DER FEHLER: Diese Zeile fehlte! ---
+            const updatedUser = await response.json(); 
+            // -----------------------------------------------
+
             try {
-                if(updatedUser.photoUrl) {
-                    await setDoc(doc(db, "users", currentUser.uid), {
-                        photoUrl: updatedUser.photoUrl,
-                        displayName: currentUser.displayName
-                    }, { merge: true });
-                }
+                // Wir speichern ALLES Wichtige in der Datenbank
+                await setDoc(doc(db, "users", currentUser.uid), {
+                    photoUrl: updatedUser.photoUrl || currentUser.photoUrl,
+                    displayName: currentUser.displayName,
+                    bio: newBio, 
+                }, { merge: true });
+
+                // Lokal aktualisieren
+                currentUser.bio = newBio;
+                
             } catch(e) { console.log("Firestore Sync Warnung", e); }
-            
-            currentUser.bio = updatedUser.bio || newBio;
+
+            // Weitere lokale Updates
             if (updatedUser.photoUrl) {
                 currentUser.photoUrl = updatedUser.photoUrl;
             }
-            
+
             viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
-            
+
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
             window.showToast("✅ Profil erfolgreich gespeichert!");
         } else {
@@ -1586,8 +1591,8 @@ window.saveProfile = async (e) => {
             window.showToast("❌ Fehler: " + errorText, true);
         }
     } catch (err) {
-        console.error("Storage-Upload Fehler:", err);
-        window.showToast("❌ Netzwerkfehler: " + err.message, true);
+        console.error(err);
+        window.showToast("Fehler beim Speichern", true);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "Speichern";
@@ -1651,6 +1656,9 @@ window.openInbox = async () => {
     const chatListEl = document.getElementById('inbox-chats-list');
     chatListEl.innerHTML = '';
     
+    // ... in openInbox ...
+
+    // A) Letzte Chats laden
     try {
         const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(50));
         const snapshot = await getDocs(q);
@@ -1659,31 +1667,50 @@ window.openInbox = async () => {
         if(snapshot.empty) {
              chatListEl.innerHTML = '<div class="text-center text-muted mt-3">Noch keine Nachrichten erhalten.</div>';
         } else {
-            snapshot.forEach(doc => {
-                const msg = doc.data();
+            // Wir müssen warten, bis wir alle Bilder geladen haben
+            // Array für die HTML-Elemente vorbereiten
+            const chatItems = [];
+
+            for (const docSnap of snapshot.docs) {
+                const msg = docSnap.data();
                 if (!chatPartners.has(msg.senderId)) {
                     chatPartners.add(msg.senderId);
                     
-                    // Fettgedruckt wenn ungelesen
+                    // Standard: UI Avatar
+                    let avatarUrl = `https://ui-avatars.com/api/?name=${msg.senderName}&background=random&size=64`;
+
+                    // VERSUCH: Echtes Bild aus Datenbank laden
+                    try {
+                        const userSnap = await getDoc(doc(db, "users", msg.senderId));
+                        if(userSnap.exists() && userSnap.data().photoUrl) {
+                            avatarUrl = userSnap.data().photoUrl;
+                        }
+                    } catch(e) { /* Bild nicht gefunden, egal -> Platzhalter bleibt */ }
+
                     const fontWeight = (msg.read === false) ? 'fw-bolder text-primary' : 'fw-normal';
                     
-                    const item = document.createElement('div');
-                    item.className = 'list-group-item list-group-item-action d-flex align-items-center p-2';
-                    item.style.cursor = 'pointer';
-                    item.onclick = () => { modal.hide(); openMessageModal(msg.senderName, msg.senderId); };
-                    item.innerHTML = `
-                        <div style="width:40px; height:40px; background:#eee; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px;">👤</div>
+                    // HTML bauen
+                    const itemHtml = `
+                    <div class="list-group-item list-group-item-action d-flex align-items-center p-2" style="cursor:pointer;" 
+                         onclick="bootstrap.Modal.getInstance(document.getElementById('inboxModal')).hide(); openMessageModal('${msg.senderName}', '${msg.senderId}')">
+                        
+                        <img src="${avatarUrl}" class="rounded-circle border me-3" style="width:50px; height:50px; object-fit:cover;">
+                        
                         <div class="flex-grow-1">
                             <div class="fw-bold">${msg.senderName}</div>
                             <div class="${fontWeight} text-truncate" style="max-width:200px;">${msg.text}</div>
                         </div>
-                        <small class="text-muted" style="font-size:0.75rem">${new Date(msg.createdAt).toLocaleDateString()}</small>
-                    `;
-                    chatListEl.appendChild(item);
+                        <div class="text-end">
+                            <small class="text-muted d-block" style="font-size:0.75rem">${new Date(msg.createdAt).toLocaleDateString()}</small>
+                            <small class="text-muted" style="font-size:0.7rem">${new Date(msg.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
+                        </div>
+                    </div>`;
+                    
+                    chatListEl.insertAdjacentHTML('beforeend', itemHtml);
                 }
-            });
+            }
         }
-    } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Laden fehlgeschlagen. Ggf. Index erstellen!</div>'; }
+    } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Laden fehlgeschlagen.</div>'; }
 
     // B) Freundesliste
     const friendsListEl = document.getElementById('inbox-friends-list');
