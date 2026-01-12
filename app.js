@@ -923,24 +923,23 @@ window.createPost = async () => {
 };
 
 /* ==========================================
-   FEED / POSTS (Mit Profilbildern)
+   FEED / POSTS Mit Datenbank-Bildern 
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
 
-    // Lade-Spinner nur zeigen, wenn Cache leer ist
+    // Lade-Animation nur beim ersten Start
     if(allPostsCache.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
 
     try {
-        // Wir laden die Posts neu
         const response = await fetch(`${API_URL}/getPosts`);
         if (!response.ok) throw new Error("Fehler beim Laden");
 
         const posts = await response.json();
-        allPostsCache = posts; // Cache updaten
+        allPostsCache = posts;
         container.innerHTML = ""; 
 
         if (posts.length === 0) {
@@ -958,43 +957,39 @@ window.loadFeed = async function() {
             const isLiked = myUid && likes.includes(myUid);
             const likeClass = isLiked ? 'liked' : '';
             
-            // --- AVATAR LOGIK (Das ist NEU) ---
-            // Standard: Ein Bild mit den Initialen des Namens generieren
+            // Standard-Avatar (Initialen)
             let avatarUrl = `https://ui-avatars.com/api/?name=${post.user}&background=random&color=fff&size=128`;
             
-            // Wenn es MEIN Post ist und ich ein Foto habe -> Zeige mein echtes Foto
+            // Wenn ich es bin -> Mein Bild sofort nehmen (ist im Cache)
             if (currentUser && post.userId === currentUser.uid && currentUser.photoUrl) {
                 avatarUrl = currentUser.photoUrl;
             }
-            // ----------------------------------
 
+            // Medien Inhalt
             let mediaHtml = "";
             if (post.mediaUrl) {
                 if (post.mediaType === 'video') mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
                 else mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2 w-100" style="max-height:500px; object-fit:cover;" loading="lazy">`;
             }
 
+            // Kommentare
             let commentsHtml = '';
             comments.forEach(c => {
-                commentsHtml += `
-                <div class="comment-item">
-                    <div class="comment-bubble">
-                        <span class="comment-author">${c.user}</span>
-                        ${c.text}
-                        <div class="text-end">${getDeleteBtn('comment', null, post.userId, postId, c.text, c.user)}</div>
-                    </div>
-                </div>`;
+                commentsHtml += `<div class="comment-item"><div class="comment-bubble"><span class="comment-author">${c.user}</span>${c.text}</div></div>`;
             });
 
+            // --- HTML GENERIEREN ---
+            // WICHTIG: Wir geben dem Bild die Klasse 'feed-avatar' und speichern die userId im 'data-userid' Attribut
             const html = `
             <div class="card mb-4 border-0 shadow-sm" id="post-${postId}">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
                     <div class="d-flex align-items-center">
                         
-                        <img src="${avatarUrl}" class="rounded-circle border me-2" 
+                        <img src="${avatarUrl}" 
+                             class="rounded-circle border me-2 feed-avatar" 
+                             data-userid="${post.userId}"
                              style="width:40px; height:40px; object-fit:cover; cursor:pointer;" 
-                             onclick="openUserProfile('${post.userId}', '${post.user}')"
-                             onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'">
+                             onclick="openUserProfile('${post.userId}', '${post.user}')">
 
                         <div>
                             <div class="fw-bold text-dark" style="cursor:pointer;" onclick="openUserProfile('${post.userId}', '${post.user}')">
@@ -1027,6 +1022,35 @@ window.loadFeed = async function() {
                 </div>
             </div>`;
             container.innerHTML += html;
+        });
+
+        // --- NACHLADEN DER BILDER (Lazy Loading) ---
+        // Wir gehen alle gerade erstellten Bilder durch und prüfen die Datenbank
+        document.querySelectorAll('.feed-avatar').forEach(async (img) => {
+            const uid = img.getAttribute('data-userid');
+            // Wenn es nicht mein eigenes Bild ist (das haben wir oben schon gesetzt)
+            if (uid && (!currentUser || uid !== currentUser.uid)) {
+                try {
+                    // Cache-Check: Haben wir das Bild schonmal geladen? (Performance)
+                    if (window.userImageCache && window.userImageCache[uid]) {
+                        img.src = window.userImageCache[uid];
+                    } else {
+                        // Datenbank fragen
+                        const snap = await getDoc(doc(db, "users", uid));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            if (data.photoUrl) {
+                                img.src = data.photoUrl;
+                                // In Cache speichern für nächstes Mal
+                                if(!window.userImageCache) window.userImageCache = {};
+                                window.userImageCache[uid] = data.photoUrl;
+                            }
+                        }
+                    }
+                } catch(e) { 
+                    // Kein Fehler anzeigen, einfach Standard-Bild lassen
+                }
+            }
         });
 
     } catch (error) { console.error(error); }
