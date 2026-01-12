@@ -1228,24 +1228,33 @@ window.renderProfilePage = async () => {
     const imgEl = document.getElementById('profile-img');
     const friendsContainer = document.getElementById('friends-list-container');
 
-    if(imgEl) {
-        // Standard Avatar
+   if(imgEl) {
+        // Standard: Erstmal ein Bild mit Initialen generieren (Platzhalter)
         let photo = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
         
-        // 1. Habe ich das Bild schon im Objekt? (z.B. weil ich es bin)
+        // 1. Wenn ich es selbst bin ODER das Bild schon geladen wurde -> Nehmen
         if (viewingUserProfile.photoUrl) {
             photo = viewingUserProfile.photoUrl;
         } 
-        // 2. Wenn nicht ICH es bin -> Versuche es aus Firestore zu holen
+        
+        // 2. WICHTIG: Wenn es ein ANDERER User ist -> In Firestore nachsehen!
         else if (!viewingUserProfile.isMe) {
-            // Asynchron laden ohne zu warten (damit die Seite nicht stockt)
-            getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
-                if(snap.exists() && snap.data().photoUrl) {
-                    imgEl.src = snap.data().photoUrl;
-                }
-            });
+            // Wir fragen die Datenbank: "Gib mir das Bild von diesem User"
+            try {
+                // HINWEIS: doc und getDoc müssen oben importiert sein!
+                getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
+                    if(snap.exists()) {
+                        const data = snap.data();
+                        if (data.photoUrl) {
+                            // Bild gefunden -> Sofort austauschen
+                            imgEl.src = data.photoUrl;
+                        }
+                    }
+                });
+            } catch(e) { console.log("Kein Bild in DB gefunden", e); }
         }
         
+        // Erstmal das Platzhalter-Bild anzeigen, bis die Datenbank antwortet
         imgEl.src = photo;
     }
     if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
