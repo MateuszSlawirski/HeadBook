@@ -1275,16 +1275,20 @@ window.openUserProfile = async (uid, name) => {
 /* ==========================================
    RENDER PROFILE PAGE (Komplett & Korrigiert)
    ========================================== */
+/* ==========================================
+   RENDER PROFILE PAGE (Fix: ???-Bild & Community-Sync)
+   ========================================== */
 window.renderProfilePage = async () => {
-    // 1. Feed laden falls leer (damit wir Daten haben)
+    // 1. Daten-Check
+    const container = document.getElementById('page-profile');
+    if (!container) return;
+    
+    // Feed laden falls leer (für Statistiken wichtig)
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
 
-    const container = document.getElementById('page-profile');
-    if (!container) return;
-    
-    // Fallback: Falls kein User betrachtet wird, nehmen wir uns selbst
+    // Fallback: Wenn kein Profil ausgewählt ist, zeige MICH an
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1301,8 +1305,11 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // 2. HTML Grundgerüst bauen (nur wenn noch nicht da)
+    // 2. Grundgerüst bauen (falls noch nicht da)
     if (!document.getElementById('profile-name')) {
+        // Fallback-Bild URL berechnen
+        const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+        
         container.innerHTML = `
         <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
         <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
@@ -1311,8 +1318,10 @@ window.renderProfilePage = async () => {
                     <div class="row align-items-end">
                         <div class="col-auto">
                             <div class="profile-pic-container">
-                                <img src="" id="profile-img" class="rounded-circle border border-4 border-white shadow bg-white" 
-                                     style="width: 120px; height: 120px; object-fit: cover; background: #eee;">
+                                <img src="${defaultAvatar}" id="profile-img" 
+                                     class="rounded-circle border border-4 border-white shadow bg-white" 
+                                     style="width: 120px; height: 120px; object-fit: cover; background: #eee;"
+                                     onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
                             </div>
                         </div>
                         <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
@@ -1325,7 +1334,6 @@ window.renderProfilePage = async () => {
                                     <div class="spinner-border spinner-border-sm text-muted"></div>
                                 </div>
                             </div>
-
                         </div>
                         <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                     </div>
@@ -1338,7 +1346,7 @@ window.renderProfilePage = async () => {
         </div>`;
     }
 
-    // Elemente referenzieren
+    // Elemente holen
     const nameEl = document.getElementById('profile-name');
     const bioEl = document.getElementById('profile-bio');
     const actionArea = document.getElementById('profile-actions');
@@ -1346,155 +1354,79 @@ window.renderProfilePage = async () => {
     const imgEl = document.getElementById('profile-img');
     const friendsContainer = document.getElementById('friends-list-container');
 
-    // 3. Profilbild Logik
+    // 3. Texte setzen
+    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
+    if (bioEl) bioEl.innerText = viewingUserProfile.bio || "Riderpoint Mitglied";
+
+    // 4. BILD & DATEN NACHLADEN (Der Sync-Fix)
+    
+    // Standard-Bild vorbereiten
+    let currentPhoto = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+    
+    // A) Habe ich schon ein Bild im Objekt?
+    if (viewingUserProfile.photoUrl && viewingUserProfile.photoUrl.startsWith('http')) {
+        currentPhoto = viewingUserProfile.photoUrl;
+    }
+    
+    // Bild sofort setzen
     if(imgEl) {
-        // Standard: Erstmal ein Bild mit Initialen generieren (Platzhalter)
-        let photo = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-        
-        // A) Wenn ich es selbst bin ODER das Bild schon geladen wurde -> Nehmen
-        if (viewingUserProfile.photoUrl) {
-            photo = viewingUserProfile.photoUrl;
-        } 
-        
-        // B) Wenn es ein ANDERER User ist -> In Firestore nachsehen (als Fallback)
-        else if (!viewingUserProfile.isMe) {
-            try {
-                // Wir fragen die Datenbank kurz nach dem Bild
-                getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
-                    if(snap.exists()) {
-                        const data = snap.data();
-                        if (data.photoUrl) {
-                            imgEl.src = data.photoUrl; // Bild gefunden -> Sofort austauschen
-                        }
-                    }
-                });
-            } catch(e) { console.log("Kein Bild in DB gefunden", e); }
-        }
-        
-        imgEl.src = photo;
+        imgEl.src = currentPhoto;
+        // Update den Error-Handler auch dynamisch
+        imgEl.setAttribute('onerror', `this.onerror=null;this.src='https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128';`);
     }
 
-    // Name & Bio setzen
-    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
-    if (bioEl) bioEl.innerText = viewingUserProfile.bio || (viewingUserProfile.isMe ? currentUser.email : "Community Mitglied");
-
-
-    // 4. --- FREUNDESLISTE RENDERN (NEU & VERBESSERT) ---
-    // Hier nutzen wir jetzt die geladenen "friendDetails" für echte Bilder!
-    if (friendsContainer) {
-        friendsContainer.innerHTML = '';
-        
-        // Liste vorbereiten
-        let list = [];
-        let hasDetails = false;
-
-        // Haben wir schon echte Details (Bilder/Namen) geladen? (aus openUserProfile)
-        if (viewingUserProfile.friendDetails && viewingUserProfile.friendDetails.length > 0) {
-            list = viewingUserProfile.friendDetails;
-            hasDetails = true;
-        } else if (viewingUserProfile.friends) {
-            // Fallback: Nur IDs vorhanden
-            list = viewingUserProfile.friends;
-        }
-
-        // Sicherheits-Check für eigenes Profil
-        if (viewingUserProfile.isMe && currentUser.friends && (!hasDetails || list.length < currentUser.friends.length)) {
-             list = currentUser.friends; 
-             hasDetails = false;
-        }
-
-        if (!list || list.length === 0) {
-            friendsContainer.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
-        } else {
-            // Nur die ersten 5 anzeigen, damit es nicht platzt
-            const topFriends = list.slice(0, 5);
-            
-            topFriends.forEach(item => {
-                let fName, fImg, fUid;
-
-                if (hasDetails) {
-                    // Juhuu! Echte Daten aus der Datenbank
-                    fUid = item.uid;
-                    fName = item.name;
-                    fImg = item.photoUrl;
-                } else {
-                    // Fallback (nur ID bekannt)
-                    fUid = item;
-                    fName = "Lade..."; 
-                    fImg = `https://ui-avatars.com/api/?name=?&background=eee&color=999`;
+    // B) ECHTZEIT-CHECK: Wenn es nicht MEIN Profil ist (oder Daten fehlen), fragen wir die DB
+    if (!viewingUserProfile.isMe || !viewingUserProfile.photoUrl) {
+        try {
+            getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
+                if(snap.exists()) {
+                    const data = snap.data();
                     
-                    // Versuch Name zu retten
-                    if(typeof findUserInfo !== 'undefined') {
-                        try { const info = findUserInfo(fUid); if(info) fName = info.name; } catch(e){}
+                    // 1. Bild aktualisieren (falls neu/anders)
+                    if (data.photoUrl && imgEl) {
+                        imgEl.src = data.photoUrl;
+                        viewingUserProfile.photoUrl = data.photoUrl; // Speichern für Cache
+                    }
+                    
+                    // 2. Bio aktualisieren
+                    if (data.bio && bioEl) {
+                        bioEl.innerText = data.bio;
+                        viewingUserProfile.bio = data.bio;
+                    }
+
+                    // 3. Freunde aktualisieren (WICHTIG für Sync)
+                    if (data.friends) {
+                        viewingUserProfile.friends = data.friends;
+                        // Trigger Freundesliste neu rendern, da wir jetzt neue IDs haben
+                        renderFriendsList(friendsContainer); 
                     }
                 }
-
-                // Das schöne Freundes-Badge erstellen
-                const friendBadge = document.createElement('div');
-                friendBadge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border shadow-sm';
-                friendBadge.style.cursor = 'pointer';
-                friendBadge.style.transition = 'transform 0.2s';
-                
-                // Kleiner Zoom-Effekt bei Maus drüber
-                friendBadge.onmouseover = () => friendBadge.style.transform = 'scale(1.05)';
-                friendBadge.onmouseout = () => friendBadge.style.transform = 'scale(1)';
-                
-                // Klick öffnet das Profil des Freundes
-                friendBadge.onclick = () => openUserProfile(fUid, fName);
-                
-                friendBadge.innerHTML = `
-                    <img src="${fImg}" class="rounded-circle me-2 border" width="30" height="30" style="object-fit:cover;">
-                    <span class="small fw-bold text-dark" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fName}</span>
-                `;
-                friendsContainer.appendChild(friendBadge);
             });
-
-            // "+3 weitere" Badge
-            if (list.length > 5) {
-                const moreBadge = document.createElement('span');
-                moreBadge.className = 'badge bg-secondary rounded-pill align-self-center ms-1';
-                moreBadge.innerText = `+${list.length - 5}`;
-                friendsContainer.appendChild(moreBadge);
-            }
-        }
+        } catch(e) { console.log("Profil Sync Info:", e); }
     }
 
 
-    // 5. Action Buttons (Postfach & Freund hinzufügen)
+    // 5. FREUNDESLISTE RENDERN (In extra Funktion ausgelagert für sauberen Refresh)
+    renderFriendsList(friendsContainer);
+
+
+    // 6. BUTTONS (Postfach / Freund hinzufügen)
     if (actionArea) {
         actionArea.innerHTML = '';
-        
         if (viewingUserProfile.isMe) {
-            // BUTTONS FÜR MICH (Postfach & Bearbeiten)
             actionArea.innerHTML = `
                 <button id="btn-inbox" class="btn btn-primary btn-sm me-2 position-relative" onclick="openInbox()">
                     📬 Mein Postfach
-                    <span id="inbox-badge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle d-none">
-                        <span class="visually-hidden">Neue Nachrichten</span>
-                    </span>
+                    <span id="inbox-badge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle d-none"></span>
                 </button>
                 <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>
             `;
-
-            // Prüfung auf ungelesene Nachrichten (Roter Punkt)
+            // Roter Punkt Check
             try {
-                const qCheck = query(
-                    collection(db, "messages"), 
-                    where("receiverId", "==", currentUser.uid), 
-                    where("read", "==", false), 
-                    limit(1)
-                );
-                
-                getDocs(qCheck).then(snap => {
-                    if (!snap.empty) {
-                        const badge = document.getElementById('inbox-badge');
-                        if(badge) badge.classList.remove('d-none');
-                    }
-                });
-            } catch(e) { console.log("Badge Check Fehler (ggf. Index fehlt)", e); }
-
+                const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false), limit(1));
+                getDocs(qCheck).then(snap => { if (!snap.empty) document.getElementById('inbox-badge')?.classList.remove('d-none'); });
+            } catch(e){}
         } else {
-            // BUTTONS FÜR ANDERE (Freund+ & Nachricht)
             const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(viewingUserProfile.uid);
             let friendBtn = isFriend 
                 ? `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`
@@ -1507,71 +1439,96 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // 6. Statistiken & Ränge
+    // 7. STATISTIKEN
     if (statsArea) {
         const targetName = viewingUserProfile.displayName;
-        
-        // Daten filtern
         const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
         const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
         const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
-
-        // RANG BERECHNUNG
         const totalActivity = myTours.length + myPosts.length + myThreads.length;
         
-        let rank = "Starter";       
-        let badgeColor = "secondary"; 
-        let rankIcon = "🥚"; 
-
+        let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
         if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
         if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
         if (totalActivity >= 100) { rank = "Meilen Fresser";badgeColor = "success"; rankIcon = "🌍"; }
         if (totalActivity >= 250) { rank = "Road King";     badgeColor = "danger";  rankIcon = "👑"; }
 
-        const rankBadgeHtml = `<span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span>`;
-
-        // Statistik-HTML zusammenbauen
-        let html = `<div class="text-center mb-3">
-                        ${rankBadgeHtml}
-                        <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
-                    </div>
+        let html = `<div class="text-center mb-3"><span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span><div class="text-muted small mt-1">${totalActivity} Aktivitäten</div></div>
                     <div class="d-flex gap-3 mb-4 justify-content-center text-center">
                         <div class="bg-light p-2 rounded px-3 border"><b>${myTours.length}</b><br><small>Touren</small></div>
                         <div class="bg-light p-2 rounded px-3 border"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
                         <div class="bg-light p-2 rounded px-3 border"><b>${myThreads.length}</b><br><small>Themen</small></div>
                     </div>`;
-
-        // Listen Rendern
-        if (myTours.length > 0) {
-            html += `<h6 class="fw-bold mt-3">🗺️ Touren</h6><div class="list-group mb-3">`;
-            myTours.forEach(t => {
-                html += `<a href="#" onclick="selectTour('${t.id}'); navigateTo('tours');" class="list-group-item list-group-item-action border-0 border-bottom">${t.title} <small class="text-muted">(${t.km} km)</small></a>`;
-            });
-            html += `</div>`;
-        }
         
-        if (myPosts.length > 0) {
-             html += `<h6 class="fw-bold mt-3">📸 Beiträge</h6><div class="list-group mb-3">`;
-             myPosts.forEach(p => {
-                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">${p.content || "Medien Inhalt"}</div>`;
-             });
-             html += `</div>`;
-        }
-
-        if (myThreads.length > 0) {
-             html += `<h6 class="fw-bold mt-3">💬 Community Themen</h6><div class="list-group mb-3">`;
-             myThreads.forEach(t => {
-                 html += `<div class="list-group-item list-group-item-action border-0 border-bottom" onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">${t.title}</div>`;
-             });
-             html += `</div>`;
-        }
-
-        if(totalActivity === 0) {
-            html += `<p class="text-center text-muted py-3">Noch keine öffentlichen Aktivitäten.</p>`;
-        }
+        // Inhalte anzeigen (gekürzt)
+        if (myPosts.length > 0) html += `<h6 class="fw-bold mt-3">📸 Letzte Beiträge</h6><div class="list-group mb-3">${myPosts.slice(0,3).map(p => `<div class="list-group-item border-0 border-bottom text-truncate">${p.content || "Bild"}</div>`).join('')}</div>`;
+        if(totalActivity === 0) html += `<p class="text-center text-muted py-3">Keine Aktivitäten.</p>`;
         statsArea.innerHTML = html;
     }
 };
+
+/* HILFSFUNKTION: FREUNDE RENDERN (Damit wir sie oben neu aufrufen können) */
+async function renderFriendsList(container) {
+    if(!container) return;
+    
+    // Welche Liste nutzen wir?
+    let list = viewingUserProfile.friendDetails || []; 
+    // Fallback auf IDs, falls Details leer
+    if (list.length === 0 && viewingUserProfile.friends) list = viewingUserProfile.friends;
+    
+    // Eigener User: Immer Live-Daten nehmen
+    if (viewingUserProfile.isMe && currentUser.friends) {
+        // Falls wir noch keine Details geladen haben, nehmen wir erstmal die IDs von currentUser
+        if (list.length < currentUser.friends.length) list = currentUser.friends;
+    }
+
+    if (!list || list.length === 0) {
+        container.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
+        return;
+    }
+
+    container.innerHTML = '';
+    const topFriends = list.slice(0, 5);
+
+    for (const item of topFriends) {
+        let fUid, fName, fImg;
+
+        // Prüfen: Ist item ein Objekt (Details) oder nur ein String (ID)?
+        if (typeof item === 'object') {
+            fUid = item.uid; fName = item.name; fImg = item.photoUrl;
+        } else {
+            fUid = item; fName = "Lade..."; fImg = `https://ui-avatars.com/api/?name=?&background=eee`;
+            // Versuch Cache
+            if(window.findUserInfo) { try{ let i = findUserInfo(fUid); if(i) fName = i.name; }catch(e){} }
+            
+            // Wenn wir nur die ID haben, laden wir das Bild im Hintergrund nach
+            getDoc(doc(db, "users", fUid)).then(snap => {
+                if(snap.exists()) {
+                    const d = snap.data();
+                    // Wir aktualisieren das Bild direkt im DOM, sobald es da ist
+                    const imgTag = document.getElementById(`friend-img-${fUid}`);
+                    const nameTag = document.getElementById(`friend-name-${fUid}`);
+                    if(imgTag && d.photoUrl) imgTag.src = d.photoUrl;
+                    if(nameTag && d.displayName) nameTag.innerText = d.displayName;
+                }
+            });
+        }
+
+        const badge = document.createElement('div');
+        badge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border shadow-sm';
+        badge.style.cursor = 'pointer';
+        badge.onclick = () => openUserProfile(fUid, fName);
+        badge.innerHTML = `
+            <img src="${fImg}" id="friend-img-${fUid}" class="rounded-circle me-2 border" width="30" height="30" style="object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${fName}'">
+            <span id="friend-name-${fUid}" class="small fw-bold text-dark" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fName}</span>
+        `;
+        container.appendChild(badge);
+    }
+    
+    if (list.length > 5) {
+        container.innerHTML += `<span class="badge bg-secondary rounded-pill align-self-center ms-1">+${list.length - 5}</span>`;
+    }
+}
 
 window.openEditProfile = () => {
     const bioText = document.getElementById('profile-bio')?.innerText || "";
