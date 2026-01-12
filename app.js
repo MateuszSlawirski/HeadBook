@@ -1204,21 +1204,58 @@ window.addFriend = async (targetUid) => {
     }
 };
 
-window.openUserProfile = (userId, userName) => {
-    let display = userName;
-    if(!display || display === 'undefined') {
-        const info = findUserInfo(userId);
-        display = info.name;
+/* ==========================================
+   PROFIL ÖFFNEN (Mit Datenbank-Check für Freunde)
+   ========================================== */
+window.openUserProfile = async (uid, name) => {
+    console.log("Öffne Profil von:", name);
+
+    // 1. Basis-Daten setzen (damit die Seite sofort aufgeht)
+    viewingUserProfile = { 
+        uid: uid, 
+        displayName: name, 
+        isMe: (currentUser && currentUser.uid === uid),
+        friends: [] // Starten wir leer (zeigt kurz "0" an)
+    };
+
+    // 2. Wenn ich es selbst bin -> Meine Daten sofort nehmen
+    if (viewingUserProfile.isMe && currentUser.friends) {
+        viewingUserProfile.friends = currentUser.friends;
+        viewingUserProfile.photoUrl = currentUser.photoUrl;
     }
 
-    viewingUserProfile = { 
-        uid: userId, 
-        displayName: display, 
-        isMe: (currentUser && currentUser.uid === userId) 
-    };
+    // 3. Navigation zur Profilseite
     navigateTo('profile');
-};
+    renderProfilePage(); // Zeigt erstmal das an, was wir haben
 
+    // 4. WICHTIG: Wenn es ein ANDERER User ist -> Daten aus Firestore nachladen!
+    if (!viewingUserProfile.isMe) {
+        try {
+            // Wir holen das "Aktenblatt" dieses Users aus der Datenbank
+            const userSnap = await getDoc(doc(db, "users", uid));
+            
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                
+                // Jetzt haben wir seine ECHTE Freundesliste
+                if (data.friends && Array.isArray(data.friends)) {
+                    viewingUserProfile.friends = data.friends;
+                }
+                
+                // Auch sein Bild aktualisieren, falls wir es noch nicht hatten
+                if (data.photoUrl) {
+                    viewingUserProfile.photoUrl = data.photoUrl;
+                }
+
+                // 5. Seite NEU malen mit den geladenen Daten
+                // Jetzt springt die "0" auf die richtige Zahl um!
+                renderProfilePage();
+            }
+        } catch(e) { 
+            console.log("Konnte Profil-Details nicht laden:", e); 
+        }
+    }
+};
 window.renderProfilePage = async () => {
     if(allPostsCache.length === 0) await loadFeed();
     const container = document.getElementById('page-profile');
