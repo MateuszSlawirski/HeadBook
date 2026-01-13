@@ -59,9 +59,7 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 /* ==========================================
    APP START (Ersetzen)
    ========================================== */
-document.addEventListener('DOMContentLoaded', () => {
-    initMap();
-    
+
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
@@ -99,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startPage = window.location.hash.replace('#', '') || 'home';
     // Nur navigieren wenn noch kein Auth-Event gefeuert hat (vermeidet doppeltes Laden)
     if (!currentUser) navigateTo(startPage);
-});
+
 
 /* ==========================================
    NAVIGATION (FIX: Erst laden, dann zeigen)
@@ -2379,4 +2377,4 @@ window.renderNotifications = async () => {
             
         list.appendChild(item);
     });
-};
+}
