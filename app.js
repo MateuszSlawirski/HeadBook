@@ -1361,7 +1361,6 @@ window.renderProfilePage = async () => {
     
     container.style.position = 'relative'; 
 
-    // Daten sicherstellen
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
@@ -1402,16 +1401,14 @@ window.renderProfilePage = async () => {
         `;
     }
 
-    // --- STATISTIKEN BERECHNEN ---
+    // --- STATISTIKEN ---
     const targetName = viewingUserProfile.displayName;
-    // Sicherstellen, dass Arrays existieren
     const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
     const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
     const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
     
     const totalActivity = myTours.length + myPosts.length + myThreads.length;
     
-    // Rang berechnen
     let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
     if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
     if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
@@ -1434,7 +1431,6 @@ window.renderProfilePage = async () => {
                                     onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
                         </div>
                     </div>
-                    
                     <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
                         <h2 class="fw-bold mb-0 text-dark" id="profile-name">${viewingUserProfile.displayName}</h2>
                         <p class="text-muted mb-0" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
@@ -1446,7 +1442,6 @@ window.renderProfilePage = async () => {
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                 </div>
 
@@ -1481,60 +1476,21 @@ window.renderProfilePage = async () => {
                         Klicke auf eine Box oben, um Aktivitäten zu sehen.
                     </div>
                 </div>
-
             </div>
         </div>
     </div>`;
 
-    // 1. Bild setzen
+    // 1. Bild
     const imgEl = document.getElementById('profile-img');
     if(imgEl && viewingUserProfile.photoUrl) imgEl.src = viewingUserProfile.photoUrl;
 
-    // 2. Freunde rendern (Fix wie zuvor)
-    const friendsContainer = document.getElementById('friends-list-container');
-    if(friendsContainer) {
-        let list = viewingUserProfile.friendDetails || []; 
-        if (list.length === 0 && viewingUserProfile.friends) list = viewingUserProfile.friends;
-        if (viewingUserProfile.isMe && currentUser.friends && list.length < currentUser.friends.length) list = currentUser.friends;
-
-        if (!list || list.length === 0) {
-            friendsContainer.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
-        } else {
-            friendsContainer.innerHTML = '';
-            const topFriends = list.slice(0, 5);
-            topFriends.forEach(item => {
-                let fUid, fName, fImg;
-                if (typeof item === 'object') { fUid = item.uid; fName = item.name; fImg = item.photoUrl; }
-                else { fUid = item; fName = "Lade..."; fImg = `https://ui-avatars.com/api/?name=?&background=eee`; } 
-                
-                // Bild Nachladen Logik
-                if(typeof item !== 'object') {
-                    getDoc(doc(db, "users", fUid)).then(snap => {
-                        if(snap.exists()) {
-                            const d = snap.data();
-                            const iTag = document.getElementById(`f-img-${fUid}`);
-                            const nTag = document.getElementById(`f-name-${fUid}`);
-                            if(iTag && d.photoUrl) iTag.src = d.photoUrl;
-                            if(nTag && d.displayName) nTag.innerText = d.displayName;
-                        }
-                    });
-                }
-
-                const badge = document.createElement('div');
-                badge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border shadow-sm';
-                badge.style.cursor = 'pointer';
-                badge.onclick = () => openUserProfile(fUid, fName);
-                badge.innerHTML = `
-                    <img src="${fImg}" id="f-img-${fUid}" class="rounded-circle me-2 border" width="30" height="30" style="object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${fName}'">
-                    <span id="f-name-${fUid}" class="small fw-bold text-dark" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fName}</span>
-                `;
-                friendsContainer.appendChild(badge);
-            });
-            if (list.length > 5) friendsContainer.innerHTML += `<span class="badge bg-secondary rounded-pill align-self-center ms-1">+${list.length - 5}</span>`;
-        }
+    // 2. Freunde
+    if(typeof renderFriendsList === 'function') {
+        const friendsContainer = document.getElementById('friends-list-container');
+        renderFriendsList(friendsContainer);
     }
 
-    // 3. Action Buttons
+    // 3. Actions
     const actionArea = document.getElementById('profile-actions');
     if (actionArea) {
         if (viewingUserProfile.isMe) {
@@ -1564,21 +1520,20 @@ window.renderProfilePage = async () => {
 };
 
 /* ==========================================
-   PROFIL TABS LOGIK (Klick auf Boxen)
+   PROFIL TABS LOGIK (Inhalte anzeigen + LÖSCHEN)
    ========================================== */
 window.switchProfileTab = (type) => {
     const container = document.getElementById('profile-dynamic-content');
     if (!container || !viewingUserProfile) return;
     
-    // Optik: Boxen hervorheben
+    // Optik: Boxen resetten
     document.querySelectorAll('.tab-box').forEach(el => el.classList.remove('border-primary', 'bg-white'));
-    // (Hier könnte man noch die aktive Box färben, wenn man ihnen IDs gibt, aber Hover reicht meist)
 
     const targetName = viewingUserProfile.displayName;
     let html = `<div class="list-group list-group-flush animate__animated animate__fadeIn">`;
     let count = 0;
 
-    // A) TOUREN ANZEIGEN
+    // A) TOUREN
     if (type === 'tours') {
         const myTours = toursData.filter(t => t.user === targetName);
         if (myTours.length === 0) html += `<div class="p-3 text-center text-muted">Keine Touren gefunden.</div>`;
@@ -1594,12 +1549,13 @@ window.switchProfileTab = (type) => {
                     <div class="fw-bold text-primary">🗺️ ${t.title}</div>
                     <small class="text-muted">${t.km} km • ${t.country}</small>
                 </div>
-                <div>${delBtn}</div> </div>`;
+                <div>${delBtn}</div>
+            </div>`;
         });
         count = myTours.length;
     }
 
-    // B) BEITRÄGE ANZEIGEN
+    // B) BEITRÄGE
     else if (type === 'posts') {
         const myPosts = allPostsCache.filter(p => p.user === targetName);
         if (myPosts.length === 0) html += `<div class="p-3 text-center text-muted">Keine Beiträge gefunden.</div>`;
@@ -1620,7 +1576,7 @@ window.switchProfileTab = (type) => {
         count = myPosts.length;
     }
 
-    // C) THEMEN ANZEIGEN
+    // C) THEMEN
     else if (type === 'threads') {
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
         if (myThreads.length === 0) html += `<div class="p-3 text-center text-muted">Keine Themen gefunden.</div>`;
@@ -1643,8 +1599,7 @@ window.switchProfileTab = (type) => {
 
     html += `</div>`;
     
-    // Überschrift hinzufügen
-    const titles = { tours: "Deine Touren", posts: "Deine Beiträge", threads: "Deine Forum-Themen" };
+    const titles = { tours: "Touren", posts: "Beiträge", threads: "Forum-Themen" };
     container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]} (${count})</h6>` + html;
 };
 /* HILFSFUNKTION: FREUNDE RENDERN (Damit wir sie oben neu aufrufen können) */
@@ -2061,24 +2016,32 @@ window.showToast = (message, isError = false) => {
     toast.show();
 };
 /* ==========================================
-   NEU: BENACHRICHTIGUNGS-CENTER (Facebook Style)
+   APP START (Mit Benachrichtigungs-Badge Logik)
    ========================================== */
-
-// 1. "Glocke" und Seite automatisch ins HTML einbauen (Start-Injection)
 document.addEventListener('DOMContentLoaded', () => {
-    // Nav-Item "Glocke" erzeugen
+    initMap();
+    
+    // 1. NAVIGATION: Glocke einfügen (Mit rotem Punkt & neuem Namen)
     const navProfile = document.getElementById('nav-profile')?.parentElement;
     if (navProfile && !document.getElementById('nav-notifications')) {
         const li = document.createElement('li');
         li.className = 'nav-item mx-3';
         li.innerHTML = `
-            <a class="nav-link d-flex flex-column align-items-center auth-required" id="nav-notifications" onclick="navigateTo('notifications')" style="cursor:pointer">
-                🔔 <span class="d-none d-lg-block" style="font-size:0.8rem">News</span>
+            <a class="nav-link d-flex flex-column align-items-center auth-required position-relative" 
+               id="nav-notifications" 
+               onclick="navigateTo('notifications'); hideNotificationBadge();" 
+               style="cursor:pointer">
+                
+                🔔 
+                <span id="nav-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none">
+                    <span class="visually-hidden">Neu</span>
+                </span>
+                
+                <span class="d-none d-lg-block" style="font-size:0.8rem">Benachrichtigung</span>
             </a>`;
-        // Vor dem Profil einfügen
         navProfile.parentElement.insertBefore(li, navProfile);
     }
-
+    
     // Page-Section "Notifications" erzeugen
     const mainContainer = document.querySelector('.container-xl');
     if (mainContainer && !document.getElementById('page-notifications')) {
@@ -2100,7 +2063,73 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         mainContainer.appendChild(section);
     }
+
+    // Auth Listener
+    onAuthStateChanged(auth, async (user) => {
+        currentUser = user; 
+        if (user) {
+            updateUI(); 
+            await syncUserWithBackend(user); 
+            
+            // Startet die Überwachung für den roten Punkt
+            startNotificationListener(); 
+
+            if (getActivePage() === 'home') loadFeed();
+            if (getActivePage() === 'profile') { viewingUserProfile = null; renderProfilePage(); }
+        } else {
+            currentRole = "guest";
+            if (getActivePage() === 'home') loadFeed();
+            if (getActivePage() === 'profile') navigateTo('home');
+            updateUI();
+        }
+    });
+
+    loadToursFromServer();
+    loadForumData(); 
+    setupEventListeners();
+    
+    const startPage = window.location.hash.replace('#', '') || 'home';
+    if (!currentUser) navigateTo(startPage);
 });
+
+// --- HELPER FÜR DEN ROTEN PUNKT ---
+function startNotificationListener() {
+    if (!currentUser) return;
+
+    // 1. Live-Check auf ungelesene Nachrichten (Firestore)
+    const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false));
+    onSnapshot(q, (snap) => {
+        if (!snap.empty) {
+            showNotificationBadge();
+        } else {
+            // Wenn keine Nachrichten, prüfen wir noch auf "neue Aktivitäten" (lokal gespeichert)
+            checkActivityBadge();
+        }
+    });
+}
+
+function checkActivityBadge() {
+    // Prüft, ob der neueste Post neuer ist als der letzte Klick auf die Glocke
+    const lastSeen = localStorage.getItem('last_notif_check') || 0;
+    if (allPostsCache.length > 0) {
+        const newestPostDate = new Date(allPostsCache[0].createdAt).getTime();
+        if (newestPostDate > new Date(lastSeen).getTime()) {
+            showNotificationBadge();
+        }
+    }
+}
+
+function showNotificationBadge() {
+    const badge = document.getElementById('nav-badge');
+    if(badge) badge.classList.remove('d-none');
+}
+
+window.hideNotificationBadge = () => {
+    const badge = document.getElementById('nav-badge');
+    if(badge) badge.classList.add('d-none');
+    // Zeitstempel merken
+    localStorage.setItem('last_notif_check', new Date().toISOString());
+};
 
 //  Die Logik: Sammelt alle Likes und Kommentare ein
 /* ==========================================
