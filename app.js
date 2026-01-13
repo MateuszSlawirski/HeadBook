@@ -291,7 +291,7 @@ window.openAddTourModal = () => {
 };
 
 /* ==========================================
-   EVENT LISTENER (FIX: Speichert User-ID sauber ab)
+   SCHRITT 1: EVENT LISTENER (Speichert User-ID sauber ab)
    ========================================== */
 function setupEventListeners() {
     // Logout
@@ -310,7 +310,7 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Thread erstellen (HIER WAR DER FEHLER)
+    // Thread erstellen (HIER WAR DER FEHLER: Wir senden jetzt userId mit!)
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -321,16 +321,19 @@ function setupEventListeners() {
             const text = document.getElementById('threadText').value;
             
             try {
+                // Wir senden saubere Daten an den Server
+                const payload = { 
+                    topic: currentForumTopic, 
+                    title, 
+                    text, 
+                    user: currentUser.displayName || "Unbekannt",
+                    userId: currentUser.uid // <--- DAS IST WICHTIG FÜR DEN KLICKBAREN NAMEN!
+                };
+                
                 const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        topic: currentForumTopic, 
-                        title, 
-                        text, 
-                        user: currentUser.displayName || "Unbekannt",
-                        userId: currentUser.uid // <--- WICHTIG: Das speichert die ID sauber in der Datenbank!
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 if (response.ok) {
@@ -760,7 +763,7 @@ window.renderForumThreads = async function(topicName, catId) {
 };
 
 /* ==========================================
-   THREAD DETAIL (Saubere Lösung: Blau, Klickbar, Hover)
+   SCHRITT 2: BEITRAG LESEN (Sauberer Link ohne Tricks)
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
     // Breadcrumbs
@@ -779,37 +782,40 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     // Daten laden
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
-    
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
 
-    // Helper: Profil öffnen + Kontext für Zurück-Button speichern
+    // --- WICHTIG: Funktion zum Profil-Öffnen ---
+    // Sie setzt den "Speicherpunkt" für den Zurück-Button
     window.openProfileFromForum = (uid, name) => {
-        if(!uid) return; // Sicherheitscheck
-        window.lastForumContext = { threadId, topicName, catId }; // Hier merken wir uns den Weg zurück
+        if(!uid) return; 
+        window.lastForumContext = { threadId, topicName, catId }; // Hier merken wir uns den Weg!
         openUserProfile(uid, name);
     };
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
     
-    // --- CHECK: Haben wir eine saubere ID? ---
-    const authorId = t.userId || t.uid; // Wir akzeptieren beide Feldnamen vom Server
-    const isClickable = !!authorId; 
+    // --- CHECK: Ist eine ID da? ---
+    const authorId = t.userId || t.uid; // Wir prüfen sauber, ob die ID vom Server kam
+    const isClickable = !!authorId;     // true, wenn ID da ist. false, wenn nicht.
 
-    // Styles definieren
+    // Styles definieren (Standard: Schwarz & Text)
     let nameStyle = 'font-weight:bold; color:black;'; 
     let nameAttr = '';
 
+    // Wenn ID da ist -> Blau & Klickbar
     if (isClickable) {
-        nameStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; transition: all 0.2s;';
+        nameStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; text-decoration:none; transition: all 0.2s;';
         nameAttr = `
             onmouseover="this.style.textDecoration='underline'" 
             onmouseout="this.style.textDecoration='none'"
             onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')"
         `;
+    } else {
+        console.log("Alter Beitrag ohne ID - Name nicht klickbar.");
     }
 
-    // HTML bauen
+    // HTML Generieren
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
@@ -835,7 +841,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
             
-            // Auch für Antworten checken
+            // Auch bei Antworten prüfen wir sauber auf ID
             const rUserId = r.userId || r.uid;
             const rClickable = !!rUserId;
             
@@ -843,7 +849,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             let rAttr = '';
 
             if (rClickable) {
-                rStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; transition: all 0.2s;';
+                rStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; text-decoration:none; transition: all 0.2s;';
                 rAttr = `
                     onmouseover="this.style.textDecoration='underline'" 
                     onmouseout="this.style.textDecoration='none'"
@@ -1350,16 +1356,21 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   RENDER PROFILE PAGE (Mit Zurück-Button)
+   SCHRITT 3: PROFIL-SEITE (Mit Zurück-Button)
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
 
+    // Sicherstellen, dass das Elternelement relative ist, damit der Button oben links sitzt
+    container.style.position = 'relative';
+
+    // Statistik-Daten laden falls nötig
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
 
+    // Fallback auf mich selbst
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1378,21 +1389,20 @@ window.renderProfilePage = async () => {
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
 
-    // --- ZURÜCK BUTTON LOGIK ---
+    // --- ZURÜCK-BUTTON ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
         // Wir kommen aus dem Forum -> Button anzeigen
         const { threadId, topicName, catId } = window.lastForumContext;
         backButtonHtml = `
-            <div class="position-absolute top-0 start-0 m-3" style="z-index: 1050;">
-                <button class="btn btn-light btn-sm shadow fw-bold border" 
+            <div class="position-absolute top-0 start-0 m-3" style="z-index: 2000;">
+                <button class="btn btn-light btn-sm shadow fw-bold border border-secondary" 
                         onclick="navigateTo('forum'); renderThreadDetail('${threadId}', '${topicName}', '${catId}'); window.lastForumContext = null;">
                     ⬅ Zurück zum Thema
                 </button>
             </div>
         `;
     }
-    // ----------------------------
 
     container.innerHTML = `
     ${backButtonHtml}
