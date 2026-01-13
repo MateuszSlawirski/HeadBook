@@ -1205,15 +1205,13 @@ window.addFriend = async (targetUid) => {
 };
 
 /* ==========================================
-   PROFIL ÖFFNEN (Reset & Reload)
+   PROFIL ÖFFNEN (FIX: Reihenfolge korrigiert)
    ========================================== */
 window.openUserProfile = async (uid, name) => {
     console.log("Wechsle Profil zu:", name);
 
-    // 1. Navigation
-    navigateTo('profile');
-    
-    // 2. WICHTIG: Globales Objekt komplett neu anlegen (löscht alle alten Daten!)
+    // 1. ZUERST: Daten setzen! (Damit die App sofort weiß, wer gemeint ist)
+    // Wir löschen alte Daten und setzen den neuen Wunsch-User
     viewingUserProfile = { 
         uid: uid, 
         displayName: name || "Lade...", 
@@ -1224,30 +1222,34 @@ window.openUserProfile = async (uid, name) => {
         photoUrl: null
     };
 
-    // 3. Sofort anzeigen (Das baut jetzt die Seite neu auf, siehe oben!)
+    // 2. DANACH: Seite wechseln
+    // Jetzt findet renderProfilePage() sofort die richtigen Daten und zeigt nicht mehr DICH an.
+    navigateTo('profile');
+    
+    // 3. Zur Sicherheit: Sofort einmal zeichnen
     if(typeof renderProfilePage === 'function') renderProfilePage();
 
-    // 4. Frische Daten aus der Datenbank holen
+    // 4. Echte Daten aus der Datenbank nachladen
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
 
         if (docSnap.exists()) {
             const data = docSnap.data();
             
-            // Objekt mit echten Daten füllen
+            // Objekt mit echten DB-Daten füllen
             viewingUserProfile.displayName = data.displayName || viewingUserProfile.displayName;
             viewingUserProfile.bio = data.bio || "Riderpoint Mitglied";
             viewingUserProfile.photoUrl = data.photoUrl || null;
             viewingUserProfile.friends = data.friends || [];
 
-            // Sync mit eigenem User, falls ich es bin
+            // Wenn ich es selbst bin, mein globales Profil updaten
             if (viewingUserProfile.isMe) {
                 currentUser.bio = data.bio;
                 currentUser.friends = data.friends;
                 currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
             }
 
-            // Freunde nachladen (Bilder)
+            // Bilder der Freunde laden
             if (viewingUserProfile.friends.length > 0) {
                 const friendPromises = viewingUserProfile.friends.slice(0, 10).map(fid => getDoc(doc(db, "users", fid)));
                 const friendSnaps = await Promise.all(friendPromises);
@@ -1265,7 +1267,7 @@ window.openUserProfile = async (uid, name) => {
                 });
             }
 
-            // 5. Seite noch einmal neu malen mit den kompletten Daten
+            // 5. Seite final aktualisieren (mit Bio, Bild & Freunden)
             if(typeof renderProfilePage === 'function') renderProfilePage();
         }
     } catch (error) {
