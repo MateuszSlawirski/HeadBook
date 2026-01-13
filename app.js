@@ -711,11 +711,13 @@ window.renderForumSubCategory = function(catId) {
     });
 };
 
+/* ==========================================
+   FORUM LEVEL 2: THEMEN LISTE 
+   ========================================== */
 window.renderForumThreads = async function(topicName, catId) {
     currentForumTopic = topicName;
     const cat = allForumData.find(c => c.id === catId);
     
-    // Breadcrumbs setzen
     renderBreadcrumbs([{ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` }, { label: topicName, onclick: null }]);
     
     const container = document.getElementById('forum-container');
@@ -732,10 +734,6 @@ window.renderForumThreads = async function(topicName, catId) {
     
     threads.forEach(thread => {
         const deleteBtn = getDeleteBtn('thread', thread.id, thread.topic);
-        
-        // --- FIX: Wir suchen die ID, damit das Profil geladen werden kann ---
-        // Wenn es ein altes Thema ist (ohne ID), wird null übergeben (Profil lädt dann evtl. nicht, aber stürzt nicht ab)
-        const authorId = thread.userId || thread.uid || null; 
 
         listArea.innerHTML += `
         <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
@@ -743,23 +741,23 @@ window.renderForumThreads = async function(topicName, catId) {
             <div class="forum-main">
                 <div class="fw-bold text-dark">${thread.title}</div>
                 <div class="small text-muted">
-                von <span class="text-primary fw-bold" style="cursor:pointer" onclick="event.stopPropagation(); openUserProfile('${authorId}', '${thread.user}')">${thread.user}</span> 
-                • ${thread.date}
+                    von <span class="text-dark fw-bold">${thread.user}</span> 
+                    • ${thread.date}
                 </div>
             </div>
             <div class="forum-stats fw-bold d-none d-md-block">${thread.replies || 0}</div>
             <div class="text-end text-muted small" style="min-width:100px;">
                 ${thread.date}
-                ${deleteBtn} </div>
+                ${deleteBtn} 
+            </div>
         </div>`;
     });
 };
 
-  /* ==========================================
-   FORUM LEVEL 3: BEITRAG LESEN (Mit Profil-Fix & Optik)
+/* ==========================================
+   FORUM LEVEL 3: BEITRAG LESEN (Klickbar & Hover & Fix)
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
-    // 1. Breadcrumbs & Loading
     let breadcrumbs = [];
     if (catId) {
         const cat = allForumData.find(c => c.id === catId);
@@ -772,7 +770,6 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     
-    // 2. Daten laden
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     
@@ -780,23 +777,20 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     if (!t) return;
 
     // --- HELPER: Profil öffnen mit "Zurück"-Gedächtnis ---
-    // Wir speichern hier, wo wir gerade sind, damit das Profil einen "Zurück"-Button zeigen kann
     window.openProfileFromForum = (uid, name) => {
-        // Wir merken uns die aktuellen Daten für den Zurück-Button
+        if(!uid) return window.showToast("User-Profil nicht verfügbar (Legacy)", true);
         window.lastForumContext = { threadId, topicName, catId };
         openUserProfile(uid, name);
     };
 
-    // Style für den klickbaren Namen (Blau + Unterstrichen bei Hover)
-    const nameStyle = `cursor:pointer; font-weight:bold; transition: color 0.2s;`;
-    const hoverAttr = `onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" onmouseout="this.style.textDecoration='none'; this.style.color='' "`;
+    // --- OPTIK: Blau & Unterstrichen bei Hover ---
+    const nameStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
+    const hoverAttr = `onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"`;
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
-    
-    // FIX: UserId holen (Fallback auf null, falls altes Thema)
-    const authorId = t.userId || t.uid || null;
+    const authorId = t.userId || t.uid || null; // ID suchen
 
-    // --- 3. HAUPT-BEITRAG RENDERN ---
+    // Haupt-Beitrag HTML
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
@@ -804,9 +798,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
                 <div>
                     <span style="${nameStyle}" ${hoverAttr} class="text-dark"
                           onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')">
-                        ${t.user}
+                        👤 ${t.user}
                     </span> 
-                    <span class="text-muted small">schrieb am ${t.date}:</span>
+                    <span class="text-muted small ms-2">schrieb am ${t.date}:</span>
                 </div>
                 <div class="d-flex align-items-center">
                     <span class="text-muted small me-2">#1</span>
@@ -818,12 +812,10 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             </div>
         </div>`;
 
-    // --- 4. ANTWORTEN RENDERN ---
+    // Antworten rendern
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
-            
-            // FIX: Auch hier die ID holen
             const replyUserId = r.userId || r.uid || null;
 
             html += `
@@ -832,9 +824,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
                     <div>
                         <span style="${nameStyle}" ${hoverAttr} class="text-dark"
                               onclick="event.stopPropagation(); openProfileFromForum('${replyUserId}', '${r.user}')">
-                            ${r.user}
+                            👤 ${r.user}
                         </span> 
-                        <span class="text-muted small">antwortete am ${r.date}:</span>
+                        <span class="text-muted small ms-2">antwortete am ${r.date}:</span>
                     </div>
                     <div class="d-flex align-items-center">
                         <span class="text-muted small me-2">#${idx + 2}</span>
@@ -848,7 +840,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         });
     }
 
-    // --- 5. ANTWORT-FELD ---
+    // Antwort-Feld
     html += `
     <div class="card mt-4 shadow-sm border-0">
         <div class="card-body">
@@ -1326,7 +1318,7 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   RENDER PROFILE PAGE (Mit "Zurück zum Forum" Button)
+   RENDER PROFILE PAGE (Mit Zurück-Button Logik)
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
@@ -1354,24 +1346,21 @@ window.renderProfilePage = async () => {
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
 
-    // --- LOGIK FÜR ZURÜCK BUTTON ---
+    // --- ZURÜCK BUTTON LOGIK ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
-        // Wenn wir aus dem Forum kommen, zeigen wir diesen Button
         const { threadId, topicName, catId } = window.lastForumContext;
         backButtonHtml = `
-            <button class="btn btn-sm btn-light position-absolute top-0 start-0 m-3 shadow-sm fw-bold" 
+            <button class="btn btn-sm btn-light position-absolute top-0 start-0 m-3 shadow fw-bold border" 
                     style="z-index: 20;"
                     onclick="navigateTo('forum'); renderThreadDetail('${threadId}', '${topicName}', '${catId}'); window.lastForumContext = null;">
                 ⬅ Zurück zum Thema
             </button>
         `;
     }
-    // -------------------------------
-    
+
     container.innerHTML = `
     ${backButtonHtml}
-    
     <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
     <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
         <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
@@ -1406,13 +1395,13 @@ window.renderProfilePage = async () => {
         </div>
     </div>`;
 
-    // 1. BILD SETZEN
+    // 1. Bild setzen
     const imgEl = document.getElementById('profile-img');
     if(imgEl && viewingUserProfile.photoUrl) {
         imgEl.src = viewingUserProfile.photoUrl;
     }
 
-    // 2. FREUNDE RENDERN
+    // 2. Freunde rendern
     const friendsContainer = document.getElementById('friends-list-container');
     if(typeof renderFriendsList === 'function') {
         renderFriendsList(friendsContainer);
@@ -1420,7 +1409,7 @@ window.renderProfilePage = async () => {
         friendsContainer.innerHTML = '<small>Lade Freunde...</small>';
     }
 
-    // 3. BUTTONS
+    // 3. Action Buttons
     const actionArea = document.getElementById('profile-actions');
     if (actionArea) {
         if (viewingUserProfile.isMe) {
@@ -1448,7 +1437,7 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // 4. STATISTIKEN
+    // 4. Statistiken
     const statsArea = document.getElementById('profile-stats-content');
     if (statsArea) {
         const targetName = viewingUserProfile.displayName;
