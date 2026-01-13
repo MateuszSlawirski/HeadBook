@@ -755,7 +755,7 @@ window.renderForumThreads = async function(topicName, catId) {
 };
 
 /* ==========================================
-   FORUM LEVEL 3: BEITRAG LESEN (Klickbar & Hover & Fix)
+   FORUM LEVEL 3: BEITRAG LESEN 
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
     let breadcrumbs = [];
@@ -778,17 +778,32 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
 
     // --- HELPER: Profil öffnen mit "Zurück"-Gedächtnis ---
     window.openProfileFromForum = (uid, name) => {
-        if(!uid) return window.showToast("User-Profil nicht verfügbar (Legacy)", true);
+        // Sicherung: Wenn keine UID da ist, brechen wir ab (sollte durch UI schon verhindert sein)
+        if(!uid) return window.showToast("Profil nicht verfügbar (Legacy Beitrag)", true);
+        
         window.lastForumContext = { threadId, topicName, catId };
         openUserProfile(uid, name);
     };
 
-    // --- OPTIK: Blau & Unterstrichen bei Hover ---
-    const nameStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
-    const hoverAttr = `onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"`;
-
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
-    const authorId = t.userId || t.uid || null; // ID suchen
+    
+    // --- INTELLIGENTE LOGIK FÜR DEN AUTOR ---
+    const authorId = t.userId || t.uid || null;
+    const isClickable = !!authorId; // Nur klickbar wenn ID existiert
+    
+    // Styles je nach Status
+    let nameAttr = '';
+    let nameStyle = 'font-weight:bold; color:black;'; // Standard (nicht klickbar)
+    
+    if (isClickable) {
+        // Wenn klickbar: Blau bei Hover, Hand-Cursor
+        nameStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
+        nameAttr = `
+            onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" 
+            onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"
+            onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')"
+        `;
+    }
 
     // Haupt-Beitrag HTML
     let html = `
@@ -796,8 +811,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         <div class="card mb-3 border-0 shadow-sm">
             <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between align-items-center">
                 <div>
-                    <span style="${nameStyle}" ${hoverAttr} class="text-dark"
-                          onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')">
+                    <span style="${nameStyle}" ${nameAttr} class="text-dark">
                         👤 ${t.user}
                     </span> 
                     <span class="text-muted small ms-2">schrieb am ${t.date}:</span>
@@ -816,14 +830,28 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
+            
+            // --- INTELLIGENTE LOGIK FÜR ANTWORTEN ---
             const replyUserId = r.userId || r.uid || null;
+            const rClickable = !!replyUserId;
+            
+            let rAttr = '';
+            let rStyle = 'font-weight:bold; color:black;';
+            
+            if (rClickable) {
+                rStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
+                rAttr = `
+                    onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" 
+                    onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"
+                    onclick="event.stopPropagation(); openProfileFromForum('${replyUserId}', '${r.user}')"
+                `;
+            }
 
             html += `
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
                     <div>
-                        <span style="${nameStyle}" ${hoverAttr} class="text-dark"
-                              onclick="event.stopPropagation(); openProfileFromForum('${replyUserId}', '${r.user}')">
+                        <span style="${rStyle}" ${rAttr} class="text-dark">
                             👤 ${r.user}
                         </span> 
                         <span class="text-muted small ms-2">antwortete am ${r.date}:</span>
@@ -1318,7 +1346,7 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   RENDER PROFILE PAGE (Mit Zurück-Button Logik)
+   RENDER PROFILE PAGE 
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
