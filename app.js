@@ -291,10 +291,9 @@ window.openAddTourModal = () => {
 };
 
 /* ==========================================
-   SCHRITT 1: EVENT LISTENER (Speichert User-ID sauber ab)
+   1. EVENT LISTENERS (ID beim Erstellen mitsenden)
    ========================================== */
 function setupEventListeners() {
-    // Logout
     const btnLogout = document.getElementById('logout-btn');
     if(btnLogout) btnLogout.addEventListener('click', async () => { 
         await signOut(auth); 
@@ -302,7 +301,6 @@ function setupEventListeners() {
         navigateTo('home'); 
     });
 
-    // Login / Register
     const authForm = document.getElementById('authForm');
     if(authForm) authForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -310,7 +308,7 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Thread erstellen (HIER WAR DER FEHLER: Wir senden jetzt userId mit!)
+    // Thread erstellen: HIER SENDE WIR JETZT DIE userId MIT!
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
@@ -321,13 +319,13 @@ function setupEventListeners() {
             const text = document.getElementById('threadText').value;
             
             try {
-                // Wir senden saubere Daten an den Server
+                // WICHTIG: userId wird hier explizit gesetzt
                 const payload = { 
                     topic: currentForumTopic, 
                     title, 
                     text, 
                     user: currentUser.displayName || "Unbekannt",
-                    userId: currentUser.uid // <--- DAS IST WICHTIG FÜR DEN KLICKBAREN NAMEN!
+                    userId: currentUser.uid 
                 };
                 
                 const response = await fetch(`${API_URL}/createThread`, {
@@ -347,7 +345,6 @@ function setupEventListeners() {
         });
     }
 
-    // Kategorie erstellen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -372,7 +369,6 @@ function setupEventListeners() {
         });
     }
 
-    // Tour erstellen
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
@@ -763,7 +759,7 @@ window.renderForumThreads = async function(topicName, catId) {
 };
 
 /* ==========================================
-   SCHRITT 2: BEITRAG LESEN (Sauberer Link ohne Tricks)
+   2. THREAD DETAIL (Intelligente Suche & Immer Klickbar)
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
     // Breadcrumbs
@@ -785,43 +781,59 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
 
-    // --- WICHTIG: Funktion zum Profil-Öffnen ---
-    // Sie setzt den "Speicherpunkt" für den Zurück-Button
-    window.openProfileFromForum = (uid, name) => {
-        if(!uid) return; 
-        window.lastForumContext = { threadId, topicName, catId }; // Hier merken wir uns den Weg!
-        openUserProfile(uid, name);
+    const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
+
+    // --- NEU: INTELLIGENTER KLICK-HANDLER ---
+    // Dieser Handler sucht die ID überall, wenn sie fehlt
+    window.handleProfileClick = async (event, username, knownUid) => {
+        event.stopPropagation();
+        let targetUid = knownUid;
+
+        // 1. Fallback: Bin ich es selbst?
+        if (!targetUid && currentUser && currentUser.displayName === username) {
+            targetUid = currentUser.uid;
+        }
+
+        // 2. Fallback: Suche in lokalen Posts
+        if (!targetUid && typeof allPostsCache !== 'undefined') {
+             const found = allPostsCache.find(p => p.user === username);
+             if(found) targetUid = found.userId;
+        }
+
+        // 3. Fallback: Suche LIVE in der Datenbank (User suchen per Name)
+        if (!targetUid) {
+            window.showToast("🔍 Suche Profil...", false);
+            try {
+                // Wir nutzen db, da es oben in app.js importiert ist
+                const q = query(collection(db, "users"), where("displayName", "==", username), limit(1));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    targetUid = snap.docs[0].id;
+                }
+            } catch(e) { console.log("User nicht gefunden", e); }
+        }
+
+        if (targetUid) {
+             // Merken für Zurück-Button
+             window.lastForumContext = { threadId, topicName, catId };
+             openUserProfile(targetUid, username);
+        } else {
+             window.showToast("Profil nicht gefunden.", true);
+        }
     };
 
-    const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
-    
-    // --- CHECK: Ist eine ID da? ---
-    const authorId = t.userId || t.uid; // Wir prüfen sauber, ob die ID vom Server kam
-    const isClickable = !!authorId;     // true, wenn ID da ist. false, wenn nicht.
+    // Style: Immer Blau & Zeigefinger
+    const nameStyle = "cursor:pointer; font-weight:bold; color:#0d6efd; text-decoration:none; transition:all 0.2s;";
+    const hoverAttr = `onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"`;
 
-    // Styles definieren (Standard: Schwarz & Text)
-    let nameStyle = 'font-weight:bold; color:black;'; 
-    let nameAttr = '';
-
-    // Wenn ID da ist -> Blau & Klickbar
-    if (isClickable) {
-        nameStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; text-decoration:none; transition: all 0.2s;';
-        nameAttr = `
-            onmouseover="this.style.textDecoration='underline'" 
-            onmouseout="this.style.textDecoration='none'"
-            onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')"
-        `;
-    } else {
-        console.log("Alter Beitrag ohne ID - Name nicht klickbar.");
-    }
-
-    // HTML Generieren
+    // --- HTML BAUEN ---
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
             <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between align-items-center">
                 <div>
-                    <span style="${nameStyle}" ${nameAttr}>
+                    <span style="${nameStyle}" ${hoverAttr}
+                          onclick="handleProfileClick(event, '${t.user}', '${t.userId || t.uid || ''}')">
                         👤 ${t.user}
                     </span> 
                     <span class="text-muted small ms-2">schrieb am ${t.date}:</span>
@@ -841,27 +853,12 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
             
-            // Auch bei Antworten prüfen wir sauber auf ID
-            const rUserId = r.userId || r.uid;
-            const rClickable = !!rUserId;
-            
-            let rStyle = 'font-weight:bold; color:black;';
-            let rAttr = '';
-
-            if (rClickable) {
-                rStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; text-decoration:none; transition: all 0.2s;';
-                rAttr = `
-                    onmouseover="this.style.textDecoration='underline'" 
-                    onmouseout="this.style.textDecoration='none'"
-                    onclick="event.stopPropagation(); openProfileFromForum('${rUserId}', '${r.user}')"
-                `;
-            }
-
             html += `
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
                     <div>
-                        <span style="${rStyle}" ${rAttr}>
+                        <span style="${nameStyle}" ${hoverAttr}
+                              onclick="handleProfileClick(event, '${r.user}', '${r.userId || r.uid || ''}')">
                             👤 ${r.user}
                         </span> 
                         <span class="text-muted small ms-2">antwortete am ${r.date}:</span>
@@ -1356,21 +1353,19 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   SCHRITT 3: PROFIL-SEITE (Mit Zurück-Button)
+   3. PROFIL PAGE (Mit Zurück-Button)
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
-
-    // Sicherstellen, dass das Elternelement relative ist, damit der Button oben links sitzt
+    
+    // Position relative für absolute Buttons
     container.style.position = 'relative';
 
-    // Statistik-Daten laden falls nötig
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
 
-    // Fallback auf mich selbst
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
@@ -1389,10 +1384,9 @@ window.renderProfilePage = async () => {
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
 
-    // --- ZURÜCK-BUTTON ---
+    // --- ZURÜCK BUTTON LOGIK ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
-        // Wir kommen aus dem Forum -> Button anzeigen
         const { threadId, topicName, catId } = window.lastForumContext;
         backButtonHtml = `
             <div class="position-absolute top-0 start-0 m-3" style="z-index: 2000;">
@@ -1406,7 +1400,6 @@ window.renderProfilePage = async () => {
 
     container.innerHTML = `
     ${backButtonHtml}
-    
     <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
     <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
         <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
