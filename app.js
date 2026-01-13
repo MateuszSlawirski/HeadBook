@@ -1205,57 +1205,49 @@ window.addFriend = async (targetUid) => {
 };
 
 /* ==========================================
-   PROFIL ÖFFNEN (Fix: Namen & Bio Geister-Daten löschen)
+   PROFIL ÖFFNEN (Reset & Reload)
    ========================================== */
 window.openUserProfile = async (uid, name) => {
-    console.log("Wechsle zu Profil:", name, uid);
+    console.log("Wechsle Profil zu:", name);
 
-    // 1. Sofort zur Profil-Seite wechseln
+    // 1. Navigation
     navigateTo('profile');
     
-    // 2. UI sofort "leeren" (damit man nicht die alten Daten sieht)
-    const nameEl = document.getElementById('profile-name');
-    const bioEl = document.getElementById('profile-bio');
-    if(nameEl) nameEl.innerText = "Lade..."; // Visuelles Feedback
-    if(bioEl) bioEl.innerText = "...";
-
-    // 3. Globales Objekt KOMPLETT neu setzen (keine alten Reste behalten!)
+    // 2. WICHTIG: Globales Objekt komplett neu anlegen (löscht alle alten Daten!)
     viewingUserProfile = { 
         uid: uid, 
-        displayName: name || "Lade Benutzer...", // Vorläufiger Name
+        displayName: name || "Lade...", 
         isMe: (currentUser && currentUser.uid === uid),
         friends: [],      
         friendDetails: [],
-        bio: "", // Leer starten
+        bio: "",
         photoUrl: null
     };
 
-    // 4. Einmal rendern (zeigt Platzhalter)
+    // 3. Sofort anzeigen (Das baut jetzt die Seite neu auf, siehe oben!)
     if(typeof renderProfilePage === 'function') renderProfilePage();
 
-    // 5. FRISCHE DATEN AUS DATENBANK HOLEN
+    // 4. Frische Daten aus der Datenbank holen
     try {
-        const docRef = doc(db, "users", uid);
-        const docSnap = await getDoc(docRef);
+        const docSnap = await getDoc(doc(db, "users", uid));
 
         if (docSnap.exists()) {
             const data = docSnap.data();
             
-            // JETZT überschreiben wir alles mit den echten DB-Daten
-            viewingUserProfile.displayName = data.displayName || viewingUserProfile.displayName; // <--- WICHTIG: Name korrigieren!
+            // Objekt mit echten Daten füllen
+            viewingUserProfile.displayName = data.displayName || viewingUserProfile.displayName;
             viewingUserProfile.bio = data.bio || "Riderpoint Mitglied";
             viewingUserProfile.photoUrl = data.photoUrl || null;
             viewingUserProfile.friends = data.friends || [];
 
-            // Wenn ich es bin, synchronisieren wir das gleich mit meinem Account
+            // Sync mit eigenem User, falls ich es bin
             if (viewingUserProfile.isMe) {
                 currentUser.bio = data.bio;
                 currentUser.friends = data.friends;
                 currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
-                currentUser.displayName = data.displayName || currentUser.displayName;
             }
 
-            // 6. Freunde-Details nachladen (Bilder für die Liste)
+            // Freunde nachladen (Bilder)
             if (viewingUserProfile.friends.length > 0) {
                 const friendPromises = viewingUserProfile.friends.slice(0, 10).map(fid => getDoc(doc(db, "users", fid)));
                 const friendSnaps = await Promise.all(friendPromises);
@@ -1273,7 +1265,7 @@ window.openUserProfile = async (uid, name) => {
                 });
             }
 
-            // 7. Seite neu malen mit den korrekten Daten
+            // 5. Seite noch einmal neu malen mit den kompletten Daten
             if(typeof renderProfilePage === 'function') renderProfilePage();
         }
     } catch (error) {
@@ -1282,26 +1274,22 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   RENDER PROFILE PAGE (Komplett & Korrigiert)
-   ========================================== */
-/* ==========================================
-   RENDER PROFILE PAGE (Fix: ???-Bild & Community-Sync)
+   RENDER PROFILE PAGE (Fix: Zwingt Neustart der Seite)
    ========================================== */
 window.renderProfilePage = async () => {
-    // 1. Daten-Check
     const container = document.getElementById('page-profile');
     if (!container) return;
-    
-    // Feed laden falls leer (für Statistiken wichtig)
+
+    // Feed laden falls leer (für Statistiken)
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
 
-    // Fallback: Wenn kein Profil ausgewählt ist, zeige MICH an
+    // Fallback: Wenn kein Profil gewählt ist -> Mein Profil
     if (!viewingUserProfile && currentUser) {
         viewingUserProfile = { 
             uid: currentUser.uid, 
-            displayName: currentUser.displayName || currentUser.email.split('@')[0], 
+            displayName: currentUser.displayName || "Ich", 
             isMe: true,
             bio: currentUser.bio || "",
             photoUrl: currentUser.photoUrl || null,
@@ -1314,114 +1302,68 @@ window.renderProfilePage = async () => {
         return;
     }
 
-    // 2. Grundgerüst bauen (falls noch nicht da)
-    if (!document.getElementById('profile-name')) {
-        // Fallback-Bild URL berechnen
-        const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-        
-        container.innerHTML = `
-        <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
-        <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
-            <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
-                <div class="card-body p-4">
-                    <div class="row align-items-end">
-                        <div class="col-auto">
-                            <div class="profile-pic-container">
-                                <img src="${defaultAvatar}" id="profile-img" 
-                                     class="rounded-circle border border-4 border-white shadow bg-white" 
-                                     style="width: 120px; height: 120px; object-fit: cover; background: #eee;"
-                                     onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
+    // WICHTIG: Wir bauen das HTML JETZT IMMER NEU!
+    // Damit löschen wir alle alten Daten vom vorherigen User restlos weg.
+    
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
+    
+    // Wir nutzen ein 'data-uid' Attribut, um zu prüfen, ob wir neu malen müssen
+    // Aber sicherheitshalber überschreiben wir es einfach immer.
+    container.innerHTML = `
+    <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
+    <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
+        <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
+            <div class="card-body p-4">
+                <div class="row align-items-end">
+                    <div class="col-auto">
+                        <div class="profile-pic-container">
+                            <img src="${defaultAvatar}" id="profile-img" 
+                                    class="rounded-circle border border-4 border-white shadow bg-white" 
+                                    style="width: 120px; height: 120px; object-fit: cover; background: #eee;"
+                                    onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
+                        <h2 class="fw-bold mb-0 text-dark" id="profile-name">${viewingUserProfile.displayName}</h2>
+                        <p class="text-muted mb-0" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
+                        
+                        <div class="mt-4 pt-3 border-top">
+                            <h6 class="fw-bold small text-uppercase text-muted mb-3">Freunde</h6>
+                            <div id="friends-list-container" class="d-flex flex-wrap gap-2">
+                                <div class="spinner-border spinner-border-sm text-muted"></div>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
-                            <h2 class="fw-bold mb-0 text-dark" id="profile-name"></h2>
-                            <p class="text-muted mb-0" id="profile-bio"></p>
-                            
-                            <div class="mt-4 pt-3 border-top">
-                                <h6 class="fw-bold small text-uppercase text-muted mb-3">Freunde</h6>
-                                <div id="friends-list-container" class="d-flex flex-wrap gap-2">
-                                    <div class="spinner-border spinner-border-sm text-muted"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                     </div>
-                    <hr class="my-4">
-                    <div id="profile-stats-content">
-                        <div class="text-center p-4 text-muted">Lade Aktivitäten...</div>
-                    </div>
+                    <div class="col-md text-md-end pb-2" id="profile-actions"></div>
+                </div>
+                <hr class="my-4">
+                <div id="profile-stats-content">
+                    <div class="text-center p-4 text-muted">Lade Aktivitäten...</div>
                 </div>
             </div>
-        </div>`;
-    }
+        </div>
+    </div>`;
 
-    // Elemente holen
-    const nameEl = document.getElementById('profile-name');
-    const bioEl = document.getElementById('profile-bio');
-    const actionArea = document.getElementById('profile-actions');
-    const statsArea = document.getElementById('profile-stats-content');
+    // Jetzt füllen wir die dynamischen Inhalte (Bild, Freunde, Buttons)
+    
+    // 1. BILD SETZEN
     const imgEl = document.getElementById('profile-img');
+    if(imgEl && viewingUserProfile.photoUrl) {
+        imgEl.src = viewingUserProfile.photoUrl;
+    }
+
+    // 2. FREUNDE RENDERN
     const friendsContainer = document.getElementById('friends-list-container');
-
-    // 3. Texte setzen
-    if (nameEl) nameEl.innerText = viewingUserProfile.displayName;
-    if (bioEl) bioEl.innerText = viewingUserProfile.bio || "Riderpoint Mitglied";
-
-    // 4. BILD & DATEN NACHLADEN (Der Sync-Fix)
-    
-    // Standard-Bild vorbereiten
-    let currentPhoto = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-    
-    // A) Habe ich schon ein Bild im Objekt?
-    if (viewingUserProfile.photoUrl && viewingUserProfile.photoUrl.startsWith('http')) {
-        currentPhoto = viewingUserProfile.photoUrl;
-    }
-    
-    // Bild sofort setzen
-    if(imgEl) {
-        imgEl.src = currentPhoto;
-        // Update den Error-Handler auch dynamisch
-        imgEl.setAttribute('onerror', `this.onerror=null;this.src='https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128';`);
+    if(typeof renderFriendsList === 'function') {
+        renderFriendsList(friendsContainer);
+    } else {
+        // Fallback falls Funktion fehlt
+        friendsContainer.innerHTML = '<small>Lade Freunde...</small>';
     }
 
-    // B) ECHTZEIT-CHECK: Wenn es nicht MEIN Profil ist (oder Daten fehlen), fragen wir die DB
-    if (!viewingUserProfile.isMe || !viewingUserProfile.photoUrl) {
-        try {
-            getDoc(doc(db, "users", viewingUserProfile.uid)).then(snap => {
-                if(snap.exists()) {
-                    const data = snap.data();
-                    
-                    // 1. Bild aktualisieren (falls neu/anders)
-                    if (data.photoUrl && imgEl) {
-                        imgEl.src = data.photoUrl;
-                        viewingUserProfile.photoUrl = data.photoUrl; // Speichern für Cache
-                    }
-                    
-                    // 2. Bio aktualisieren
-                    if (data.bio && bioEl) {
-                        bioEl.innerText = data.bio;
-                        viewingUserProfile.bio = data.bio;
-                    }
-
-                    // 3. Freunde aktualisieren (WICHTIG für Sync)
-                    if (data.friends) {
-                        viewingUserProfile.friends = data.friends;
-                        // Trigger Freundesliste neu rendern, da wir jetzt neue IDs haben
-                        renderFriendsList(friendsContainer); 
-                    }
-                }
-            });
-        } catch(e) { console.log("Profil Sync Info:", e); }
-    }
-
-
-    // 5. FREUNDESLISTE RENDERN (In extra Funktion ausgelagert für sauberen Refresh)
-    renderFriendsList(friendsContainer);
-
-
-    // 6. BUTTONS (Postfach / Freund hinzufügen)
+    // 3. BUTTONS
+    const actionArea = document.getElementById('profile-actions');
     if (actionArea) {
-        actionArea.innerHTML = '';
         if (viewingUserProfile.isMe) {
             actionArea.innerHTML = `
                 <button id="btn-inbox" class="btn btn-primary btn-sm me-2 position-relative" onclick="openInbox()">
@@ -1430,7 +1372,7 @@ window.renderProfilePage = async () => {
                 </button>
                 <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>
             `;
-            // Roter Punkt Check
+            // Badge Check
             try {
                 const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false), limit(1));
                 getDocs(qCheck).then(snap => { if (!snap.empty) document.getElementById('inbox-badge')?.classList.remove('d-none'); });
@@ -1448,20 +1390,19 @@ window.renderProfilePage = async () => {
         }
     }
 
-    // 7. STATISTIKEN
+    // 4. STATISTIKEN
+    const statsArea = document.getElementById('profile-stats-content');
     if (statsArea) {
         const targetName = viewingUserProfile.displayName;
         const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
         const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
         const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
-        const totalActivity = myTours.length + myPosts.length + myThreads.length;
         
+        const totalActivity = myTours.length + myPosts.length + myThreads.length;
         let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
         if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
         if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
-        if (totalActivity >= 100) { rank = "Meilen Fresser";badgeColor = "success"; rankIcon = "🌍"; }
-        if (totalActivity >= 250) { rank = "Road King";     badgeColor = "danger";  rankIcon = "👑"; }
-
+        
         let html = `<div class="text-center mb-3"><span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span><div class="text-muted small mt-1">${totalActivity} Aktivitäten</div></div>
                     <div class="d-flex gap-3 mb-4 justify-content-center text-center">
                         <div class="bg-light p-2 rounded px-3 border"><b>${myTours.length}</b><br><small>Touren</small></div>
@@ -1469,7 +1410,6 @@ window.renderProfilePage = async () => {
                         <div class="bg-light p-2 rounded px-3 border"><b>${myThreads.length}</b><br><small>Themen</small></div>
                     </div>`;
         
-        // Inhalte anzeigen (gekürzt)
         if (myPosts.length > 0) html += `<h6 class="fw-bold mt-3">📸 Letzte Beiträge</h6><div class="list-group mb-3">${myPosts.slice(0,3).map(p => `<div class="list-group-item border-0 border-bottom text-truncate">${p.content || "Bild"}</div>`).join('')}</div>`;
         if(totalActivity === 0) html += `<p class="text-center text-muted py-3">Keine Aktivitäten.</p>`;
         statsArea.innerHTML = html;
