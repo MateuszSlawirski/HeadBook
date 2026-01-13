@@ -1353,15 +1353,15 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   3. PROFIL PAGE (Mit Zurück-Button)
+   PROFIL SEITE (Neues Design & Interaktive Boxen)
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
     
-    // Position relative für absolute Buttons
-    container.style.position = 'relative';
+    container.style.position = 'relative'; 
 
+    // Daten sicherstellen
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
         if(typeof loadFeed === 'function') await loadFeed();
     }
@@ -1384,20 +1384,41 @@ window.renderProfilePage = async () => {
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
 
-    // --- ZURÜCK BUTTON LOGIK ---
+    // --- ZURÜCK BUTTON ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
         const { threadId, topicName, catId } = window.lastForumContext;
+        const clickAction = threadId 
+            ? `renderThreadDetail('${threadId}', '${topicName}', '${catId}')`
+            : `renderForumThreads('${topicName}', '${catId}')`;
+
         backButtonHtml = `
             <div class="position-absolute top-0 start-0 m-3" style="z-index: 2000;">
                 <button class="btn btn-light btn-sm shadow fw-bold border border-secondary" 
-                        onclick="navigateTo('forum'); renderThreadDetail('${threadId}', '${topicName}', '${catId}'); window.lastForumContext = null;">
-                    ⬅ Zurück zum Thema
+                        onclick="navigateTo('forum'); ${clickAction}; window.lastForumContext = null;">
+                    ⬅ Zurück
                 </button>
             </div>
         `;
     }
 
+    // --- STATISTIKEN BERECHNEN ---
+    const targetName = viewingUserProfile.displayName;
+    // Sicherstellen, dass Arrays existieren
+    const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
+    const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
+    const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
+    
+    const totalActivity = myTours.length + myPosts.length + myThreads.length;
+    
+    // Rang berechnen
+    let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
+    if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
+    if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
+    if (totalActivity >= 100) { rank = "Meilen Fresser";badgeColor = "success"; rankIcon = "🌍"; }
+    if (totalActivity >= 250) { rank = "Road King";     badgeColor = "danger";  rankIcon = "👑"; }
+
+    // --- HTML AUFBAU ---
     container.innerHTML = `
     ${backButtonHtml}
     <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
@@ -1413,6 +1434,7 @@ window.renderProfilePage = async () => {
                                     onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
                         </div>
                     </div>
+                    
                     <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
                         <h2 class="fw-bold mb-0 text-dark" id="profile-name">${viewingUserProfile.displayName}</h2>
                         <p class="text-muted mb-0" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
@@ -1424,28 +1446,92 @@ window.renderProfilePage = async () => {
                             </div>
                         </div>
                     </div>
+                    
                     <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                 </div>
+
                 <hr class="my-4">
-                <div id="profile-stats-content">
-                    <div class="text-center p-4 text-muted">Lade Aktivitäten...</div>
+
+                <div class="text-center mb-3">
+                    <span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span>
+                    <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
                 </div>
+
+                <div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                    
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
+                         onclick="switchProfileTab('tours')" style="cursor:pointer; min-width: 90px;">
+                        <b class="fs-5">${myTours.length}</b><br><small>Touren</small>
+                    </div>
+                    
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
+                         onclick="switchProfileTab('posts')" style="cursor:pointer; min-width: 90px;">
+                        <b class="fs-5">${myPosts.length}</b><br><small>Beiträge</small>
+                    </div>
+                    
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
+                         onclick="switchProfileTab('threads')" style="cursor:pointer; min-width: 90px;">
+                        <b class="fs-5">${myThreads.length}</b><br><small>Themen</small>
+                    </div>
+
+                </div>
+
+                <div id="profile-dynamic-content" class="mt-3">
+                    <div class="text-center text-muted small fst-italic py-3">
+                        Klicke auf eine Box oben, um Aktivitäten zu sehen.
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>`;
 
     // 1. Bild setzen
     const imgEl = document.getElementById('profile-img');
-    if(imgEl && viewingUserProfile.photoUrl) {
-        imgEl.src = viewingUserProfile.photoUrl;
-    }
+    if(imgEl && viewingUserProfile.photoUrl) imgEl.src = viewingUserProfile.photoUrl;
 
-    // 2. Freunde rendern
+    // 2. Freunde rendern (Fix wie zuvor)
     const friendsContainer = document.getElementById('friends-list-container');
-    if(typeof renderFriendsList === 'function') {
-        renderFriendsList(friendsContainer);
-    } else {
-        friendsContainer.innerHTML = '<small>Lade Freunde...</small>';
+    if(friendsContainer) {
+        let list = viewingUserProfile.friendDetails || []; 
+        if (list.length === 0 && viewingUserProfile.friends) list = viewingUserProfile.friends;
+        if (viewingUserProfile.isMe && currentUser.friends && list.length < currentUser.friends.length) list = currentUser.friends;
+
+        if (!list || list.length === 0) {
+            friendsContainer.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
+        } else {
+            friendsContainer.innerHTML = '';
+            const topFriends = list.slice(0, 5);
+            topFriends.forEach(item => {
+                let fUid, fName, fImg;
+                if (typeof item === 'object') { fUid = item.uid; fName = item.name; fImg = item.photoUrl; }
+                else { fUid = item; fName = "Lade..."; fImg = `https://ui-avatars.com/api/?name=?&background=eee`; } 
+                
+                // Bild Nachladen Logik
+                if(typeof item !== 'object') {
+                    getDoc(doc(db, "users", fUid)).then(snap => {
+                        if(snap.exists()) {
+                            const d = snap.data();
+                            const iTag = document.getElementById(`f-img-${fUid}`);
+                            const nTag = document.getElementById(`f-name-${fUid}`);
+                            if(iTag && d.photoUrl) iTag.src = d.photoUrl;
+                            if(nTag && d.displayName) nTag.innerText = d.displayName;
+                        }
+                    });
+                }
+
+                const badge = document.createElement('div');
+                badge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border shadow-sm';
+                badge.style.cursor = 'pointer';
+                badge.onclick = () => openUserProfile(fUid, fName);
+                badge.innerHTML = `
+                    <img src="${fImg}" id="f-img-${fUid}" class="rounded-circle me-2 border" width="30" height="30" style="object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${fName}'">
+                    <span id="f-name-${fUid}" class="small fw-bold text-dark" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fName}</span>
+                `;
+                friendsContainer.appendChild(badge);
+            });
+            if (list.length > 5) friendsContainer.innerHTML += `<span class="badge bg-secondary rounded-pill align-self-center ms-1">+${list.length - 5}</span>`;
+        }
     }
 
     // 3. Action Buttons
@@ -1475,33 +1561,92 @@ window.renderProfilePage = async () => {
             `;
         }
     }
-
-    // 4. Statistiken
-    const statsArea = document.getElementById('profile-stats-content');
-    if (statsArea) {
-        const targetName = viewingUserProfile.displayName;
-        const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
-        const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
-        const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
-        
-        const totalActivity = myTours.length + myPosts.length + myThreads.length;
-        let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
-        if (totalActivity >= 10)  { rank = "Asphalt Scout"; badgeColor = "info";    rankIcon = "🧭"; }
-        if (totalActivity >= 50)  { rank = "Kurven Jäger";  badgeColor = "warning"; rankIcon = "🏍️"; }
-        
-        let html = `<div class="text-center mb-3"><span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span><div class="text-muted small mt-1">${totalActivity} Aktivitäten</div></div>
-                    <div class="d-flex gap-3 mb-4 justify-content-center text-center">
-                        <div class="bg-light p-2 rounded px-3 border"><b>${myTours.length}</b><br><small>Touren</small></div>
-                        <div class="bg-light p-2 rounded px-3 border"><b>${myPosts.length}</b><br><small>Beiträge</small></div>
-                        <div class="bg-light p-2 rounded px-3 border"><b>${myThreads.length}</b><br><small>Themen</small></div>
-                    </div>`;
-        
-        if (myPosts.length > 0) html += `<h6 class="fw-bold mt-3">📸 Letzte Beiträge</h6><div class="list-group mb-3">${myPosts.slice(0,3).map(p => `<div class="list-group-item border-0 border-bottom text-truncate">${p.content || "Bild"}</div>`).join('')}</div>`;
-        if(totalActivity === 0) html += `<p class="text-center text-muted py-3">Keine Aktivitäten.</p>`;
-        statsArea.innerHTML = html;
-    }
 };
 
+/* ==========================================
+   PROFIL TABS LOGIK (Klick auf Boxen)
+   ========================================== */
+window.switchProfileTab = (type) => {
+    const container = document.getElementById('profile-dynamic-content');
+    if (!container || !viewingUserProfile) return;
+    
+    // Optik: Boxen hervorheben
+    document.querySelectorAll('.tab-box').forEach(el => el.classList.remove('border-primary', 'bg-white'));
+    // (Hier könnte man noch die aktive Box färben, wenn man ihnen IDs gibt, aber Hover reicht meist)
+
+    const targetName = viewingUserProfile.displayName;
+    let html = `<div class="list-group list-group-flush animate__animated animate__fadeIn">`;
+    let count = 0;
+
+    // A) TOUREN ANZEIGEN
+    if (type === 'tours') {
+        const myTours = toursData.filter(t => t.user === targetName);
+        if (myTours.length === 0) html += `<div class="p-3 text-center text-muted">Keine Touren gefunden.</div>`;
+        
+        myTours.forEach(t => {
+            // ADMIN DELETE BUTTON
+            const delBtn = getDeleteBtn('tour', t.id, t.id); 
+            
+            html += `
+            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
+                 onclick="selectTour('${t.id}'); navigateTo('tours');" style="cursor:pointer;">
+                <div>
+                    <div class="fw-bold text-primary">🗺️ ${t.title}</div>
+                    <small class="text-muted">${t.km} km • ${t.country}</small>
+                </div>
+                <div>${delBtn}</div> </div>`;
+        });
+        count = myTours.length;
+    }
+
+    // B) BEITRÄGE ANZEIGEN
+    else if (type === 'posts') {
+        const myPosts = allPostsCache.filter(p => p.user === targetName);
+        if (myPosts.length === 0) html += `<div class="p-3 text-center text-muted">Keine Beiträge gefunden.</div>`;
+        
+        myPosts.forEach(p => {
+            const delBtn = getDeleteBtn('post', p.id, p.userId);
+            
+            html += `
+            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
+                 onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">
+                <div class="text-truncate" style="max-width: 80%;">
+                    <div class="fw-bold">📸 Beitrag</div>
+                    <small class="text-muted">${p.content || "Bild-Inhalt"}</small>
+                </div>
+                <div>${delBtn}</div>
+            </div>`;
+        });
+        count = myPosts.length;
+    }
+
+    // C) THEMEN ANZEIGEN
+    else if (type === 'threads') {
+        const myThreads = allThreadsCache.filter(t => t.user === targetName);
+        if (myThreads.length === 0) html += `<div class="p-3 text-center text-muted">Keine Themen gefunden.</div>`;
+        
+        myThreads.forEach(t => {
+            const delBtn = getDeleteBtn('thread', t.id, t.topic);
+            
+            html += `
+            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
+                 onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">
+                <div>
+                    <div class="fw-bold text-success">💬 ${t.title}</div>
+                    <small class="text-muted">in ${t.topic}</small>
+                </div>
+                <div>${delBtn}</div>
+            </div>`;
+        });
+        count = myThreads.length;
+    }
+
+    html += `</div>`;
+    
+    // Überschrift hinzufügen
+    const titles = { tours: "Deine Touren", posts: "Deine Beiträge", threads: "Deine Forum-Themen" };
+    container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]} (${count})</h6>` + html;
+};
 /* HILFSFUNKTION: FREUNDE RENDERN (Damit wir sie oben neu aufrufen können) */
 async function renderFriendsList(container) {
     if(!container) return;
