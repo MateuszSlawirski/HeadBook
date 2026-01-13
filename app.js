@@ -1205,29 +1205,35 @@ window.addFriend = async (targetUid) => {
 };
 
 /* ==========================================
-   PROFIL ÖFFNEN (Final: Lädt SOFORT alle Daten)
+   PROFIL ÖFFNEN (Fix: Namen & Bio Geister-Daten löschen)
    ========================================== */
 window.openUserProfile = async (uid, name) => {
-    console.log("Öffne Profil von:", name);
+    console.log("Wechsle zu Profil:", name, uid);
 
-    // 1. Sofort umschalten, damit der Nutzer was sieht
+    // 1. Sofort zur Profil-Seite wechseln
     navigateTo('profile');
+    
+    // 2. UI sofort "leeren" (damit man nicht die alten Daten sieht)
+    const nameEl = document.getElementById('profile-name');
+    const bioEl = document.getElementById('profile-bio');
+    if(nameEl) nameEl.innerText = "Lade..."; // Visuelles Feedback
+    if(bioEl) bioEl.innerText = "...";
 
-    // 2. Basis-Daten setzen (Platzhalter)
+    // 3. Globales Objekt KOMPLETT neu setzen (keine alten Reste behalten!)
     viewingUserProfile = { 
         uid: uid, 
-        displayName: name, 
+        displayName: name || "Lade Benutzer...", // Vorläufiger Name
         isMe: (currentUser && currentUser.uid === uid),
         friends: [],      
-        friendDetails: [], // Hier kommen die Bilder rein
-        bio: "Lade...",
+        friendDetails: [],
+        bio: "", // Leer starten
         photoUrl: null
     };
 
-    // 3. Seite einmal rendern (zeigt Lade-Spinner oder Platzhalter)
+    // 4. Einmal rendern (zeigt Platzhalter)
     if(typeof renderProfilePage === 'function') renderProfilePage();
 
-    // 4. ECHTE DATEN LADEN (Das fehlte beim Direkt-Klick!)
+    // 5. FRISCHE DATEN AUS DATENBANK HOLEN
     try {
         const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
@@ -1235,14 +1241,22 @@ window.openUserProfile = async (uid, name) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             
-            // Profil-Daten aktualisieren
+            // JETZT überschreiben wir alles mit den echten DB-Daten
+            viewingUserProfile.displayName = data.displayName || viewingUserProfile.displayName; // <--- WICHTIG: Name korrigieren!
             viewingUserProfile.bio = data.bio || "Riderpoint Mitglied";
             viewingUserProfile.photoUrl = data.photoUrl || null;
             viewingUserProfile.friends = data.friends || [];
 
-            // 5. Wenn Freunde da sind: Deren BILDER laden!
+            // Wenn ich es bin, synchronisieren wir das gleich mit meinem Account
+            if (viewingUserProfile.isMe) {
+                currentUser.bio = data.bio;
+                currentUser.friends = data.friends;
+                currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
+                currentUser.displayName = data.displayName || currentUser.displayName;
+            }
+
+            // 6. Freunde-Details nachladen (Bilder für die Liste)
             if (viewingUserProfile.friends.length > 0) {
-                // Wir laden parallel die Infos aller Freunde
                 const friendPromises = viewingUserProfile.friends.slice(0, 10).map(fid => getDoc(doc(db, "users", fid)));
                 const friendSnaps = await Promise.all(friendPromises);
 
@@ -1253,25 +1267,17 @@ window.openUserProfile = async (uid, name) => {
                         viewingUserProfile.friendDetails.push({
                             uid: snap.id,
                             name: fData.displayName || "Unbekannt",
-                            photoUrl: fData.photoUrl // Das Bild!
+                            photoUrl: fData.photoUrl
                         });
                     }
                 });
             }
-            
-            // Wenn ICH es bin, speichere ich die Daten auch global
-            if (viewingUserProfile.isMe) {
-                currentUser.bio = data.bio;
-                currentUser.friends = data.friends;
-                currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
-            }
 
-            // 6. Seite NEU malen (jetzt mit allen Bildern & Freunden)
-            console.log("Fertig geladen:", viewingUserProfile);
+            // 7. Seite neu malen mit den korrekten Daten
             if(typeof renderProfilePage === 'function') renderProfilePage();
         }
     } catch (error) {
-        console.error("Fehler beim Laden des Profils:", error);
+        console.error("Fehler beim Profil-Laden:", error);
     }
 };
 
