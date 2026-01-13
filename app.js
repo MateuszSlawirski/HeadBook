@@ -291,10 +291,10 @@ window.openAddTourModal = () => {
 };
 
 /* ==========================================
-   EVENT LISTENERS
+   EVENT LISTENER (FIX: Speichert User-ID sauber ab)
    ========================================== */
-
 function setupEventListeners() {
+    // Logout
     const btnLogout = document.getElementById('logout-btn');
     if(btnLogout) btnLogout.addEventListener('click', async () => { 
         await signOut(auth); 
@@ -302,6 +302,7 @@ function setupEventListeners() {
         navigateTo('home'); 
     });
 
+    // Login / Register
     const authForm = document.getElementById('authForm');
     if(authForm) authForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -309,26 +310,29 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
+    // Thread erstellen (HIER WAR DER FEHLER)
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!currentUser) return window.showToast("Bitte logge dich erst ein!", true);
+            
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
+            
             try {
                 const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // HIER WAR DER FEHLER: Wir senden jetzt die userId mit!
                     body: JSON.stringify({ 
                         topic: currentForumTopic, 
                         title, 
                         text, 
                         user: currentUser.displayName || "Unbekannt",
-                        userId: currentUser.uid // <--- WICHTIG!
+                        userId: currentUser.uid // <--- WICHTIG: Das speichert die ID sauber in der Datenbank!
                     })
                 });
+                
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
                     e.target.reset();
@@ -340,6 +344,7 @@ function setupEventListeners() {
         });
     }
 
+    // Kategorie erstellen
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async (e) => {
@@ -364,10 +369,10 @@ function setupEventListeners() {
         });
     }
 
+    // Tour erstellen
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
-
 /* ==========================================
    TOUREN & MAP
    ========================================== */
@@ -755,9 +760,10 @@ window.renderForumThreads = async function(topicName, catId) {
 };
 
 /* ==========================================
-   FORUM LEVEL 3: BEITRAG LESEN 
+   THREAD DETAIL (Saubere Lösung: Blau, Klickbar, Hover)
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
+    // Breadcrumbs
     let breadcrumbs = [];
     if (catId) {
         const cat = allForumData.find(c => c.id === catId);
@@ -770,48 +776,46 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     
+    // Daten laden
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     
     const t = threads.find(thread => thread.id === threadId);
     if (!t) return;
 
-    // --- HELPER: Profil öffnen mit "Zurück"-Gedächtnis ---
+    // Helper: Profil öffnen + Kontext für Zurück-Button speichern
     window.openProfileFromForum = (uid, name) => {
-        // Sicherung: Wenn keine UID da ist, brechen wir ab (sollte durch UI schon verhindert sein)
-        if(!uid) return window.showToast("Profil nicht verfügbar (Legacy Beitrag)", true);
-        
-        window.lastForumContext = { threadId, topicName, catId };
+        if(!uid) return; // Sicherheitscheck
+        window.lastForumContext = { threadId, topicName, catId }; // Hier merken wir uns den Weg zurück
         openUserProfile(uid, name);
     };
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
     
-    // --- INTELLIGENTE LOGIK FÜR DEN AUTOR ---
-    const authorId = t.userId || t.uid || null;
-    const isClickable = !!authorId; // Nur klickbar wenn ID existiert
-    
-    // Styles je nach Status
+    // --- CHECK: Haben wir eine saubere ID? ---
+    const authorId = t.userId || t.uid; // Wir akzeptieren beide Feldnamen vom Server
+    const isClickable = !!authorId; 
+
+    // Styles definieren
+    let nameStyle = 'font-weight:bold; color:black;'; 
     let nameAttr = '';
-    let nameStyle = 'font-weight:bold; color:black;'; // Standard (nicht klickbar)
-    
+
     if (isClickable) {
-        // Wenn klickbar: Blau bei Hover, Hand-Cursor
-        nameStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
+        nameStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; transition: all 0.2s;';
         nameAttr = `
-            onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" 
-            onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"
+            onmouseover="this.style.textDecoration='underline'" 
+            onmouseout="this.style.textDecoration='none'"
             onclick="event.stopPropagation(); openProfileFromForum('${authorId}', '${t.user}')"
         `;
     }
 
-    // Haupt-Beitrag HTML
+    // HTML bauen
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
             <div class="card-header bg-light border-bottom py-2 d-flex justify-content-between align-items-center">
                 <div>
-                    <span style="${nameStyle}" ${nameAttr} class="text-dark">
+                    <span style="${nameStyle}" ${nameAttr}>
                         👤 ${t.user}
                     </span> 
                     <span class="text-muted small ms-2">schrieb am ${t.date}:</span>
@@ -831,19 +835,19 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
             
-            // --- INTELLIGENTE LOGIK FÜR ANTWORTEN ---
-            const replyUserId = r.userId || r.uid || null;
-            const rClickable = !!replyUserId;
+            // Auch für Antworten checken
+            const rUserId = r.userId || r.uid;
+            const rClickable = !!rUserId;
             
-            let rAttr = '';
             let rStyle = 'font-weight:bold; color:black;';
-            
+            let rAttr = '';
+
             if (rClickable) {
-                rStyle = `cursor:pointer; font-weight:bold; transition: all 0.2s;`;
+                rStyle = 'font-weight:bold; color:#0d6efd; cursor:pointer; transition: all 0.2s;';
                 rAttr = `
-                    onmouseover="this.style.textDecoration='underline'; this.style.color='#0d6efd'" 
-                    onmouseout="this.style.textDecoration='none'; this.style.color='inherit'"
-                    onclick="event.stopPropagation(); openProfileFromForum('${replyUserId}', '${r.user}')"
+                    onmouseover="this.style.textDecoration='underline'" 
+                    onmouseout="this.style.textDecoration='none'"
+                    onclick="event.stopPropagation(); openProfileFromForum('${rUserId}', '${r.user}')"
                 `;
             }
 
@@ -851,7 +855,7 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
                     <div>
-                        <span style="${rStyle}" ${rAttr} class="text-dark">
+                        <span style="${rStyle}" ${rAttr}>
                             👤 ${r.user}
                         </span> 
                         <span class="text-muted small ms-2">antwortete am ${r.date}:</span>
@@ -1346,7 +1350,7 @@ window.openUserProfile = async (uid, name) => {
 };
 
 /* ==========================================
-   RENDER PROFILE PAGE 
+   RENDER PROFILE PAGE (Mit Zurück-Button)
    ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
@@ -1377,18 +1381,22 @@ window.renderProfilePage = async () => {
     // --- ZURÜCK BUTTON LOGIK ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
+        // Wir kommen aus dem Forum -> Button anzeigen
         const { threadId, topicName, catId } = window.lastForumContext;
         backButtonHtml = `
-            <button class="btn btn-sm btn-light position-absolute top-0 start-0 m-3 shadow fw-bold border" 
-                    style="z-index: 20;"
-                    onclick="navigateTo('forum'); renderThreadDetail('${threadId}', '${topicName}', '${catId}'); window.lastForumContext = null;">
-                ⬅ Zurück zum Thema
-            </button>
+            <div class="position-absolute top-0 start-0 m-3" style="z-index: 1050;">
+                <button class="btn btn-light btn-sm shadow fw-bold border" 
+                        onclick="navigateTo('forum'); renderThreadDetail('${threadId}', '${topicName}', '${catId}'); window.lastForumContext = null;">
+                    ⬅ Zurück zum Thema
+                </button>
+            </div>
         `;
     }
+    // ----------------------------
 
     container.innerHTML = `
     ${backButtonHtml}
+    
     <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
     <div class="container" style="margin-top: -60px; position: relative; z-index: 10;">
         <div class="card border-0 shadow rounded-4 overflow-hidden bg-white">
