@@ -1205,71 +1205,74 @@ window.addFriend = async (targetUid) => {
 };
 
 /* ==========================================
-   PROFIL ÖFFNEN (Lädt Freunde INKLUSIVE Bilder & Namen)
+   PROFIL ÖFFNEN (Final: Lädt SOFORT alle Daten)
    ========================================== */
 window.openUserProfile = async (uid, name) => {
-    console.log("Öffne Profil:", name);
-    
-    // 1. Basis-Setup
+    console.log("Öffne Profil von:", name);
+
+    // 1. Sofort umschalten, damit der Nutzer was sieht
+    navigateTo('profile');
+
+    // 2. Basis-Daten setzen (Platzhalter)
     viewingUserProfile = { 
         uid: uid, 
         displayName: name, 
         isMe: (currentUser && currentUser.uid === uid),
-        friends: [],      // Hier kommen die IDs rein
-        friendDetails: [], // NEU: Hier kommen die echten User-Infos (Bilder!) rein
-        bio: "..." 
+        friends: [],      
+        friendDetails: [], // Hier kommen die Bilder rein
+        bio: "Lade...",
+        photoUrl: null
     };
 
-    // 2. Navigation
-    navigateTo('profile');
-    
-    // Kleiner Lade-Status im Titel, bis Daten da sind
-    const nameHeader = document.getElementById('profile-name');
-    if(nameHeader) nameHeader.innerHTML += ' <span class="spinner-border spinner-border-sm"></span>';
+    // 3. Seite einmal rendern (zeigt Lade-Spinner oder Platzhalter)
+    if(typeof renderProfilePage === 'function') renderProfilePage();
 
+    // 4. ECHTE DATEN LADEN (Das fehlte beim Direkt-Klick!)
     try {
-        // A) Haupt-Profil laden (Bio, Bild, Freundesliste-IDs)
-        const userSnap = await getDoc(doc(db, "users", uid));
-        
-        if (userSnap.exists()) {
-            const data = userSnap.data();
+        const docRef = doc(db, "users", uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const data = docSnap.data();
             
-            viewingUserProfile.bio = data.bio || "";
-            viewingUserProfile.photoUrl = data.photoUrl || "";
-            viewingUserProfile.friends = data.friends || []; // Das sind nur die IDs (z.B. ["123", "456"])
+            // Profil-Daten aktualisieren
+            viewingUserProfile.bio = data.bio || "Riderpoint Mitglied";
+            viewingUserProfile.photoUrl = data.photoUrl || null;
+            viewingUserProfile.friends = data.friends || [];
 
-            // Wenn ich es bin, Update lokal
-            if (viewingUserProfile.isMe) {
-                currentUser.bio = data.bio;
-                currentUser.friends = data.friends;
-            }
-
-            // B) NEU: JETZT die Details der Freunde laden (Bilder & Namen)
-            // Wir gehen die Liste der IDs durch und holen für jeden die Infos
+            // 5. Wenn Freunde da sind: Deren BILDER laden!
             if (viewingUserProfile.friends.length > 0) {
-                const friendsPromises = viewingUserProfile.friends.map(friendId => getDoc(doc(db, "users", friendId)));
-                const friendsSnaps = await Promise.all(friendsPromises);
-                
-                viewingUserProfile.friendDetails = []; // Liste leeren
-                
-                friendsSnaps.forEach(snap => {
+                // Wir laden parallel die Infos aller Freunde
+                const friendPromises = viewingUserProfile.friends.slice(0, 10).map(fid => getDoc(doc(db, "users", fid)));
+                const friendSnaps = await Promise.all(friendPromises);
+
+                viewingUserProfile.friendDetails = [];
+                friendSnaps.forEach(snap => {
                     if (snap.exists()) {
                         const fData = snap.data();
                         viewingUserProfile.friendDetails.push({
                             uid: snap.id,
                             name: fData.displayName || "Unbekannt",
-                            photoUrl: fData.photoUrl || `https://ui-avatars.com/api/?name=${fData.displayName}` // Fallback Bild
+                            photoUrl: fData.photoUrl // Das Bild!
                         });
                     }
                 });
             }
-        }
-    } catch(e) { 
-        console.log("Fehler beim Laden:", e); 
-    }
+            
+            // Wenn ICH es bin, speichere ich die Daten auch global
+            if (viewingUserProfile.isMe) {
+                currentUser.bio = data.bio;
+                currentUser.friends = data.friends;
+                currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
+            }
 
-    // 3. Seite NEU malen (Jetzt mit allen Bildern!)
-    renderProfilePage();
+            // 6. Seite NEU malen (jetzt mit allen Bildern & Freunden)
+            console.log("Fertig geladen:", viewingUserProfile);
+            if(typeof renderProfilePage === 'function') renderProfilePage();
+        }
+    } catch (error) {
+        console.error("Fehler beim Laden des Profils:", error);
+    }
 };
 
 /* ==========================================
