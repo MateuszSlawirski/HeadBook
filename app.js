@@ -12,7 +12,6 @@ import {
     updateProfile 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// NEU: Imports für den Chat (Datenbank)
 import { 
     getFirestore, 
     collection, 
@@ -34,7 +33,7 @@ const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app); // Die Chat-Datenbank starten
+const db = getFirestore(app); 
 
 // STATE VARIABLES
 let allPostsCache = []; 
@@ -55,32 +54,69 @@ let allThreadsCache = [];
 
 const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
-
 /* ==========================================
-   APP START (Ersetzen)
+   APP START (Bereinigt & Korrekt)
    ========================================== */
+document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    
+    // 1. NAVIGATION: Glocke einfügen (Ohne schwarzen Punkt)
+    const navProfile = document.getElementById('nav-profile')?.parentElement;
+    if (navProfile && !document.getElementById('nav-notifications')) {
+        const li = document.createElement('li');
+        li.className = 'nav-item mx-3';
+        li.style.listStyle = 'none'; // Entfernt den schwarzen Punkt
+        li.innerHTML = `
+            <a class="nav-link d-flex flex-column align-items-center auth-required position-relative" 
+               id="nav-notifications" 
+               onclick="navigateTo('notifications'); hideNotificationBadge();" 
+               style="cursor:pointer">
+                
+                🔔 
+                <span id="nav-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none">
+                    <span class="visually-hidden">Neu</span>
+                </span>
+                
+                <span class="d-none d-lg-block" style="font-size:0.8rem">Benachrichtigung</span>
+            </a>`;
+        navProfile.parentElement.insertBefore(li, navProfile);
+    }
+    
+    // Notification Page Section
+    const mainContainer = document.querySelector('.container-xl');
+    if (mainContainer && !document.getElementById('page-notifications')) {
+        const section = document.createElement('section');
+        section.id = 'page-notifications';
+        section.className = 'page-section';
+        section.innerHTML = `
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <h3 class="fw-bold mb-4">🔔 Deine Benachrichtigungen</h3>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <div id="notification-list" class="list-group list-group-flush">
+                                <div class="text-center p-5 text-muted">Lade Neuigkeiten...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        mainContainer.appendChild(section);
+    }
 
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         currentUser = user; 
-        
         if (user) {
             updateUI(); 
-            // 1. Erst User-Rolle und Freunde vom Server holen
             await syncUserWithBackend(user); 
             
-            // 2. JETZT erst Feed laden (damit Admin-Buttons da sind)
-            if (getActivePage() === 'home') {
-                loadFeed();
-            }
+            // Startet die Überwachung UND prüft sofort auf Neuigkeiten
+            startNotificationListener(); 
 
-            // 3. Profil laden falls wir dort sind
-            if (getActivePage() === 'profile') {
-                viewingUserProfile = null; 
-                renderProfilePage();
-            }
+            if (getActivePage() === 'home') loadFeed();
+            if (getActivePage() === 'profile') { viewingUserProfile = null; renderProfilePage(); }
         } else {
-            // Wenn ausgeloggt -> Gastmodus
             currentRole = "guest";
             if (getActivePage() === 'home') loadFeed();
             if (getActivePage() === 'profile') navigateTo('home');
@@ -90,25 +126,21 @@ const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
 
     loadToursFromServer();
     loadForumData(); 
-    
-    
     setupEventListeners();
     
     const startPage = window.location.hash.replace('#', '') || 'home';
-    // Nur navigieren wenn noch kein Auth-Event gefeuert hat (vermeidet doppeltes Laden)
     if (!currentUser) navigateTo(startPage);
+});
 
 
 /* ==========================================
-   NAVIGATION (FIX: Erst laden, dann zeigen)
+   NAVIGATION
    ========================================== */
 async function navigateTo(pageId) {
-    // 1. UI vorbereiten (Nav-Leiste aktiv setzen)
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
     const navLink = document.getElementById(`nav-${pageId}`);
     if(navLink) navLink.classList.add('active');
 
-    // 2. Seite wechseln (Visuell)
     document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
     const target = document.getElementById(`page-${pageId}`);
     if (target) {
@@ -116,35 +148,19 @@ async function navigateTo(pageId) {
         window.location.hash = pageId;
     }
 
-    // 3. SPEZIAL-LOGIK PRO SEITE
-    
-    // A) PROFIL: Hier war das Problem!
     if (pageId === 'profile') {
         const container = document.getElementById('page-profile');
-        
-        // Wenn ich mein eigenes Profil ansehe (oder noch keins gesetzt ist)
         if (!viewingUserProfile || (currentUser && viewingUserProfile.uid === currentUser.uid)) {
-            
-            // Lade-Animation anzeigen, damit du nicht "0 Freunde" siehst
             if(container) container.innerHTML = '<div class="text-center p-5 mt-5"><div class="spinner-border text-primary"></div><div class="mt-2">Lade Profil & Freunde...</div></div>';
-            
             if(auth.currentUser) {
-                // WARTEN bis Sync fertig ist
                 await syncUserWithBackend(auth.currentUser);
-                // Reset auf "Ich" mit den frischen Daten
                 viewingUserProfile = null; 
             }
         }
-        // Jetzt erst rendern (mit den frischen Daten)
         renderProfilePage();
     }
 
-    // B) HOME: Feed aktualisieren
-    if (pageId === 'home') {
-        await loadFeed(); 
-    }
-
-    // C) TOUREN
+    if (pageId === 'home') await loadFeed(); 
     if (pageId === 'tours') {
         loadToursFromServer();
         if (map) {
@@ -155,21 +171,10 @@ async function navigateTo(pageId) {
             }, 200);
         }
     }
-
-    // D) FORUM
-    if (pageId === 'forum') {
-        renderForumHome();
-    }
-    // E) NOTIFICATIONS
-    if (pageId === 'notifications') {
-        renderNotifications();
-    }
+    if (pageId === 'forum') renderForumHome();
+    if (pageId === 'notifications') renderNotifications();
 }
 window.navigateTo = navigateTo;
-
-/* ==========================================
-   HELPER FUNKTIONEN 
-   ========================================== */
 
 function getActivePage() {
     return window.location.hash.replace('#', '') || 'home';
@@ -181,15 +186,10 @@ window.openMyProfile = () => {
 };
 
 /* ==========================================
-   AUTH & UI
-   ========================================== */
-
-/* ==========================================
-   SYNC USER (Korrigierte Version)
+   SYNC USER
    ========================================== */
 async function syncUserWithBackend(firebaseUser) {
     if (!firebaseUser) return;
-
     try {
         console.log("Synchronisiere User mit Backend...");
         const response = await fetch(`${API_URL}/users`, {
@@ -203,56 +203,36 @@ async function syncUserWithBackend(firebaseUser) {
         });
 
         if (response.ok) {
-            // 1. Erst die Daten vom Azure-Server holen
             const dbUser = await response.json();
-
-            // 2. Auto-Sync: Bild in Firestore speichern (im Hintergrund)
             try {
                 if (dbUser.photoUrl) {
-                    const userRef = doc(db, "users", firebaseUser.uid);
-                    await setDoc(userRef, {
+                    await setDoc(doc(db, "users", firebaseUser.uid), {
                         photoUrl: dbUser.photoUrl,
                         displayName: dbUser.displayName || firebaseUser.displayName
                     }, { merge: true });
                 }
             } catch(e) { console.log("Auto-Sync Info:", e); }
 
-            // 3. WICHTIG: Jetzt Freunde aus Firestore laden und in das User-Objekt mischen
-            // Das muss HIER stehen, nachdem dbUser geladen wurde!
             try {
                 const mySnap = await getDoc(doc(db, "users", firebaseUser.uid));
                 if (mySnap.exists()) {
                     const myData = mySnap.data();
                     if (myData.friends && Array.isArray(myData.friends)) {
-                        // Wir packen die Freunde aus der Datenbank in unser User-Objekt
                         dbUser.friends = myData.friends;
                     }
                 }
-            } catch(e) { console.log("Konnte Freunde nicht laden", e); }
-            // -------------------------------------------------------------
+            } catch(e) {}
 
-            console.log("Daten vom Server erhalten (inkl. Freunde):", dbUser);
-
-            // 4. Jetzt erst den globalen currentUser setzen
             if (currentUser) {
-                // Falls schon eingeloggt, Daten aktualisieren
                 currentUser.role = dbUser.role || "user";
                 currentUser.friends = dbUser.friends || []; 
                 currentUser.photoUrl = dbUser.photoUrl || currentUser.photoUrl;
             } else {
-                // Falls erster Login
                 currentUser = dbUser;
             }
-
-            // UI Updates
             if(window.location.hash === '#profile') renderProfilePage();
-
-        } else {
-            console.error("Backend Error:", await response.text());
         }
-    } catch (error) {
-        console.error("Sync Error:", error);
-    }
+    } catch (error) { console.error("Sync Error:", error); }
 }
 
 function updateUI() {
@@ -281,15 +261,13 @@ function updateUI() {
 window.openAddTourModal = () => {
     if (!currentUser) {
         new bootstrap.Modal(document.getElementById('authModal')).show();
-        const msg = document.getElementById('auth-message');
-        if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Bitte erst einloggen!</span>';
     } else {
         new bootstrap.Modal(document.getElementById('addTourModal')).show();
     }
 };
 
 /* ==========================================
-   1. EVENT LISTENERS (ID beim Erstellen mitsenden)
+   EVENT LISTENER
    ========================================== */
 function setupEventListeners() {
     const btnLogout = document.getElementById('logout-btn');
@@ -306,18 +284,14 @@ function setupEventListeners() {
         if (isReg) handleRegister(); else handleLogin(e);
     });
 
-    // Thread erstellen: HIER SENDE WIR JETZT DIE userId MIT!
     const createThreadForm = document.getElementById('createThreadForm');
     if (createThreadForm) {
         createThreadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!currentUser) return window.showToast("Bitte logge dich erst ein!", true);
-            
             const title = document.getElementById('threadTitle').value;
             const text = document.getElementById('threadText').value;
-            
             try {
-                // WICHTIG: userId wird hier explizit gesetzt
                 const payload = { 
                     topic: currentForumTopic, 
                     title, 
@@ -325,13 +299,11 @@ function setupEventListeners() {
                     user: currentUser.displayName || "Unbekannt",
                     userId: currentUser.uid 
                 };
-                
                 const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
                     e.target.reset();
@@ -370,10 +342,10 @@ function setupEventListeners() {
     const addTourForm = document.getElementById('addTourForm');
     if(addTourForm) addTourForm.addEventListener('submit', handleAddTour);
 }
+
 /* ==========================================
    TOUREN & MAP
    ========================================== */
-
 async function loadToursFromServer() {
     try {
         const response = await fetch(`${API_URL}/GetTours`);
@@ -502,11 +474,7 @@ window.showTourOnMap = (tourId) => {
     }
 };
 
-/* ==========================================
-   GPX UPLOAD
-   ========================================== */
 let tempGpxData = null;
-
 window.handleGpxFileSelect = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -598,16 +566,13 @@ async function handleAddTour(e) {
    ========================================== */
 window.deleteItem = async (type, id, partitionKey, parentId = null, commentText = null, commentUser = null) => {
     if (!confirm("Wirklich unwiderruflich löschen?")) return;
-
     const payload = { type, id, partitionKey, parentId, commentText, commentUser };
-    
     try {
         const response = await fetch(`${API_URL}/deleteItem`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
         if (response.ok) {
             window.showToast("Gelöscht!");
             if (type === 'tour') { loadToursFromServer(); }
@@ -627,13 +592,12 @@ window.deleteItem = async (type, id, partitionKey, parentId = null, commentText 
 };
 
 function getDeleteBtn(type, id, partitionKey, parentId=null, text=null, user=null) {
+    // Falls Button fehlt, sicherstellen, dass currentRole == 'admin' ist
     if (currentRole !== 'admin') return "";
-
     const formatArg = (val) => {
         if (val === null || val === undefined) return 'null';
         return `'${val.toString().replace(/'/g, "\\'").replace(/\n/g, " ")}'`;
     };
-
     return `<button class="btn btn-sm btn-outline-danger border-0 ms-2" 
             onclick="event.stopPropagation(); deleteItem('${type}', ${formatArg(id)}, ${formatArg(partitionKey)}, ${formatArg(parentId)}, ${formatArg(text)}, ${formatArg(user)})">
             🗑️</button>`;
@@ -654,7 +618,6 @@ window.downloadGPX = (tourId) => {
 /* ==========================================
    FORUM LOGIK
    ========================================== */
-
 window.renderForumHome = function() {
     currentCategoryId = null; currentForumTopic = null;
     renderBreadcrumbs([]); 
@@ -692,7 +655,6 @@ window.renderForumSubCategory = function(catId) {
         if (currentRole === 'admin') {
              deleteBtn = getDeleteBtn('topic', safeId, catId, null, topic.title);
         }
-
         const lastPostHtml = stats.lastPost ? `<div class="mt-1 small text-muted">Neuer Beitrag von <span class="fw-bold text-dark">${stats.lastPost.user}</span></div>` : `<small class="text-muted">Leer</small>`;
         
         container.innerHTML += `
@@ -714,7 +676,7 @@ window.renderForumSubCategory = function(catId) {
 };
 
 /* ==========================================
-   FORUM LEVEL 2: THEMEN LISTE 
+   LEVEL 2: THEMEN LISTE 
    ========================================== */
 window.renderForumThreads = async function(topicName, catId) {
     currentForumTopic = topicName;
@@ -733,9 +695,36 @@ window.renderForumThreads = async function(topicName, catId) {
     listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
     
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
+    // Smart-Klick Helper (falls noch nicht da)
+    if (!window.handleProfileClick) {
+        window.handleProfileClick = async (event, username, knownUid) => {
+            event.stopPropagation();
+            let targetUid = knownUid;
+            if (!targetUid && currentUser && currentUser.displayName === username) targetUid = currentUser.uid;
+            if (!targetUid && typeof allPostsCache !== 'undefined') { const f = allPostsCache.find(p => p.user === username); if(f) targetUid = f.userId; }
+            if (!targetUid) {
+                try {
+                    const q = query(collection(db, "users"), where("displayName", "==", username), limit(1));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) targetUid = snap.docs[0].id;
+                } catch(e) {}
+            }
+            if (targetUid) {
+                window.lastForumContext = { threadId: null, topicName, catId }; 
+                openUserProfile(targetUid, username);
+            } else {
+                window.showToast("Profil nicht gefunden.", true);
+            }
+        };
+    }
     
+    const nameStyle = "cursor:pointer; font-weight:bold; color:#0d6efd; text-decoration:none; transition:all 0.2s;";
+    const hoverAttr = `onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"`;
+
     threads.forEach(thread => {
         const deleteBtn = getDeleteBtn('thread', thread.id, thread.topic);
+        const authorId = thread.userId || thread.uid || "";
 
         listArea.innerHTML += `
         <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
@@ -743,7 +732,10 @@ window.renderForumThreads = async function(topicName, catId) {
             <div class="forum-main">
                 <div class="fw-bold text-dark">${thread.title}</div>
                 <div class="small text-muted">
-                    von <span class="text-dark fw-bold">${thread.user}</span> 
+                    von <span style="${nameStyle}" ${hoverAttr} 
+                              onclick="handleProfileClick(event, '${thread.user}', '${authorId}')">
+                        ${thread.user}
+                    </span> 
                     • ${thread.date}
                 </div>
             </div>
@@ -757,10 +749,9 @@ window.renderForumThreads = async function(topicName, catId) {
 };
 
 /* ==========================================
-   2. THREAD DETAIL (Intelligente Suche & Immer Klickbar)
+   LEVEL 3: BEITRAG LESEN
    ========================================== */
 window.renderThreadDetail = async function(threadId, topicName, catId) {
-    // Breadcrumbs
     let breadcrumbs = [];
     if (catId) {
         const cat = allForumData.find(c => c.id === catId);
@@ -773,7 +764,6 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
     const container = document.getElementById('forum-container');
     container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     
-    // Daten laden
     const response = await fetch(`${API_URL}/getThreads?topic=${encodeURIComponent(topicName)}`);
     const threads = await response.json();
     const t = threads.find(thread => thread.id === threadId);
@@ -781,38 +771,21 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
 
     const deleteThreadBtn = getDeleteBtn('thread', t.id, t.topic);
 
-    // --- NEU: INTELLIGENTER KLICK-HANDLER ---
-    // Dieser Handler sucht die ID überall, wenn sie fehlt
+    // Klick-Handler
     window.handleProfileClick = async (event, username, knownUid) => {
         event.stopPropagation();
         let targetUid = knownUid;
-
-        // 1. Fallback: Bin ich es selbst?
-        if (!targetUid && currentUser && currentUser.displayName === username) {
-            targetUid = currentUser.uid;
-        }
-
-        // 2. Fallback: Suche in lokalen Posts
-        if (!targetUid && typeof allPostsCache !== 'undefined') {
-             const found = allPostsCache.find(p => p.user === username);
-             if(found) targetUid = found.userId;
-        }
-
-        // 3. Fallback: Suche LIVE in der Datenbank (User suchen per Name)
+        if (!targetUid && currentUser && currentUser.displayName === username) { targetUid = currentUser.uid; }
+        if (!targetUid && typeof allPostsCache !== 'undefined') { const found = allPostsCache.find(p => p.user === username); if(found) targetUid = found.userId; }
         if (!targetUid) {
             window.showToast("🔍 Suche Profil...", false);
             try {
-                // Wir nutzen db, da es oben in app.js importiert ist
                 const q = query(collection(db, "users"), where("displayName", "==", username), limit(1));
                 const snap = await getDocs(q);
-                if (!snap.empty) {
-                    targetUid = snap.docs[0].id;
-                }
-            } catch(e) { console.log("User nicht gefunden", e); }
+                if (!snap.empty) { targetUid = snap.docs[0].id; }
+            } catch(e) {}
         }
-
         if (targetUid) {
-             // Merken für Zurück-Button
              window.lastForumContext = { threadId, topicName, catId };
              openUserProfile(targetUid, username);
         } else {
@@ -820,11 +793,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         }
     };
 
-    // Style: Immer Blau & Zeigefinger
     const nameStyle = "cursor:pointer; font-weight:bold; color:#0d6efd; text-decoration:none; transition:all 0.2s;";
     const hoverAttr = `onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"`;
 
-    // --- HTML BAUEN ---
     let html = `
         <h3 class="fw-bold mb-4">${t.title}</h3>
         <div class="card mb-3 border-0 shadow-sm">
@@ -846,11 +817,9 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             </div>
         </div>`;
 
-    // Antworten rendern
     if (t.repliesList) {
         t.repliesList.forEach((r, idx) => {
             const deleteReplyBtn = getDeleteBtn('reply', null, t.topic, t.id, r.text, r.user);
-            
             html += `
             <div class="card mb-3 border-0 shadow-sm ms-3 ms-md-5 bg-white">
                 <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center">
@@ -873,7 +842,6 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
         });
     }
 
-    // Antwort-Feld
     html += `
     <div class="card mt-4 shadow-sm border-0">
         <div class="card-body">
@@ -882,7 +850,6 @@ window.renderThreadDetail = async function(threadId, topicName, catId) {
             <button class="btn btn-primary" onclick="sendReply('${t.id}', '${t.topic}', '${catId}')">Absenden</button>
         </div>
     </div>`;
-
     container.innerHTML = html;
 };
 
@@ -899,7 +866,6 @@ window.sendReply = async function(threadId, topic, catId) {
     } catch (err) { window.showToast(err.message, true); }
 };
 
-// --- HELPER: THREAD ÖFFNEN VOM PROFIL AUS ---
 window.openThreadFromProfile = async (threadId, topic) => {
     navigateTo('forum');
     let catId = null;
@@ -909,8 +875,6 @@ window.openThreadFromProfile = async (threadId, topic) => {
             allForumData = await res.json();
         } catch(e){}
     }
-    
-    // Wir suchen die Kategorie, zu der das Topic gehört
     for(const cat of allForumData) {
         if(cat.topics.some(t => t.title === topic)) {
             catId = cat.id;
@@ -1022,13 +986,12 @@ window.createPost = async () => {
 };
 
 /* ==========================================
-   FEED / POSTS Mit Datenbank-Bildern 
+   FEED / POSTS
    ========================================== */
 window.loadFeed = async function() {
     const container = document.getElementById('feed-posts');
     if (!container) return; 
 
-    // Lade-Animation nur beim ersten Start
     if(allPostsCache.length === 0) {
         container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-danger"></div></div>';
     }
@@ -1056,40 +1019,31 @@ window.loadFeed = async function() {
             const isLiked = myUid && likes.includes(myUid);
             const likeClass = isLiked ? 'liked' : '';
             
-            // Standard-Avatar (Initialen)
             let avatarUrl = `https://ui-avatars.com/api/?name=${post.user}&background=random&color=fff&size=128`;
-            
-            // Wenn ich es bin -> Mein Bild sofort nehmen (ist im Cache)
             if (currentUser && post.userId === currentUser.uid && currentUser.photoUrl) {
                 avatarUrl = currentUser.photoUrl;
             }
 
-            // Medien Inhalt
             let mediaHtml = "";
             if (post.mediaUrl) {
                 if (post.mediaType === 'video') mediaHtml = `<video src="${post.mediaUrl}" controls class="img-fluid rounded mt-2 w-100" style="max-height:500px;"></video>`;
                 else mediaHtml = `<img src="${post.mediaUrl}" class="img-fluid rounded mt-2 w-100" style="max-height:500px; object-fit:cover;" loading="lazy">`;
             }
 
-            // Kommentare
             let commentsHtml = '';
             comments.forEach(c => {
                 commentsHtml += `<div class="comment-item"><div class="comment-bubble"><span class="comment-author">${c.user}</span>${c.text}</div></div>`;
             });
 
-            // --- HTML GENERIEREN ---
-            // WICHTIG: Wir geben dem Bild die Klasse 'feed-avatar' und speichern die userId im 'data-userid' Attribut
             const html = `
             <div class="card mb-4 border-0 shadow-sm" id="post-${postId}">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
                     <div class="d-flex align-items-center">
-                        
                         <img src="${avatarUrl}" 
                              class="rounded-circle border me-2 feed-avatar" 
                              data-userid="${post.userId}"
                              style="width:40px; height:40px; object-fit:cover; cursor:pointer;" 
                              onclick="openUserProfile('${post.userId}', '${post.user}')">
-
                         <div>
                             <div class="fw-bold text-dark" style="cursor:pointer;" onclick="openUserProfile('${post.userId}', '${post.user}')">
                             ${post.user || "Unbekannt"}
@@ -1099,7 +1053,6 @@ window.loadFeed = async function() {
                     </div>
                     ${getDeleteBtn('post', postId, post.userId)}
                 </div>
-                
                 <div class="card-body pt-1">
                     <p class="card-text fs-5 mb-2">${post.content}</p>
                     ${mediaHtml}
@@ -1123,32 +1076,24 @@ window.loadFeed = async function() {
             container.innerHTML += html;
         });
 
-        // --- NACHLADEN DER BILDER (Lazy Loading) ---
-        // Wir gehen alle gerade erstellten Bilder durch und prüfen die Datenbank
         document.querySelectorAll('.feed-avatar').forEach(async (img) => {
             const uid = img.getAttribute('data-userid');
-            // Wenn es nicht mein eigenes Bild ist (das haben wir oben schon gesetzt)
             if (uid && (!currentUser || uid !== currentUser.uid)) {
                 try {
-                    // Cache-Check: Haben wir das Bild schonmal geladen? (Performance)
                     if (window.userImageCache && window.userImageCache[uid]) {
                         img.src = window.userImageCache[uid];
                     } else {
-                        // Datenbank fragen
                         const snap = await getDoc(doc(db, "users", uid));
                         if (snap.exists()) {
                             const data = snap.data();
                             if (data.photoUrl) {
                                 img.src = data.photoUrl;
-                                // In Cache speichern für nächstes Mal
                                 if(!window.userImageCache) window.userImageCache = {};
                                 window.userImageCache[uid] = data.photoUrl;
                             }
                         }
                     }
-                } catch(e) { 
-                    // Kein Fehler anzeigen, einfach Standard-Bild lassen
-                }
+                } catch(e) {}
             }
         });
 
@@ -1204,67 +1149,36 @@ window.insertPostEmoji = function(emoji) {
 };
 
 /* ==========================================
-   PROFIL & USER INTERACTION (KOMPLETT FIX)
+   PROFIL & USER
    ========================================== */
-
-// Helper zum Namen finden
 function findUserInfo(uid) {
     if (!uid) return { name: "Unbekannt", pic: null };
-    
-    // 1. Suche in Touren
     const tour = toursData.find(t => t.userId === uid);
     if (tour && tour.user) return { name: tour.user, pic: null };
-
-    // 2. Suche in Posts
     const post = allPostsCache.find(p => p.userId === uid);
     if (post && post.user) return { name: post.user, pic: null };
-
-    // 3. Suche in Forum Threads
     const thread = allThreadsCache.find(t => t.userId === uid || t.user === uid); 
     if (thread && thread.user) return { name: thread.user, pic: null };
-
-    // 4. Suche in Kommentaren (Tiefensuche)
     for (const p of allPostsCache) {
         if (p.comments) {
             const comment = p.comments.find(c => c.userId === uid); 
             if (comment && comment.user) return { name: comment.user, pic: null };
         }
     }
-
     return { name: "User " + uid.substring(0, 5), pic: null };
 }
 
-/* ==========================================
-   FREUNDE HINZUFÜGEN (Firestore Lösung)
-   ========================================== */
 window.addFriend = async (targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
-
     try {
-        // Wir speichern den Freund direkt in DEINER Datenbank-Akte
         const myUserRef = doc(db, "users", currentUser.uid);
-
-        // arrayUnion fügt hinzu, verhindert aber Doppelte automatisch
-        await updateDoc(myUserRef, {
-            friends: arrayUnion(targetUid)
-        });
-
+        await updateDoc(myUserRef, { friends: arrayUnion(targetUid) });
         window.showToast("Freund hinzugefügt! 🎉");
-        
-        // Sofortige Anzeige-Aktualisierung (damit der Button grün wird)
         if (!currentUser.friends) currentUser.friends = [];
-        if (!currentUser.friends.includes(targetUid)) {
-            currentUser.friends.push(targetUid);
-        }
-        
-        // Wenn wir gerade auf dem Profil dieses Users sind -> Seite neu malen
-        if (viewingUserProfile && viewingUserProfile.uid === targetUid) {
-            renderProfilePage(); 
-        }
-
+        if (!currentUser.friends.includes(targetUid)) currentUser.friends.push(targetUid);
+        if (viewingUserProfile && viewingUserProfile.uid === targetUid) renderProfilePage(); 
     } catch (error) {
         console.error("Fehler:", error);
-        // Fallback: Falls dein User-Dokument noch nicht existiert
         if (error.code === 'not-found') {
              await setDoc(doc(db, "users", currentUser.uid), { 
                  friends: [targetUid],
@@ -1279,14 +1193,8 @@ window.addFriend = async (targetUid) => {
     }
 };
 
-/* ==========================================
-   PROFIL ÖFFNEN (FIX: Reihenfolge korrigiert)
-   ========================================== */
 window.openUserProfile = async (uid, name) => {
     console.log("Wechsle Profil zu:", name);
-
-    // 1. ZUERST: Daten setzen! (Damit die App sofort weiß, wer gemeint ist)
-    // Wir löschen alte Daten und setzen den neuen Wunsch-User
     viewingUserProfile = { 
         uid: uid, 
         displayName: name || "Lade...", 
@@ -1296,39 +1204,24 @@ window.openUserProfile = async (uid, name) => {
         bio: "",
         photoUrl: null
     };
-
-    // 2. DANACH: Seite wechseln
-    // Jetzt findet renderProfilePage() sofort die richtigen Daten und zeigt nicht mehr DICH an.
     navigateTo('profile');
-    
-    // 3. Zur Sicherheit: Sofort einmal zeichnen
     if(typeof renderProfilePage === 'function') renderProfilePage();
-
-    // 4. Echte Daten aus der Datenbank nachladen
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
-
         if (docSnap.exists()) {
             const data = docSnap.data();
-            
-            // Objekt mit echten DB-Daten füllen
             viewingUserProfile.displayName = data.displayName || viewingUserProfile.displayName;
             viewingUserProfile.bio = data.bio || "Riderpoint Mitglied";
             viewingUserProfile.photoUrl = data.photoUrl || null;
             viewingUserProfile.friends = data.friends || [];
-
-            // Wenn ich es selbst bin, mein globales Profil updaten
             if (viewingUserProfile.isMe) {
                 currentUser.bio = data.bio;
                 currentUser.friends = data.friends;
                 currentUser.photoUrl = data.photoUrl || currentUser.photoUrl;
             }
-
-            // Bilder der Freunde laden
             if (viewingUserProfile.friends.length > 0) {
                 const friendPromises = viewingUserProfile.friends.slice(0, 10).map(fid => getDoc(doc(db, "users", fid)));
                 const friendSnaps = await Promise.all(friendPromises);
-
                 viewingUserProfile.friendDetails = [];
                 friendSnaps.forEach(snap => {
                     if (snap.exists()) {
@@ -1341,18 +1234,11 @@ window.openUserProfile = async (uid, name) => {
                     }
                 });
             }
-
-            // 5. Seite final aktualisieren (mit Bio, Bild & Freunden)
             if(typeof renderProfilePage === 'function') renderProfilePage();
         }
-    } catch (error) {
-        console.error("Fehler beim Profil-Laden:", error);
-    }
+    } catch (error) { console.error("Fehler beim Profil-Laden:", error); }
 };
 
-/* ==========================================
-   PROFIL SEITE (Neues Design & Interaktive Boxen)
-   ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
@@ -1381,7 +1267,6 @@ window.renderProfilePage = async () => {
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
 
-    // --- ZURÜCK BUTTON ---
     let backButtonHtml = "";
     if (window.lastForumContext) {
         const { threadId, topicName, catId } = window.lastForumContext;
@@ -1399,7 +1284,6 @@ window.renderProfilePage = async () => {
         `;
     }
 
-    // --- STATISTIKEN ---
     const targetName = viewingUserProfile.displayName;
     const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
     const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
@@ -1413,7 +1297,6 @@ window.renderProfilePage = async () => {
     if (totalActivity >= 100) { rank = "Meilen Fresser";badgeColor = "success"; rankIcon = "🌍"; }
     if (totalActivity >= 250) { rank = "Road King";     badgeColor = "danger";  rankIcon = "👑"; }
 
-    // --- HTML AUFBAU ---
     container.innerHTML = `
     ${backButtonHtml}
     <div style="height: 200px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 0 0 20px 20px;"></div>
@@ -1432,7 +1315,6 @@ window.renderProfilePage = async () => {
                     <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
                         <h2 class="fw-bold mb-0 text-dark" id="profile-name">${viewingUserProfile.displayName}</h2>
                         <p class="text-muted mb-0" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
-                        
                         <div class="mt-4 pt-3 border-top">
                             <h6 class="fw-bold small text-uppercase text-muted mb-3">Freunde</h6>
                             <div id="friends-list-container" class="d-flex flex-wrap gap-2">
@@ -1442,33 +1324,25 @@ window.renderProfilePage = async () => {
                     </div>
                     <div class="col-md text-md-end pb-2" id="profile-actions"></div>
                 </div>
-
                 <hr class="my-4">
-
                 <div class="text-center mb-3">
                     <span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span>
                     <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
                 </div>
-
                 <div class="d-flex gap-3 mb-4 justify-content-center text-center">
-                    
                     <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
                          onclick="switchProfileTab('tours')" style="cursor:pointer; min-width: 90px;">
                         <b class="fs-5">${myTours.length}</b><br><small>Touren</small>
                     </div>
-                    
                     <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
                          onclick="switchProfileTab('posts')" style="cursor:pointer; min-width: 90px;">
                         <b class="fs-5">${myPosts.length}</b><br><small>Beiträge</small>
                     </div>
-                    
                     <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
                          onclick="switchProfileTab('threads')" style="cursor:pointer; min-width: 90px;">
                         <b class="fs-5">${myThreads.length}</b><br><small>Themen</small>
                     </div>
-
                 </div>
-
                 <div id="profile-dynamic-content" class="mt-3">
                     <div class="text-center text-muted small fst-italic py-3">
                         Klicke auf eine Box oben, um Aktivitäten zu sehen.
@@ -1478,17 +1352,14 @@ window.renderProfilePage = async () => {
         </div>
     </div>`;
 
-    // 1. Bild
     const imgEl = document.getElementById('profile-img');
     if(imgEl && viewingUserProfile.photoUrl) imgEl.src = viewingUserProfile.photoUrl;
 
-    // 2. Freunde
     if(typeof renderFriendsList === 'function') {
         const friendsContainer = document.getElementById('friends-list-container');
         renderFriendsList(friendsContainer);
     }
 
-    // 3. Actions
     const actionArea = document.getElementById('profile-actions');
     if (actionArea) {
         if (viewingUserProfile.isMe) {
@@ -1517,24 +1388,18 @@ window.renderProfilePage = async () => {
     }
 };
 
-/* ==========================================
-   PROFIL TABS (Mit Admin-Lösch-Button)
-   ========================================== */
 window.switchProfileTab = (type) => {
     const container = document.getElementById('profile-dynamic-content');
     if (!container || !viewingUserProfile) return;
-    
     document.querySelectorAll('.tab-box').forEach(el => el.classList.remove('border-primary', 'bg-white'));
     const targetName = viewingUserProfile.displayName;
     let html = `<div class="list-group list-group-flush animate__animated animate__fadeIn">`;
     let count = 0;
-
-    // TOUREN
     if (type === 'tours') {
         const myTours = toursData.filter(t => t.user === targetName);
         if (myTours.length === 0) html += `<div class="p-3 text-center text-muted">Keine Touren gefunden.</div>`;
         myTours.forEach(t => {
-            const delBtn = getDeleteBtn('tour', t.id, t.id); // <--- HIER IST DER BUTTON
+            const delBtn = getDeleteBtn('tour', t.id, t.id); 
             html += `
             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
                  onclick="selectTour('${t.id}'); navigateTo('tours');" style="cursor:pointer;">
@@ -1547,13 +1412,11 @@ window.switchProfileTab = (type) => {
         });
         count = myTours.length;
     }
-
-    // BEITRÄGE
     else if (type === 'posts') {
         const myPosts = allPostsCache.filter(p => p.user === targetName);
         if (myPosts.length === 0) html += `<div class="p-3 text-center text-muted">Keine Beiträge gefunden.</div>`;
         myPosts.forEach(p => {
-            const delBtn = getDeleteBtn('post', p.id, p.userId); // <--- HIER IST DER BUTTON
+            const delBtn = getDeleteBtn('post', p.id, p.userId); 
             html += `
             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
                  onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">
@@ -1566,13 +1429,11 @@ window.switchProfileTab = (type) => {
         });
         count = myPosts.length;
     }
-
-    // THEMEN
     else if (type === 'threads') {
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
         if (myThreads.length === 0) html += `<div class="p-3 text-center text-muted">Keine Themen gefunden.</div>`;
         myThreads.forEach(t => {
-            const delBtn = getDeleteBtn('thread', t.id, t.topic); // <--- HIER IST DER BUTTON
+            const delBtn = getDeleteBtn('thread', t.id, t.topic); 
             html += `
             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
                  onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">
@@ -1585,50 +1446,32 @@ window.switchProfileTab = (type) => {
         });
         count = myThreads.length;
     }
-
     html += `</div>`;
     const titles = { tours: "Touren", posts: "Beiträge", threads: "Forum-Themen" };
     container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]} (${count})</h6>` + html;
 };
-/* HILFSFUNKTION: FREUNDE RENDERN (Damit wir sie oben neu aufrufen können) */
+
 async function renderFriendsList(container) {
     if(!container) return;
-    
-    // Welche Liste nutzen wir?
     let list = viewingUserProfile.friendDetails || []; 
-    // Fallback auf IDs, falls Details leer
     if (list.length === 0 && viewingUserProfile.friends) list = viewingUserProfile.friends;
-    
-    // Eigener User: Immer Live-Daten nehmen
-    if (viewingUserProfile.isMe && currentUser.friends) {
-        // Falls wir noch keine Details geladen haben, nehmen wir erstmal die IDs von currentUser
-        if (list.length < currentUser.friends.length) list = currentUser.friends;
-    }
-
+    if (viewingUserProfile.isMe && currentUser.friends && list.length < currentUser.friends.length) list = currentUser.friends;
     if (!list || list.length === 0) {
         container.innerHTML = '<small class="text-muted fst-italic">Noch keine Freunde.</small>';
         return;
     }
-
     container.innerHTML = '';
     const topFriends = list.slice(0, 5);
-
     for (const item of topFriends) {
         let fUid, fName, fImg;
-
-        // Prüfen: Ist item ein Objekt (Details) oder nur ein String (ID)?
         if (typeof item === 'object') {
             fUid = item.uid; fName = item.name; fImg = item.photoUrl;
         } else {
             fUid = item; fName = "Lade..."; fImg = `https://ui-avatars.com/api/?name=?&background=eee`;
-            // Versuch Cache
             if(window.findUserInfo) { try{ let i = findUserInfo(fUid); if(i) fName = i.name; }catch(e){} }
-            
-            // Wenn wir nur die ID haben, laden wir das Bild im Hintergrund nach
             getDoc(doc(db, "users", fUid)).then(snap => {
                 if(snap.exists()) {
                     const d = snap.data();
-                    // Wir aktualisieren das Bild direkt im DOM, sobald es da ist
                     const imgTag = document.getElementById(`friend-img-${fUid}`);
                     const nameTag = document.getElementById(`friend-name-${fUid}`);
                     if(imgTag && d.photoUrl) imgTag.src = d.photoUrl;
@@ -1636,7 +1479,6 @@ async function renderFriendsList(container) {
                 }
             });
         }
-
         const badge = document.createElement('div');
         badge.className = 'd-flex align-items-center bg-light rounded-pill pe-3 p-1 border shadow-sm';
         badge.style.cursor = 'pointer';
@@ -1647,7 +1489,6 @@ async function renderFriendsList(container) {
         `;
         container.appendChild(badge);
     }
-    
     if (list.length > 5) {
         container.innerHTML += `<span class="badge bg-secondary rounded-pill align-self-center ms-1">+${list.length - 5}</span>`;
     }
@@ -1657,7 +1498,6 @@ window.openEditProfile = () => {
     const bioText = document.getElementById('profile-bio')?.innerText || "";
     const bioInput = document.getElementById('editProfileBio');
     if (bioInput) bioInput.value = bioText;
-    
     const modalElement = document.getElementById('editProfileModal');
     if (modalElement) {
         const modal = new bootstrap.Modal(modalElement);
@@ -1669,97 +1509,54 @@ window.previewProfileImage = (event) => {
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('edit-preview-img').src = e.target.result;
-        }
+        reader.onload = function(e) { document.getElementById('edit-preview-img').src = e.target.result; }
         reader.readAsDataURL(file);
     }
 };
 
 window.saveProfile = async (e) => {
     e.preventDefault();
-
     const fileInput = document.getElementById('editProfilePic');
     const newBio = document.getElementById('editProfileBio').value;
     const submitBtn = e.target.querySelector('button[type="submit"]');
-
-    submitBtn.disabled = true;
-    submitBtn.innerText = "Speichere...";
-
+    submitBtn.disabled = true; submitBtn.innerText = "Speichere...";
     try {
         const formData = new FormData();
         formData.append('uid', currentUser.uid);
         formData.append('bio', newBio);
-
-        if (fileInput.files.length > 0) {
-            formData.append('profilePic', fileInput.files[0]);
-        }
-
-        const response = await fetch(`${API_URL}/updateUser`, {
-            method: 'POST',
-            body: formData
-        });
-
+        if (fileInput.files.length > 0) formData.append('profilePic', fileInput.files[0]);
+        const response = await fetch(`${API_URL}/updateUser`, { method: 'POST', body: formData });
         if (response.ok) {
-            // --- HIER WAR DER FEHLER: Diese Zeile fehlte! ---
             const updatedUser = await response.json(); 
-            // -----------------------------------------------
-
             try {
-                // Wir speichern ALLES Wichtige in der Datenbank
                 await setDoc(doc(db, "users", currentUser.uid), {
                     photoUrl: updatedUser.photoUrl || currentUser.photoUrl,
                     displayName: currentUser.displayName,
                     bio: newBio, 
                 }, { merge: true });
-
-                // Lokal aktualisieren
                 currentUser.bio = newBio;
-                
             } catch(e) { console.log("Firestore Sync Warnung", e); }
-
-            // Weitere lokale Updates
-            if (updatedUser.photoUrl) {
-                currentUser.photoUrl = updatedUser.photoUrl;
-            }
-
+            if (updatedUser.photoUrl) currentUser.photoUrl = updatedUser.photoUrl;
             viewingUserProfile = { ...viewingUserProfile, ...currentUser, isMe: true };
             renderProfilePage();
-
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
             window.showToast("✅ Profil erfolgreich gespeichert!");
         } else {
             const errorText = await response.text();
             window.showToast("❌ Fehler: " + errorText, true);
         }
-    } catch (err) {
-        console.error(err);
-        window.showToast("Fehler beim Speichern", true);
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Speichern";
-    }
+    } catch (err) { console.error(err); window.showToast("Fehler beim Speichern", true); } 
+    finally { submitBtn.disabled = false; submitBtn.innerText = "Speichern"; }
 };
 
-
-
-
 /* ==========================================
-   NEU: MESSENGER & POSTFACH (Mit Zeitstempel & Gelesen-Status)
+   MESSENGER & POSTFACH
    ========================================== */
 let unsubscribeChat = null; 
+function getChatId(uid1, uid2) { return [uid1, uid2].sort().join("_"); }
 
-// Hilfsfunktion: ID generieren
-function getChatId(uid1, uid2) {
-    return [uid1, uid2].sort().join("_");
-}
-
-
-
-// 1. DAS POSTFACH
 window.openInbox = async () => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
-
     let inboxModal = document.getElementById('inboxModal');
     if (!inboxModal) {
         const modalHtml = `
@@ -1790,54 +1587,31 @@ window.openInbox = async () => {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         inboxModal = document.getElementById('inboxModal');
     }
-
     const modal = new bootstrap.Modal(inboxModal);
     modal.show();
-
-    // A) Letzte Chats laden
     const chatListEl = document.getElementById('inbox-chats-list');
     chatListEl.innerHTML = '';
-    
-    // ... in openInbox ...
-
-    // A) Letzte Chats laden
     try {
         const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(50));
         const snapshot = await getDocs(q);
         const chatPartners = new Set();
-        
         if(snapshot.empty) {
              chatListEl.innerHTML = '<div class="text-center text-muted mt-3">Noch keine Nachrichten erhalten.</div>';
         } else {
-            // Wir müssen warten, bis wir alle Bilder geladen haben
-            // Array für die HTML-Elemente vorbereiten
-            const chatItems = [];
-
             for (const docSnap of snapshot.docs) {
                 const msg = docSnap.data();
                 if (!chatPartners.has(msg.senderId)) {
                     chatPartners.add(msg.senderId);
-                    
-                    // Standard: UI Avatar
                     let avatarUrl = `https://ui-avatars.com/api/?name=${msg.senderName}&background=random&size=64`;
-
-                    // VERSUCH: Echtes Bild aus Datenbank laden
                     try {
                         const userSnap = await getDoc(doc(db, "users", msg.senderId));
-                        if(userSnap.exists() && userSnap.data().photoUrl) {
-                            avatarUrl = userSnap.data().photoUrl;
-                        }
-                    } catch(e) { /* Bild nicht gefunden, egal -> Platzhalter bleibt */ }
-
+                        if(userSnap.exists() && userSnap.data().photoUrl) avatarUrl = userSnap.data().photoUrl;
+                    } catch(e) {}
                     const fontWeight = (msg.read === false) ? 'fw-bolder text-primary' : 'fw-normal';
-                    
-                    // HTML bauen
                     const itemHtml = `
                     <div class="list-group-item list-group-item-action d-flex align-items-center p-2" style="cursor:pointer;" 
                          onclick="bootstrap.Modal.getInstance(document.getElementById('inboxModal')).hide(); openMessageModal('${msg.senderName}', '${msg.senderId}')">
-                        
                         <img src="${avatarUrl}" class="rounded-circle border me-3" style="width:50px; height:50px; object-fit:cover;">
-                        
                         <div class="flex-grow-1">
                             <div class="fw-bold">${msg.senderName}</div>
                             <div class="${fontWeight} text-truncate" style="max-width:200px;">${msg.text}</div>
@@ -1847,27 +1621,20 @@ window.openInbox = async () => {
                             <small class="text-muted" style="font-size:0.7rem">${new Date(msg.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
                         </div>
                     </div>`;
-                    
                     chatListEl.insertAdjacentHTML('beforeend', itemHtml);
                 }
             }
         }
     } catch(e) { console.error(e); chatListEl.innerHTML = '<div class="text-danger p-2">Laden fehlgeschlagen.</div>'; }
-
-    // B) Freundesliste
     const friendsListEl = document.getElementById('inbox-friends-list');
     friendsListEl.innerHTML = '';
-    
     if (currentUser.friends && currentUser.friends.length > 0) {
         currentUser.friends.forEach(fid => {
             const info = findUserInfo(fid);
             const item = document.createElement('div');
             item.className = 'list-group-item list-group-item-action d-flex align-items-center p-2';
             item.onclick = () => { modal.hide(); openMessageModal(info.name, fid); };
-            item.innerHTML = `
-                <div class="me-3 fs-4">🟢</div>
-                <div class="fw-bold">${info.name}</div>
-            `;
+            item.innerHTML = `<div class="me-3 fs-4">🟢</div><div class="fw-bold">${info.name}</div>`;
             friendsListEl.appendChild(item);
         });
     } else {
@@ -1875,15 +1642,12 @@ window.openInbox = async () => {
     }
 };
 
-// 2. CHAT FENSTER (Mit Zeitstempel & Gelesen-Logik)
 window.openMessageModal = (name, targetUid) => {
     if (!currentUser) return window.showToast("Bitte einloggen", true);
     const partnerId = targetUid || (viewingUserProfile ? viewingUserProfile.uid : null);
     if (!partnerId) return window.showToast("Fehler: Chat-Partner unbekannt", true);
-
     const modalEl = document.getElementById('messageModal');
     document.getElementById('msg-recipient').innerText = name;
-    
     const txtArea = document.getElementById('msg-text');
     let chatHistory = document.getElementById('chat-history');
     if(!chatHistory) {
@@ -1891,64 +1655,37 @@ window.openMessageModal = (name, targetUid) => {
         chatHistory.id = 'chat-history';
         chatHistory.style.cssText = "height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; background: #f9f9f9; display: flex; flex-direction: column;";
         txtArea.parentNode.insertBefore(chatHistory, txtArea);
-        txtArea.rows = 2; 
-        txtArea.placeholder = "Nachricht schreiben...";
+        txtArea.rows = 2; txtArea.placeholder = "Nachricht schreiben...";
     }
-    
     if (unsubscribeChat) unsubscribeChat();
-
     const chatId = getChatId(currentUser.uid, partnerId);
     const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("createdAt", "asc"));
-    
     unsubscribeChat = onSnapshot(q, (snapshot) => {
         chatHistory.innerHTML = ""; 
         if (snapshot.empty) chatHistory.innerHTML = '<div class="text-center text-muted mt-5 small">Schreib die erste Nachricht!</div>';
-
         snapshot.forEach((docSnapshot) => {
             const msg = docSnapshot.data();
             const isMe = msg.senderId === currentUser.uid;
-            
-            // --- NEU: Zeitstempel formatieren (z.B. 14:30) ---
             const timeStr = new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-            // --- NEU: Nachricht als GELESEN markieren (wenn sie von anderen ist und noch ungelesen) ---
             if (!isMe && msg.read === false) {
-                // Wir updaten das Dokument in der Datenbank
-                try {
-                    updateDoc(docSnapshot.ref, { read: true });
-                } catch(e) { console.log("Konnte nicht als gelesen markieren", e); }
+                try { updateDoc(docSnapshot.ref, { read: true }); } catch(e) {}
             }
-
             const bubble = document.createElement('div');
-            bubble.style.cssText = `
-                max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem; position: relative;
-                align-self: ${isMe ? 'flex-end' : 'flex-start'};
-                background-color: ${isMe ? '#0d6efd' : '#e9ecef'};
-                color: ${isMe ? '#fff' : '#000'};
-            `;
-            
-            // Text + kleine Uhrzeit
-            bubble.innerHTML = `
-                <div>${msg.text}</div>
-                <div style="font-size: 0.7em; opacity: 0.7; text-align: right; margin-top: 2px;">${timeStr}</div>
-            `;
+            bubble.style.cssText = `max-width: 80%; padding: 8px 12px; margin-bottom: 5px; border-radius: 15px; font-size: 0.9rem; position: relative; align-self: ${isMe ? 'flex-end' : 'flex-start'}; background-color: ${isMe ? '#0d6efd' : '#e9ecef'}; color: ${isMe ? '#fff' : '#000'};`;
+            bubble.innerHTML = `<div>${msg.text}</div><div style="font-size: 0.7em; opacity: 0.7; text-align: right; margin-top: 2px;">${timeStr}</div>`;
             chatHistory.appendChild(bubble);
         });
         chatHistory.scrollTop = chatHistory.scrollHeight;
     });
-
     window.currentChatPartnerId = partnerId; 
     new bootstrap.Modal(modalEl).show();
 };
 
-// 3. SENDEN (Mit read: false)
 window.sendMessage = async () => {
     const textInput = document.getElementById('msg-text');
     const text = textInput.value.trim();
     const partnerId = window.currentChatPartnerId;
-    
     if(!text || !partnerId) return;
-
     try {
         const chatId = getChatId(currentUser.uid, partnerId);
         await addDoc(collection(db, "messages"), {
@@ -1958,254 +1695,60 @@ window.sendMessage = async () => {
             receiverId: partnerId,
             chatId: chatId,
             createdAt: Date.now(),
-            read: false  // <--- NEU: Standardmäßig ungelesen
+            read: false
         });
         textInput.value = ""; 
-    } catch (e) {
-        console.error(e);
-        window.showToast("Sendefehler", true);
-    }
+    } catch (e) { console.error(e); window.showToast("Sendefehler", true); }
 };
 
-// Listener aufräumen
 const msgModal = document.getElementById('messageModal');
 if(msgModal) {
     msgModal.addEventListener('hidden.bs.modal', () => {
         if (unsubscribeChat) unsubscribeChat();
-        // Beim Schließen prüfen wir den Badge nochmal neu
-        if(window.renderProfilePage && viewingUserProfile && viewingUserProfile.isMe) {
-             renderProfilePage(); 
-        }
+        if(window.renderProfilePage && viewingUserProfile && viewingUserProfile.isMe) renderProfilePage(); 
     });
 }
-
-
-
-
-
 
 window.showToast = (message, isError = false) => {
     const toastEl = document.getElementById('appToast');
     const msgEl = document.getElementById('toast-message');
-    
-    if (!toastEl || !msgEl) {
-        console.log(message);
-        return;
-    }
+    if (!toastEl || !msgEl) { console.log(message); return; }
     msgEl.innerText = message;
-    if (isError) {
-        toastEl.classList.remove('bg-success');
-        toastEl.classList.add('bg-danger');
-    } else {
-        toastEl.classList.remove('bg-danger');
-        toastEl.classList.add('bg-success');
-    }
+    if (isError) { toastEl.classList.remove('bg-success'); toastEl.classList.add('bg-danger'); } else { toastEl.classList.remove('bg-danger'); toastEl.classList.add('bg-success'); }
     const toast = new bootstrap.Toast(toastEl);
     toast.show();
 };
-/* ==========================================
-   APP START (Fix: Schwarzer Punkt weg & Auto-Sync)
-   ========================================== */
-document.addEventListener('DOMContentLoaded', () => {
-    initMap();
-    
-    // 1. NAVIGATION: Glocke einfügen (Ohne schwarzen Punkt)
-    const navProfile = document.getElementById('nav-profile')?.parentElement;
-    if (navProfile && !document.getElementById('nav-notifications')) {
-        const li = document.createElement('li');
-        li.className = 'nav-item mx-3';
-        li.style.listStyle = 'none'; // <--- DAS ENTFERNT DEN SCHWARZEN PUNKT!
-        li.innerHTML = `
-            <a class="nav-link d-flex flex-column align-items-center auth-required position-relative" 
-               id="nav-notifications" 
-               onclick="navigateTo('notifications'); hideNotificationBadge();" 
-               style="cursor:pointer">
-                
-                🔔 
-                <span id="nav-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none">
-                    <span class="visually-hidden">Neu</span>
-                </span>
-                
-                <span class="d-none d-lg-block" style="font-size:0.8rem">Benachrichtigung</span>
-            </a>`;
-        navProfile.parentElement.insertBefore(li, navProfile);
-    }
-    
-    // Notification Page Section
-    const mainContainer = document.querySelector('.container-xl');
-    if (mainContainer && !document.getElementById('page-notifications')) {
-        const section = document.createElement('section');
-        section.id = 'page-notifications';
-        section.className = 'page-section';
-        section.innerHTML = `
-            <div class="row justify-content-center">
-                <div class="col-md-8">
-                    <h3 class="fw-bold mb-4">🔔 Deine Benachrichtigungen</h3>
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body p-0">
-                            <div id="notification-list" class="list-group list-group-flush">
-                                <div class="text-center p-5 text-muted">Lade Neuigkeiten...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        mainContainer.appendChild(section);
-    }
-
-    // Auth Listener
-    onAuthStateChanged(auth, async (user) => {
-        currentUser = user; 
-        if (user) {
-            updateUI(); 
-            await syncUserWithBackend(user); 
-            
-            // Startet die Überwachung UND prüft sofort auf Neuigkeiten
-            startNotificationListener(); 
-
-            if (getActivePage() === 'home') loadFeed();
-            if (getActivePage() === 'profile') { viewingUserProfile = null; renderProfilePage(); }
-        } else {
-            currentRole = "guest";
-            if (getActivePage() === 'home') loadFeed();
-            if (getActivePage() === 'profile') navigateTo('home');
-            updateUI();
-        }
-    });
-
-    loadToursFromServer();
-    loadForumData(); 
-    setupEventListeners();
-    
-    const startPage = window.location.hash.replace('#', '') || 'home';
-    if (!currentUser) navigateTo(startPage);
-});
-
-// --- HELPER FÜR DEN ROTEN PUNKT ---
-function startNotificationListener() {
-    if (!currentUser) return;
-
-    // 1. Live-Check auf ungelesene Nachrichten (Firestore)
-    const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false));
-    onSnapshot(q, (snap) => {
-        if (!snap.empty) {
-            showNotificationBadge();
-        } else {
-            // Wenn keine Nachrichten, prüfen wir noch auf "neue Aktivitäten" (lokal gespeichert)
-            checkActivityBadge();
-        }
-    });
-}
-
-function checkActivityBadge() {
-    // Prüft, ob der neueste Post neuer ist als der letzte Klick auf die Glocke
-    const lastSeen = localStorage.getItem('last_notif_check') || 0;
-    if (allPostsCache.length > 0) {
-        const newestPostDate = new Date(allPostsCache[0].createdAt).getTime();
-        if (newestPostDate > new Date(lastSeen).getTime()) {
-            showNotificationBadge();
-        }
-    }
-}
-
-function showNotificationBadge() {
-    const badge = document.getElementById('nav-badge');
-    if(badge) badge.classList.remove('d-none');
-}
-
-window.hideNotificationBadge = () => {
-    const badge = document.getElementById('nav-badge');
-    if(badge) badge.classList.add('d-none');
-    // Zeitstempel merken
-    localStorage.setItem('last_notif_check', new Date().toISOString());
-};
 
 /* ==========================================
-   NOTIFICATION SYSTEM (Sync, Zeitstempel, Red Dot)
+   NOTIFICATION SYSTEM
    ========================================== */
-
-// 1. LISTENER & SYNC BEIM START
 function startNotificationListener() {
     if (!currentUser) return;
-
-    // A) Live-Check auf ungelesene Chat-Nachrichten
     const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false));
-    onSnapshot(q, (snap) => {
-        if (!snap.empty) {
-            showNotificationBadge();
-        }
-    });
-
-    // B) Sync beim Refresh: Prüfen ob es neue Aktivitäten gab seit dem letzten Mal
-    // Wir warten kurz (2sek), bis Feed & Forum geladen sind, dann prüfen wir
+    onSnapshot(q, (snap) => { if (!snap.empty) showNotificationBadge(); });
     setTimeout(checkActivityBadge, 2000); 
-    // Und nochmal alle 30 Sekunden
     setInterval(checkActivityBadge, 30000);
 }
 
-// Prüft ALLE Daten auf Neuigkeiten (für den roten Punkt nach Refresh)
 function checkActivityBadge() {
     if (!currentUser) return;
     const lastCheckStr = localStorage.getItem('last_notif_check');
-    // Wenn noch nie geklickt wurde -> Rot
     if (!lastCheckStr) { showNotificationBadge(); return; }
-
     const lastCheck = new Date(lastCheckStr).getTime();
-    let hasNews = false;
-
-    // 1. Meine Beiträge checken (Likes/Kommentare)
-    allPostsCache.forEach(p => {
-        if (p.userId === currentUser.uid) {
-            // Neue Kommentare?
-            if (p.comments) {
-                const newComm = p.comments.find(c => c.user !== currentUser.displayName && new Date(p.createdAt).getTime() > lastCheck); // Vereinfacht: wir checken Post-Datum oder bräuchten Kommentar-Datum
-                // Da Kommentar-Datum oft fehlt, prüfen wir hier einfachheitshalber:
-                // Wenn der Post selbt Kommentare hat und wir den Punkt noch nicht gelöscht haben...
-                // Besser: Wir verlassen uns auf die Logik unten.
-            }
-        }
-    });
-    
-    // Einfache Logik: Wir generieren kurz die Liste intern und schauen auf das Datum des neusten Elements
-    // Das ist am sichersten.
     const latestItemDate = getLatestNotificationDate();
-    if (latestItemDate > lastCheck) {
-        showNotificationBadge();
-    }
+    if (latestItemDate > lastCheck) showNotificationBadge();
 }
 
 function getLatestNotificationDate() {
     let maxDate = 0;
     const myUid = currentUser.uid;
     const myName = currentUser.displayName;
-
-    // Feed Scannen
     allPostsCache.forEach(post => {
-        // Kommentare auf meine Posts
-        if (post.userId === myUid && post.comments) {
-             // Da Kommentare kein Datum haben (im einfachen Modell), nehmen wir Post-Update-Zeit oder Post-Zeit
-             // Workaround: Wir nehmen an, Kommentare sind aktuell.
-        }
-        // Freunde Posts
         if (currentUser.friends && currentUser.friends.includes(post.userId)) {
             const d = new Date(post.createdAt).getTime();
             if (d > maxDate) maxDate = d;
         }
     });
-    
-    // Forum Scannen
-    allThreadsCache.forEach(t => {
-        if ((t.user === myName || t.userId === myUid) && t.repliesList) {
-            t.repliesList.forEach(r => {
-                if (r.user !== myName) {
-                    // Versuche Datum zu parsen (Forum Datum ist String "DD.MM.YYYY")
-                    // Das ist schwer zu vergleichen, wir setzen es auf "Jetzt" wenn neu, 
-                    // aber für den Badge Check reicht oft der Chat und Feed.
-                }
-            });
-        }
-    });
-
     return maxDate;
 }
 
@@ -2220,23 +1763,16 @@ window.hideNotificationBadge = () => {
     localStorage.setItem('last_notif_check', new Date().toISOString());
 };
 
-// 2. RENDERING (Liste anzeigen)
 window.renderNotifications = async () => {
     const list = document.getElementById('notification-list');
     if(!list) return;
-    
     list.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
-
     const myUid = currentUser ? currentUser.uid : null;
     const myName = currentUser ? currentUser.displayName : null;
     if(!myUid) return;
-
     if(allPostsCache.length === 0) await loadFeed();
     if(allThreadsCache.length === 0) await loadForumData(); 
-
     let notifs = [];
-
-    // A) FEED INTERAKTIONEN
     allPostsCache.forEach(post => {
         if (post.userId === myUid) {
             if (post.comments) {
@@ -2247,7 +1783,7 @@ window.renderNotifications = async () => {
                             user: c.user,
                             text: `hat kommentiert: "${c.text}"`,
                             linkAction: () => { navigateTo('home'); setTimeout(()=>document.getElementById(`post-${post.id}`).scrollIntoView(), 500); },
-                            date: post.createdAt // Fallback, da Kommentar kein Datum hat
+                            date: post.createdAt 
                         });
                     }
                 });
@@ -2267,7 +1803,6 @@ window.renderNotifications = async () => {
                 });
             }
         }
-        // Freunde Posts
         if (currentUser.friends && currentUser.friends.includes(post.userId)) {
              const daysOld = (new Date() - new Date(post.createdAt)) / (1000 * 60 * 60 * 24);
              if (daysOld < 3) {
@@ -2281,8 +1816,6 @@ window.renderNotifications = async () => {
              }
         }
     });
-
-    // B) FORUM
     allThreadsCache.forEach(thread => {
         if (thread.user === myName || thread.userId === myUid) {
             if (thread.repliesList) {
@@ -2293,15 +1826,13 @@ window.renderNotifications = async () => {
                             user: reply.user,
                             text: `antwortete im Thema "${thread.title}".`,
                             linkAction: () => { openThreadFromProfile(thread.id, thread.topic); }, 
-                            date: null // Datum ist String, wird unten behandelt
+                            date: null 
                         });
                     }
                 });
             }
         }
     });
-
-    // C) NACHRICHTEN
     try {
         const qMsg = query(collection(db, "messages"), where("receiverId", "==", myUid), orderBy("createdAt", "desc"), limit(20));
         const snapshot = await getDocs(qMsg);
@@ -2323,14 +1854,11 @@ window.renderNotifications = async () => {
         });
     } catch (e) { console.error("Fehler Messages:", e); }
 
-    // D) SORTIEREN & ZEITSTEMPEL
     list.innerHTML = '';
     if (notifs.length === 0) {
         list.innerHTML = '<div class="text-center p-5 text-muted">Keine neuen Benachrichtigungen.</div>';
         return;
     }
-
-    // Neueste zuerst
     notifs.sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
         const dateB = b.date ? new Date(b.date).getTime() : 0;
@@ -2341,28 +1869,23 @@ window.renderNotifications = async () => {
         let icon = '🔔';
         let colorClass = 'list-group-item-action'; 
         let borderClass = '';
-
         if (n.type === 'comment') { icon = '💬'; }
         if (n.type === 'like') { icon = '❤️'; }
         if (n.type === 'friend_post') { icon = '📰'; colorClass = 'bg-light'; }
         if (n.type === 'forum_reply') { icon = '🔧'; }
         if (n.type === 'message') { 
             icon = '📩'; 
-            colorClass = 'bg-primary-subtle'; // Blau für Nachrichten
-            if(n.isNew) borderClass = 'border-start border-4 border-danger'; // Roter Rand wenn neu
+            colorClass = 'bg-primary-subtle'; 
+            if(n.isNew) borderClass = 'border-start border-4 border-danger'; 
         }
-
-        // Datum formatieren: 12.01.2026, 14:30
         let timeString = "";
         if(n.date) {
             timeString = new Date(n.date).toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' });
         }
-
         const item = document.createElement('div');
         item.className = `list-group-item ${colorClass} p-3 ${borderClass}`;
         item.style.cursor = "pointer";
         item.onclick = n.linkAction;
-        
         item.innerHTML = `
             <div class="d-flex align-items-center">
                 <div class="me-3 fs-4">${icon}</div>
@@ -2374,7 +1897,6 @@ window.renderNotifications = async () => {
                     <div class="text-muted small text-truncate" style="max-width: 250px;">${n.text}</div>
                 </div>
             </div>`;
-            
         list.appendChild(item);
     });
-}
+};
