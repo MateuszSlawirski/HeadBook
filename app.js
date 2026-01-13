@@ -320,7 +320,14 @@ function setupEventListeners() {
                 const response = await fetch(`${API_URL}/createThread`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic: currentForumTopic, title, text, user: currentUser.displayName || "Unbekannt" })
+                    // HIER WAR DER FEHLER: Wir senden jetzt die userId mit!
+                    body: JSON.stringify({ 
+                        topic: currentForumTopic, 
+                        title, 
+                        text, 
+                        user: currentUser.displayName || "Unbekannt",
+                        userId: currentUser.uid // <--- WICHTIG!
+                    })
                 });
                 if (response.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('createThreadModal')).hide();
@@ -707,7 +714,10 @@ window.renderForumSubCategory = function(catId) {
 window.renderForumThreads = async function(topicName, catId) {
     currentForumTopic = topicName;
     const cat = allForumData.find(c => c.id === catId);
+    
+    // Breadcrumbs setzen
     renderBreadcrumbs([{ label: cat.title, onclick: `renderForumSubCategory('${cat.id}')` }, { label: topicName, onclick: null }]);
+    
     const container = document.getElementById('forum-container');
     container.innerHTML = `<div class="clearfix mb-3"><h3 class="fw-bold float-start">${topicName}</h3>${currentUser ? `<button class="btn btn-danger float-end" onclick="openNewThreadModal()">Neues Thema +</button>` : ""}</div>
         <div class="forum-header-row d-flex"><div style="flex-grow:1;">Thema / Ersteller</div><div style="width:100px; text-align:center;">Antworten</div><div style="width:150px; text-align:right;">Letzter Beitrag</div></div>
@@ -717,9 +727,15 @@ window.renderForumThreads = async function(topicName, catId) {
     const threads = await response.json();
     const listArea = document.getElementById('thread-list-area');
     listArea.innerHTML = (threads.length === 0) ? '<div class="p-4 text-center text-muted">Noch keine Themen vorhanden.</div>' : "";
+    
     threads.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    
     threads.forEach(thread => {
         const deleteBtn = getDeleteBtn('thread', thread.id, thread.topic);
+        
+        // --- FIX: Wir suchen die ID, damit das Profil geladen werden kann ---
+        // Wenn es ein altes Thema ist (ohne ID), wird null übergeben (Profil lädt dann evtl. nicht, aber stürzt nicht ab)
+        const authorId = thread.userId || thread.uid || null; 
 
         listArea.innerHTML += `
         <div class="forum-row py-2" style="cursor:pointer;" onclick="renderThreadDetail('${thread.id}', '${thread.topic}', '${catId}')">
@@ -727,7 +743,7 @@ window.renderForumThreads = async function(topicName, catId) {
             <div class="forum-main">
                 <div class="fw-bold text-dark">${thread.title}</div>
                 <div class="small text-muted">
-                von <span class="text-primary fw-bold" style="cursor:pointer" onclick="event.stopPropagation(); openUserProfile(null, '${thread.user}')">${thread.user}</span> 
+                von <span class="text-primary fw-bold" style="cursor:pointer" onclick="event.stopPropagation(); openUserProfile('${authorId}', '${thread.user}')">${thread.user}</span> 
                 • ${thread.date}
                 </div>
             </div>
