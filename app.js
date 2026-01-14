@@ -458,6 +458,13 @@ function createTourListItem(tour) {
     const deleteBtn = getDeleteBtn('tour', tour.id, tour.id);
     const buttonsHtml = actionBtn + deleteBtn;
 
+    // ID holen (falls vorhanden)
+    const authorId = tour.userId || tour.uid || "";
+
+    // Styles für den klickbaren Namen (Blau & Hover-Effekt)
+    const nameStyle = "cursor:pointer; font-weight:bold; color:#0d6efd; text-decoration:none; transition:all 0.2s;";
+    const hoverAttr = `onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"`;
+
     return `
     <div class="list-group-item list-group-item-action p-3 border-bottom tour-item-card" id="tour-card-${tour.id}" onclick="selectTour('${tour.id}')" style="cursor:pointer;">
         <div class="d-flex justify-content-between">
@@ -469,9 +476,10 @@ function createTourListItem(tour) {
             <div>
                 <span class="badge bg-secondary fw-normal me-2" style="font-size:0.7em">${tour.state || tour.country}</span>
                 <small class="text-muted" style="font-size:0.8em">von 
-                    <b style="cursor:pointer" class="text-primary" onclick="event.stopPropagation(); openUserProfile('${tour.userId}', '${tour.user}')">
+                    <span style="${nameStyle}" ${hoverAttr} 
+                          onclick="handleProfileClick(event, '${tour.user || "Unbekannt"}', '${authorId}')">
                         ${tour.user || "Unbekannt"}
-                    </b>
+                    </span>
                 </small>
             </div>
             <div>${buttonsHtml}</div>
@@ -1925,4 +1933,44 @@ window.renderNotifications = async () => {
             </div>`;
         list.appendChild(item);
     });
+};
+
+/* ==========================================
+   HELPER: INTELLIGENTER PROFIL-KLICK
+   (Sucht User-ID, falls sie fehlt - GLOBAL)
+   ========================================== */
+window.handleProfileClick = async (event, username, knownUid) => {
+    event.stopPropagation(); 
+    let targetUid = knownUid;
+
+    // 1. Check: Bin ich es selbst?
+    if (!targetUid && currentUser && currentUser.displayName === username) {
+        targetUid = currentUser.uid;
+    }
+
+    // 2. Check: Suche im lokalen Cache (Posts)
+    if (!targetUid && typeof allPostsCache !== 'undefined') {
+         const found = allPostsCache.find(p => p.user === username);
+         if(found) targetUid = found.userId;
+    }
+
+    // 3. Fallback: Suche LIVE in der Datenbank (nach Namen)
+    if (!targetUid) {
+        window.showToast("🔍 Suche Profil...", false);
+        try {
+            const q = query(collection(db, "users"), where("displayName", "==", username), limit(1));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+                targetUid = snap.docs[0].id;
+            }
+        } catch(e) { console.log("User-Suche fehlgeschlagen", e); }
+    }
+
+    // Ergebnis
+    if (targetUid) {
+         window.lastForumContext = null; 
+         openUserProfile(targetUid, username);
+    } else {
+         window.showToast("Profil nicht gefunden.", true);
+    }
 };
