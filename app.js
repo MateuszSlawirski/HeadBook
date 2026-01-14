@@ -1273,6 +1273,9 @@ window.openUserProfile = async (uid, name) => {
     } catch (error) { console.error("Fehler beim Profil-Laden:", error); }
 };
 
+/* ==========================================
+   PROFIL SEITE (Mit Garage-Tab)
+   ========================================== */
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
@@ -1290,13 +1293,22 @@ window.renderProfilePage = async () => {
             isMe: true,
             bio: currentUser.bio || "",
             photoUrl: currentUser.photoUrl || null,
-            friends: currentUser.friends || []
+            friends: currentUser.friends || [],
+            garage: currentUser.garage || null // Garage laden
         };
     } 
 
     if (!viewingUserProfile) {
         container.innerHTML = '<div class="p-5 text-center">Lade Profil...</div>';
         return;
+    }
+    
+    // Garage-Daten sicherstellen (falls wir fremdes Profil anschauen)
+    if (!viewingUserProfile.garage && !viewingUserProfile.isMe) {
+        try {
+            const snap = await getDoc(doc(db, "users", viewingUserProfile.uid));
+            if (snap.exists()) viewingUserProfile.garage = snap.data().garage || null;
+        } catch(e) {}
     }
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
@@ -1363,7 +1375,8 @@ window.renderProfilePage = async () => {
                     <span class="badge bg-${badgeColor} ms-2 shadow-sm">${rankIcon} ${rank}</span>
                     <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
                 </div>
-                <div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                
+                <div class="d-flex gap-2 mb-4 justify-content-center text-center flex-wrap">
                     <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
                          onclick="switchProfileTab('tours')" style="cursor:pointer; min-width: 90px;">
                         <b class="fs-5">${myTours.length}</b><br><small>Touren</small>
@@ -1376,7 +1389,13 @@ window.renderProfilePage = async () => {
                          onclick="switchProfileTab('threads')" style="cursor:pointer; min-width: 90px;">
                         <b class="fs-5">${myThreads.length}</b><br><small>Themen</small>
                     </div>
+                    
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
+                         onclick="switchProfileTab('garage')" style="cursor:pointer; min-width: 90px;">
+                        <b class="fs-5">🏍️</b><br><small>Garage</small>
+                    </div>
                 </div>
+
                 <div id="profile-dynamic-content" class="mt-3">
                     <div class="text-center text-muted small fst-italic py-3">
                         Klicke auf eine Box oben, um Aktivitäten zu sehen.
@@ -1422,14 +1441,62 @@ window.renderProfilePage = async () => {
     }
 };
 
+/* ==========================================
+   PROFIL TABS (Mit Garage & Admin Löschen)
+   ========================================== */
 window.switchProfileTab = (type) => {
     const container = document.getElementById('profile-dynamic-content');
     if (!container || !viewingUserProfile) return;
     document.querySelectorAll('.tab-box').forEach(el => el.classList.remove('border-primary', 'bg-white'));
+    
     const targetName = viewingUserProfile.displayName;
-    let html = `<div class="list-group list-group-flush animate__animated animate__fadeIn">`;
+    let html = `<div class="animate__animated animate__fadeIn">`;
     let count = 0;
-    if (type === 'tours') {
+    
+    // --- 1. GARAGE ---
+    if (type === 'garage') {
+        const bike = viewingUserProfile.garage;
+        if (!bike) {
+            html += `<div class="text-center p-5 text-muted">
+                        <div class="fs-1 mb-2">🏍️</div>
+                        <p>Die Garage ist noch leer.</p>
+                     </div>`;
+        } else {
+            html += `
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body text-center p-4">
+                    <h4 class="fw-bold text-dark mb-3">${bike.brand} ${bike.model}</h4>
+                    <div class="row justify-content-center gap-3">
+                        <div class="col-auto bg-white p-3 rounded border">
+                            <div class="text-muted small">Hubraum</div>
+                            <div class="fw-bold fs-5">${bike.ccm || "-"} ccm</div>
+                        </div>
+                        <div class="col-auto bg-white p-3 rounded border">
+                            <div class="text-muted small">Leistung</div>
+                            <div class="fw-bold fs-5">${bike.hp || "-"} PS</div>
+                        </div>
+                        <div class="col-auto bg-white p-3 rounded border">
+                            <div class="text-muted small">Baujahr</div>
+                            <div class="fw-bold fs-5">${bike.year || "-"}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        // Bearbeiten-Button nur für mich selbst
+        if (viewingUserProfile.isMe) {
+            html += `<div class="text-center mt-3">
+                        <button class="btn btn-outline-primary btn-sm" onclick="openEditGarage()">
+                            🔧 Garage bearbeiten
+                        </button>
+                     </div>`;
+        }
+        count = bike ? 1 : 0;
+    }
+    
+    // --- 2. TOUREN ---
+    else if (type === 'tours') {
+        html += `<div class="list-group list-group-flush">`;
         const myTours = toursData.filter(t => t.user === targetName);
         if (myTours.length === 0) html += `<div class="p-3 text-center text-muted">Keine Touren gefunden.</div>`;
         myTours.forEach(t => {
@@ -1444,9 +1511,13 @@ window.switchProfileTab = (type) => {
                 <div>${delBtn}</div>
             </div>`;
         });
+        html += `</div>`;
         count = myTours.length;
     }
+    
+    // --- 3. BEITRÄGE ---
     else if (type === 'posts') {
+        html += `<div class="list-group list-group-flush">`;
         const myPosts = allPostsCache.filter(p => p.user === targetName);
         if (myPosts.length === 0) html += `<div class="p-3 text-center text-muted">Keine Beiträge gefunden.</div>`;
         myPosts.forEach(p => {
@@ -1461,9 +1532,13 @@ window.switchProfileTab = (type) => {
                 <div>${delBtn}</div>
             </div>`;
         });
+        html += `</div>`;
         count = myPosts.length;
     }
+    
+    // --- 4. THEMEN ---
     else if (type === 'threads') {
+        html += `<div class="list-group list-group-flush">`;
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
         if (myThreads.length === 0) html += `<div class="p-3 text-center text-muted">Keine Themen gefunden.</div>`;
         myThreads.forEach(t => {
@@ -1478,11 +1553,13 @@ window.switchProfileTab = (type) => {
                 <div>${delBtn}</div>
             </div>`;
         });
+        html += `</div>`;
         count = myThreads.length;
     }
+    
     html += `</div>`;
-    const titles = { tours: "Touren", posts: "Beiträge", threads: "Forum-Themen" };
-    container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]} (${count})</h6>` + html;
+    const titles = { tours: "Touren", posts: "Beiträge", threads: "Themen", garage: "Deine Maschine" };
+    container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]}</h6>` + html;
 };
 
 async function renderFriendsList(container) {
@@ -1990,6 +2067,103 @@ window.renderNotifications = async () => {
             
         list.appendChild(item);
     });
+};
+
+/* ==========================================
+   GARAGE FEATURES (Neu)
+   ========================================== */
+window.openEditGarage = () => {
+    let modal = document.getElementById('garageModal');
+    if (!modal) {
+        const html = `
+        <div class="modal fade" id="garageModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">🏍️ Garage bearbeiten</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="garageForm" onsubmit="saveGarage(event)">
+                            <div class="mb-3">
+                                <label class="form-label">Marke (z.B. Kawasaki)</label>
+                                <input type="text" class="form-control" id="bikeBrand" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Modell (z.B. Z900)</label>
+                                <input type="text" class="form-control" id="bikeModel" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-4 mb-3">
+                                    <label class="form-label">ccm</label>
+                                    <input type="number" class="form-control" id="bikeCcm" placeholder="948">
+                                </div>
+                                <div class="col-4 mb-3">
+                                    <label class="form-label">PS</label>
+                                    <input type="number" class="form-control" id="bikeHp" placeholder="125">
+                                </div>
+                                <div class="col-4 mb-3">
+                                    <label class="form-label">Jahr</label>
+                                    <input type="number" class="form-control" id="bikeYear" placeholder="2024">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Speichern</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
+        modal = document.getElementById('garageModal');
+    }
+    
+    // Werte füllen falls vorhanden
+    if (currentUser && currentUser.garage) {
+        document.getElementById('bikeBrand').value = currentUser.garage.brand || "";
+        document.getElementById('bikeModel').value = currentUser.garage.model || "";
+        document.getElementById('bikeCcm').value = currentUser.garage.ccm || "";
+        document.getElementById('bikeHp').value = currentUser.garage.hp || "";
+        document.getElementById('bikeYear').value = currentUser.garage.year || "";
+    }
+    
+    new bootstrap.Modal(modal).show();
+};
+
+window.saveGarage = async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    
+    const garageData = {
+        brand: document.getElementById('bikeBrand').value,
+        model: document.getElementById('bikeModel').value,
+        ccm: document.getElementById('bikeCcm').value,
+        hp: document.getElementById('bikeHp').value,
+        year: document.getElementById('bikeYear').value
+    };
+    
+    const btn = e.target.querySelector('button');
+    btn.disabled = true; btn.innerText = "Speichere...";
+    
+    try {
+        // Wir speichern das direkt im User-Dokument in Firestore
+        await setDoc(doc(db, "users", currentUser.uid), { 
+            garage: garageData 
+        }, { merge: true });
+        
+        // Lokal updaten
+        currentUser.garage = garageData;
+        if(viewingUserProfile && viewingUserProfile.isMe) viewingUserProfile.garage = garageData;
+        
+        window.showToast("Garage aktualisiert! 🏍️");
+        bootstrap.Modal.getInstance(document.getElementById('garageModal')).hide();
+        switchProfileTab('garage'); // Ansicht aktualisieren
+        
+    } catch (err) {
+        console.error(err);
+        window.showToast("Fehler beim Speichern.", true);
+    } finally {
+        btn.disabled = false; btn.innerText = "Speichern";
+    }
 };
 
 /* ==========================================
