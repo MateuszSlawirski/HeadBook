@@ -13,36 +13,23 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    query, 
-    where, 
-    onSnapshot, 
-    orderBy, 
-    getDocs, 
-    limit, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    updateDoc, 
-    arrayUnion
-    
+    getFirestore, collection, addDoc, query, where, onSnapshot, orderBy, getDocs, limit, doc, getDoc, setDoc, updateDoc, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-import { 
-    getStorage, 
-    ref, 
-    uploadBytes, 
-    getDownloadURL 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
+// AZURE STORAGE SDK (Lädt die Bibliothek direkt aus dem Internet)
+import { BlobServiceClient } from "https://cdn.jsdelivr.net/npm/@azure/storage-blob@12.17.0/+esm";
 
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
+// --- AZURE CONFIG ---
+const AZURE_STORAGE_ACCOUNT = "headbookstorage"; 
+const AZURE_CONTAINER = "profilbike"; // Dein neuer Container!
+// HIER DEINEN TOKEN EINFÜGEN (muss mit ?sv= beginnen):
+const AZURE_SAS_TOKEN = "sv=2024-11-04&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2030-01-14T20:34:23Z&st=2026-01-14T12:19:23Z&spr=https&sig=KQeREunO7b6RYhHBi3PszlaWpnd%2BuEZf5xizchrq0cQ%3D"; 
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app); 
+const db = getFirestore(app);
 const storage = getStorage(app);
 
 // STATE VARIABLES
@@ -63,6 +50,38 @@ let allForumData = [];
 let allThreadsCache = []; 
 
 const USER_EDITABLE_CATEGORIES = ["bikes", "garage", "tours"];
+
+
+/* ==========================================
+   HELPER: AZURE UPLOAD
+   ========================================== */
+async function uploadToAzure(file) {
+    if (!AZURE_SAS_TOKEN || AZURE_SAS_TOKEN.length < 5 || AZURE_SAS_TOKEN.includes("HIER_DEN_TOKEN")) {
+        throw new Error("Azure SAS Token fehlt in app.js!");
+    }
+    
+    // Verbindung zu Azure herstellen
+    const blobServiceClient = new BlobServiceClient(
+        `https://${AZURE_STORAGE_ACCOUNT}.blob.core.windows.net${AZURE_SAS_TOKEN}`
+    );
+    const containerClient = blobServiceClient.getContainerClient(AZURE_CONTAINER);
+    
+    // Dateinamen sicher machen (keine Sonderzeichen, eindeutig durch Zeitstempel)
+    const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const fileName = `${currentUser.uid}_${Date.now()}_${safeName}`;
+    
+    const blockBlobClient = containerClient.getBlockBlobClient(fileName);
+    
+    console.log(`Lade hoch nach Azure Container '${AZURE_CONTAINER}': ${fileName}`);
+    
+    // Upload starten
+    await blockBlobClient.uploadData(file, {
+        blobHTTPHeaders: { blobContentType: file.type }
+    });
+    
+    // Die fertige Bild-URL zurückgeben (ohne den geheimen Token)
+    return `https://${AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/${AZURE_CONTAINER}/${fileName}`;
+}
 
 /* ==========================================
    APP START (Bereinigt & Korrekt)
@@ -2034,7 +2053,7 @@ window.renderNotifications = async () => {
 };
 
 /* ==========================================
-   GARAGE FEATURES (Mit Bild-Upload!)
+   GARAGE FEATURES (Azure Upload)
    ========================================== */
 window.openGarageModal = (index) => {
     let modal = document.getElementById('garageModal');
@@ -2075,7 +2094,7 @@ window.openGarageModal = (index) => {
                             <div class="mb-3 border-top pt-3">
                                 <label class="form-label fw-bold">Bilder hochladen (Max 2)</label>
                                 <input type="file" id="bikeImages" class="form-control" accept="image/*" multiple>
-                                <small class="text-muted">Nur wenn du neue Bilder hinzufügen willst.</small>
+                                <small class="text-muted">Lädt direkt in deinen 'profilbike' Container.</small>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Speichern</button>
                         </form>
@@ -2113,27 +2132,28 @@ window.saveGarageBike = async (e) => {
     const index = parseInt(document.getElementById('bikeIndex').value);
     const fileInput = document.getElementById('bikeImages');
     const btn = e.target.querySelector('button[type="submit"]');
+    
+    const oldText = btn.innerText;
     btn.disabled = true; btn.innerText = "Lade hoch...";
     
     try {
         let currentGarage = (currentUser.garage && Array.isArray(currentUser.garage)) ? [...currentUser.garage] : [];
         let imageUrls = [];
         
-        // Wenn wir bearbeiten, behalten wir die alten Bilder vorerst
+        // Alte Bilder behalten beim Bearbeiten
         if (index >= 0 && currentGarage[index].images) {
             imageUrls = currentGarage[index].images;
         }
 
-        // Neue Bilder hochladen (Firebase Storage)
+        // Neue Bilder zu Azure hochladen
         if (fileInput.files.length > 0) {
-            imageUrls = []; // Ersetzen der alten Bilder bei neuer Auswahl
+            imageUrls = []; // Wir ersetzen die alten Bilder bei neuer Auswahl
             const maxFiles = Math.min(fileInput.files.length, 2);
+            
             for (let i = 0; i < maxFiles; i++) {
                 const file = fileInput.files[i];
-                // Speicherort: garage_images / USER_ID / ZEITSTEMPEL_INDEX
-                const storageRef = ref(storage, `garage_images/${currentUser.uid}/${Date.now()}_${i}`);
-                await uploadBytes(storageRef, file);
-                const url = await getDownloadURL(storageRef);
+                // Hier rufen wir unsere neue Azure-Funktion auf!
+                const url = await uploadToAzure(file);
                 imageUrls.push(url);
             }
         }
@@ -2151,21 +2171,23 @@ window.saveGarageBike = async (e) => {
         if (index >= 0) currentGarage[index] = newBike;
         else currentGarage.push(newBike);
 
+        // Speichern in Firestore
         await setDoc(doc(db, "users", currentUser.uid), { garage: currentGarage }, { merge: true });
         
+        // Lokal updaten
         currentUser.garage = currentGarage;
         if(viewingUserProfile && viewingUserProfile.isMe) viewingUserProfile.garage = currentGarage;
         
         window.showToast("Garage gespeichert! 🏍️");
         bootstrap.Modal.getInstance(document.getElementById('garageModal')).hide();
-        renderProfilePage(); // Header aktualisieren
-        switchProfileTab('garage'); // Liste aktualisieren
+        renderProfilePage(); 
+        switchProfileTab('garage'); 
         
     } catch (err) {
         console.error(err);
         window.showToast("Fehler: " + err.message, true);
     } finally {
-        btn.disabled = false; btn.innerText = "Speichern";
+        btn.disabled = false; btn.innerText = oldText;
     }
 };
 
