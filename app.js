@@ -27,13 +27,23 @@ import {
     setDoc, 
     updateDoc, 
     arrayUnion
+    
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import { 
+    getStorage, 
+    ref, 
+    uploadBytes, 
+    getDownloadURL 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
 
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app); 
+const storage = getStorage(app);
 
 // STATE VARIABLES
 let allPostsCache = []; 
@@ -1279,7 +1289,6 @@ window.openUserProfile = async (uid, name) => {
 window.renderProfilePage = async () => {
     const container = document.getElementById('page-profile');
     if (!container) return;
-    
     container.style.position = 'relative'; 
 
     if(typeof allPostsCache !== 'undefined' && allPostsCache.length === 0) {
@@ -1294,7 +1303,7 @@ window.renderProfilePage = async () => {
             bio: currentUser.bio || "",
             photoUrl: currentUser.photoUrl || null,
             friends: currentUser.friends || [],
-            garage: currentUser.garage || null // Garage laden
+            garage: currentUser.garage || [] 
         };
     } 
 
@@ -1303,38 +1312,34 @@ window.renderProfilePage = async () => {
         return;
     }
     
-    // Garage-Daten sicherstellen (falls wir fremdes Profil anschauen)
-    if (!viewingUserProfile.garage && !viewingUserProfile.isMe) {
+    // Garage laden und sicherstellen dass es ein Array ist (für mehrere Bikes)
+    if ((!viewingUserProfile.garage || !Array.isArray(viewingUserProfile.garage)) && !viewingUserProfile.isMe) {
         try {
             const snap = await getDoc(doc(db, "users", viewingUserProfile.uid));
-            if (snap.exists()) viewingUserProfile.garage = snap.data().garage || null;
-        } catch(e) {}
+            if (snap.exists()) {
+                const data = snap.data();
+                // Falls alte Daten da sind (kein Array), wandeln wir es um
+                viewingUserProfile.garage = Array.isArray(data.garage) ? data.garage : (data.garage ? [data.garage] : []);
+            }
+        } catch(e) { viewingUserProfile.garage = []; }
+    }
+    if (viewingUserProfile.isMe && viewingUserProfile.garage && !Array.isArray(viewingUserProfile.garage)) {
+         viewingUserProfile.garage = [viewingUserProfile.garage];
+         currentUser.garage = viewingUserProfile.garage;
     }
     
     const defaultAvatar = `https://ui-avatars.com/api/?name=${viewingUserProfile.displayName}&background=random&size=128`;
-
     let backButtonHtml = "";
     if (window.lastForumContext) {
         const { threadId, topicName, catId } = window.lastForumContext;
-        const clickAction = threadId 
-            ? `renderThreadDetail('${threadId}', '${topicName}', '${catId}')`
-            : `renderForumThreads('${topicName}', '${catId}')`;
-
-        backButtonHtml = `
-            <div class="position-absolute top-0 start-0 m-3" style="z-index: 2000;">
-                <button class="btn btn-light btn-sm shadow fw-bold border border-secondary" 
-                        onclick="navigateTo('forum'); ${clickAction}; window.lastForumContext = null;">
-                    ⬅ Zurück
-                </button>
-            </div>
-        `;
+        const clickAction = threadId ? `renderThreadDetail('${threadId}', '${topicName}', '${catId}')` : `renderForumThreads('${topicName}', '${catId}')`;
+        backButtonHtml = `<div class="position-absolute top-0 start-0 m-3" style="z-index: 2000;"><button class="btn btn-light btn-sm shadow fw-bold border border-secondary" onclick="navigateTo('forum'); ${clickAction}; window.lastForumContext = null;">⬅ Zurück</button></div>`;
     }
 
     const targetName = viewingUserProfile.displayName;
     const myTours = (typeof toursData !== 'undefined') ? toursData.filter(t => t.user === targetName) : [];
     const myPosts = (typeof allPostsCache !== 'undefined') ? allPostsCache.filter(p => p.user === targetName) : [];
     const myThreads = (typeof allThreadsCache !== 'undefined') ? allThreadsCache.filter(t => t.user === targetName) : [];
-    
     const totalActivity = myTours.length + myPosts.length + myThreads.length;
     
     let rank = "Starter", badgeColor = "secondary", rankIcon = "🥚"; 
@@ -1352,20 +1357,23 @@ window.renderProfilePage = async () => {
                 <div class="row align-items-end">
                     <div class="col-auto">
                         <div class="profile-pic-container">
-                            <img src="${defaultAvatar}" id="profile-img" 
-                                    class="rounded-circle border border-4 border-white shadow bg-white" 
-                                    style="width: 120px; height: 120px; object-fit: cover; background: #eee;"
-                                    onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
+                            <img src="${defaultAvatar}" id="profile-img" class="rounded-circle border border-4 border-white shadow bg-white" style="width: 120px; height: 120px; object-fit: cover; background: #eee;" onerror="this.onerror=null;this.src='${defaultAvatar}';"> 
                         </div>
                     </div>
                     <div class="col-md-6 mb-3 mb-md-0 pt-3 pt-md-0">
                         <h2 class="fw-bold mb-0 text-dark" id="profile-name">${viewingUserProfile.displayName}</h2>
-                        <p class="text-muted mb-0" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
+                        <p class="text-muted mb-1" id="profile-bio">${viewingUserProfile.bio || "Riderpoint Mitglied"}</p>
+                        
+                        <div id="profile-garage-summary" onclick="switchProfileTab('garage')" 
+                             class="text-dark small d-flex align-items-center mt-2 py-1 px-2 rounded bg-light border" 
+                             style="cursor:pointer; width:fit-content; transition: background 0.2s;"
+                             onmouseover="this.style.backgroundColor='#e2e6ea'" onmouseout="this.style.backgroundColor='#f8f9fa'">
+                             <span class="me-2 fs-5">🏍️</span> <span id="garage-text">Lade Garage...</span>
+                        </div>
+
                         <div class="mt-4 pt-3 border-top">
                             <h6 class="fw-bold small text-uppercase text-muted mb-3">Freunde</h6>
-                            <div id="friends-list-container" class="d-flex flex-wrap gap-2">
-                                <div class="spinner-border spinner-border-sm text-muted"></div>
-                            </div>
+                            <div id="friends-list-container" class="d-flex flex-wrap gap-2"><div class="spinner-border spinner-border-sm text-muted"></div></div>
                         </div>
                     </div>
                     <div class="col-md text-md-end pb-2" id="profile-actions"></div>
@@ -1376,67 +1384,43 @@ window.renderProfilePage = async () => {
                     <div class="text-muted small mt-1">${totalActivity} Aktivitäten gesamt</div>
                 </div>
                 
-                <div class="d-flex gap-2 mb-4 justify-content-center text-center flex-wrap">
-                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
-                         onclick="switchProfileTab('tours')" style="cursor:pointer; min-width: 90px;">
-                        <b class="fs-5">${myTours.length}</b><br><small>Touren</small>
-                    </div>
-                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
-                         onclick="switchProfileTab('posts')" style="cursor:pointer; min-width: 90px;">
-                        <b class="fs-5">${myPosts.length}</b><br><small>Beiträge</small>
-                    </div>
-                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
-                         onclick="switchProfileTab('threads')" style="cursor:pointer; min-width: 90px;">
-                        <b class="fs-5">${myThreads.length}</b><br><small>Themen</small>
-                    </div>
-                    
-                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" 
-                         onclick="switchProfileTab('garage')" style="cursor:pointer; min-width: 90px;">
-                        <b class="fs-5">🏍️</b><br><small>Garage</small>
-                    </div>
+                <div class="d-flex gap-3 mb-4 justify-content-center text-center">
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" onclick="switchProfileTab('tours')" style="cursor:pointer; min-width: 90px;"><b class="fs-5">${myTours.length}</b><br><small>Touren</small></div>
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" onclick="switchProfileTab('posts')" style="cursor:pointer; min-width: 90px;"><b class="fs-5">${myPosts.length}</b><br><small>Beiträge</small></div>
+                    <div class="bg-light p-2 rounded px-3 border shadow-sm tab-box" onclick="switchProfileTab('threads')" style="cursor:pointer; min-width: 90px;"><b class="fs-5">${myThreads.length}</b><br><small>Themen</small></div>
                 </div>
 
-                <div id="profile-dynamic-content" class="mt-3">
-                    <div class="text-center text-muted small fst-italic py-3">
-                        Klicke auf eine Box oben, um Aktivitäten zu sehen.
-                    </div>
-                </div>
+                <div id="profile-dynamic-content" class="mt-3"><div class="text-center text-muted small fst-italic py-3">Klicke auf eine Box oben oder dein Bike, um Aktivitäten zu sehen.</div></div>
             </div>
         </div>
     </div>`;
 
+    // Garage Text füllen
+    const summaryEl = document.getElementById('garage-text');
+    const garageDiv = document.getElementById('profile-garage-summary');
+    if(viewingUserProfile.garage && Array.isArray(viewingUserProfile.garage) && viewingUserProfile.garage.length > 0) {
+        const bikeNames = viewingUserProfile.garage.map(b => `${b.brand} ${b.model}`).join(', ');
+        summaryEl.innerHTML = `<span class="fw-bold">Fährt:</span> ${bikeNames}`;
+    } else {
+        if(viewingUserProfile.isMe) summaryEl.innerHTML = "Garage ist leer. <b>+ Bike hinzufügen</b>";
+        else garageDiv.style.display = 'none'; // Ausblenden wenn leer bei Fremden
+    }
+
     const imgEl = document.getElementById('profile-img');
     if(imgEl && viewingUserProfile.photoUrl) imgEl.src = viewingUserProfile.photoUrl;
-
-    if(typeof renderFriendsList === 'function') {
-        const friendsContainer = document.getElementById('friends-list-container');
-        renderFriendsList(friendsContainer);
-    }
+    if(typeof renderFriendsList === 'function') renderFriendsList(document.getElementById('friends-list-container'));
 
     const actionArea = document.getElementById('profile-actions');
     if (actionArea) {
         if (viewingUserProfile.isMe) {
             actionArea.innerHTML = `
-                <button id="btn-inbox" class="btn btn-primary btn-sm me-2 position-relative" onclick="openInbox()">
-                    📬 Mein Postfach
-                    <span id="inbox-badge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle d-none"></span>
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil bearbeiten</button>
+                <button id="btn-inbox" class="btn btn-primary btn-sm me-2 position-relative" onclick="openInbox()">📬 Postfach <span id="inbox-badge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle d-none"></span></button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="openEditProfile()">✏️ Profil</button>
             `;
-            try {
-                const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false), limit(1));
-                getDocs(qCheck).then(snap => { if (!snap.empty) document.getElementById('inbox-badge')?.classList.remove('d-none'); });
-            } catch(e){}
+            try { const qCheck = query(collection(db, "messages"), where("receiverId", "==", currentUser.uid), where("read", "==", false), limit(1)); getDocs(qCheck).then(snap => { if (!snap.empty) document.getElementById('inbox-badge')?.classList.remove('d-none'); }); } catch(e){}
         } else {
             const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(viewingUserProfile.uid);
-            let friendBtn = isFriend 
-                ? `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>`
-                : `<button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>`;
-
-            actionArea.innerHTML = `
-                ${friendBtn}
-                <button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}', '${viewingUserProfile.uid}')">💬 Nachricht senden</button>
-            `;
+            actionArea.innerHTML = (isFriend ? `<button class="btn btn-success btn-sm me-2" disabled>✔ Befreundet</button>` : `<button class="btn btn-danger btn-sm me-2" onclick="addFriend('${viewingUserProfile.uid}')">🤝 Freund+</button>`) + `<button class="btn btn-dark btn-sm" onclick="openMessageModal('${viewingUserProfile.displayName}', '${viewingUserProfile.uid}')">💬 Nachricht</button>`;
         }
     }
 };
@@ -1453,112 +1437,92 @@ window.switchProfileTab = (type) => {
     let html = `<div class="animate__animated animate__fadeIn">`;
     let count = 0;
     
-    // --- 1. GARAGE ---
+    // --- 1. GARAGE (MIT BILDERN) ---
     if (type === 'garage') {
-        const bike = viewingUserProfile.garage;
-        if (!bike) {
-            html += `<div class="text-center p-5 text-muted">
-                        <div class="fs-1 mb-2">🏍️</div>
-                        <p>Die Garage ist noch leer.</p>
-                     </div>`;
+        const garage = Array.isArray(viewingUserProfile.garage) ? viewingUserProfile.garage : [];
+        count = garage.length;
+
+        if (garage.length === 0) {
+            html += `<div class="text-center p-5 text-muted"><div class="fs-1 mb-2">🏍️</div><p>Die Garage ist noch leer.</p></div>`;
         } else {
-            html += `
-            <div class="card border-0 shadow-sm bg-light">
-                <div class="card-body text-center p-4">
-                    <h4 class="fw-bold text-dark mb-3">${bike.brand} ${bike.model}</h4>
-                    <div class="row justify-content-center gap-3">
-                        <div class="col-auto bg-white p-3 rounded border">
-                            <div class="text-muted small">Hubraum</div>
-                            <div class="fw-bold fs-5">${bike.ccm || "-"} ccm</div>
-                        </div>
-                        <div class="col-auto bg-white p-3 rounded border">
-                            <div class="text-muted small">Leistung</div>
-                            <div class="fw-bold fs-5">${bike.hp || "-"} PS</div>
-                        </div>
-                        <div class="col-auto bg-white p-3 rounded border">
-                            <div class="text-muted small">Baujahr</div>
-                            <div class="fw-bold fs-5">${bike.year || "-"}</div>
+            html += `<div class="row g-3">`;
+            garage.forEach((bike, index) => {
+                // Bilder HTML
+                let imagesHtml = `<div class="bg-light rounded d-flex align-items-center justify-content-center text-muted small" style="height:150px;">Kein Bild</div>`;
+                if (bike.images && bike.images.length > 0) {
+                    imagesHtml = `<div class="d-flex gap-2 overflow-auto" style="height:150px;">`;
+                    bike.images.forEach(url => {
+                        imagesHtml += `<img src="${url}" class="rounded shadow-sm border" style="height:100%; width:auto; object-fit:cover;">`;
+                    });
+                    imagesHtml += `</div>`;
+                }
+
+                let actions = "";
+                if (viewingUserProfile.isMe) {
+                    actions = `
+                    <div class="mt-3 d-flex justify-content-end gap-2 border-top pt-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openGarageModal(${index})">✏️ Bearbeiten</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteGarageBike(${index})">🗑️ Löschen</button>
+                    </div>`;
+                }
+                html += `
+                <div class="col-md-6">
+                    <div class="card border shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="fw-bold text-dark mb-2">${bike.brand} ${bike.model}</h5>
+                            <div class="mb-3">${imagesHtml}</div>
+                            <div class="d-flex gap-3 text-muted small mb-2">
+                                <div>Hubraum: <b>${bike.ccm || "-"} ccm</b></div>
+                                <div>Leistung: <b>${bike.hp || "-"} PS</b></div>
+                            </div>
+                            <div class="text-muted small">Baujahr: <b>${bike.year || "-"}</b></div>
+                            ${actions}
                         </div>
                     </div>
-                </div>
-            </div>`;
+                </div>`;
+            });
+            html += `</div>`;
         }
-        // Bearbeiten-Button nur für mich selbst
         if (viewingUserProfile.isMe) {
-            html += `<div class="text-center mt-3">
-                        <button class="btn btn-outline-primary btn-sm" onclick="openEditGarage()">
-                            🔧 Garage bearbeiten
-                        </button>
-                     </div>`;
+            html += `<div class="text-center mt-4"><button class="btn btn-primary" onclick="openGarageModal(-1)">+ Weiteres Bike hinzufügen</button></div>`;
         }
-        count = bike ? 1 : 0;
     }
-    
-    // --- 2. TOUREN ---
+    // TOUREN
     else if (type === 'tours') {
         html += `<div class="list-group list-group-flush">`;
         const myTours = toursData.filter(t => t.user === targetName);
         if (myTours.length === 0) html += `<div class="p-3 text-center text-muted">Keine Touren gefunden.</div>`;
         myTours.forEach(t => {
             const delBtn = getDeleteBtn('tour', t.id, t.id); 
-            html += `
-            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
-                 onclick="selectTour('${t.id}'); navigateTo('tours');" style="cursor:pointer;">
-                <div>
-                    <div class="fw-bold text-primary">🗺️ ${t.title}</div>
-                    <small class="text-muted">${t.km} km • ${t.country}</small>
-                </div>
-                <div>${delBtn}</div>
-            </div>`;
+            html += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" onclick="selectTour('${t.id}'); navigateTo('tours');" style="cursor:pointer;"><div><div class="fw-bold text-primary">🗺️ ${t.title}</div><small class="text-muted">${t.km} km • ${t.country}</small></div><div>${delBtn}</div></div>`;
         });
-        html += `</div>`;
-        count = myTours.length;
+        html += `</div>`; count = myTours.length;
     }
-    
-    // --- 3. BEITRÄGE ---
+    // BEITRÄGE
     else if (type === 'posts') {
         html += `<div class="list-group list-group-flush">`;
         const myPosts = allPostsCache.filter(p => p.user === targetName);
         if (myPosts.length === 0) html += `<div class="p-3 text-center text-muted">Keine Beiträge gefunden.</div>`;
         myPosts.forEach(p => {
             const delBtn = getDeleteBtn('post', p.id, p.userId); 
-            html += `
-            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
-                 onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;">
-                <div class="text-truncate" style="max-width: 80%;">
-                    <div class="fw-bold">📸 Beitrag</div>
-                    <small class="text-muted">${p.content || "Bild-Inhalt"}</small>
-                </div>
-                <div>${delBtn}</div>
-            </div>`;
+            html += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" onclick="navigateTo('home'); setTimeout(() => document.getElementById('post-${p.id}').scrollIntoView(), 500);" style="cursor:pointer;"><div class="text-truncate" style="max-width: 80%;"><div class="fw-bold">📸 Beitrag</div><small class="text-muted">${p.content || "Bild-Inhalt"}</small></div><div>${delBtn}</div></div>`;
         });
-        html += `</div>`;
-        count = myPosts.length;
+        html += `</div>`; count = myPosts.length;
     }
-    
-    // --- 4. THEMEN ---
+    // THEMEN
     else if (type === 'threads') {
         html += `<div class="list-group list-group-flush">`;
         const myThreads = allThreadsCache.filter(t => t.user === targetName);
         if (myThreads.length === 0) html += `<div class="p-3 text-center text-muted">Keine Themen gefunden.</div>`;
         myThreads.forEach(t => {
             const delBtn = getDeleteBtn('thread', t.id, t.topic); 
-            html += `
-            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3"
-                 onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;">
-                <div>
-                    <div class="fw-bold text-success">💬 ${t.title}</div>
-                    <small class="text-muted">in ${t.topic}</small>
-                </div>
-                <div>${delBtn}</div>
-            </div>`;
+            html += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" onclick="openThreadFromProfile('${t.id}', '${t.topic}')" style="cursor:pointer;"><div><div class="fw-bold text-success">💬 ${t.title}</div><small class="text-muted">in ${t.topic}</small></div><div>${delBtn}</div></div>`;
         });
-        html += `</div>`;
-        count = myThreads.length;
+        html += `</div>`; count = myThreads.length;
     }
     
     html += `</div>`;
-    const titles = { tours: "Touren", posts: "Beiträge", threads: "Themen", garage: "Deine Maschine" };
+    const titles = { tours: "Touren", posts: "Beiträge", threads: "Themen", garage: "Deine Garage" };
     container.innerHTML = `<h6 class="fw-bold text-muted text-uppercase small mb-3 border-bottom pb-2">${titles[type]}</h6>` + html;
 };
 
@@ -2070,9 +2034,9 @@ window.renderNotifications = async () => {
 };
 
 /* ==========================================
-   GARAGE FEATURES (Neu)
+   GARAGE FEATURES (Mit Bild-Upload!)
    ========================================== */
-window.openEditGarage = () => {
+window.openGarageModal = (index) => {
     let modal = document.getElementById('garageModal');
     if (!modal) {
         const html = `
@@ -2080,11 +2044,12 @@ window.openEditGarage = () => {
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">🏍️ Garage bearbeiten</h5>
+                        <h5 class="modal-title" id="garageModalTitle">🏍️ Bike eintragen</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <form id="garageForm" onsubmit="saveGarage(event)">
+                        <form id="garageForm">
+                            <input type="hidden" id="bikeIndex" value="-1">
                             <div class="mb-3">
                                 <label class="form-label">Marke (z.B. Kawasaki)</label>
                                 <input type="text" class="form-control" id="bikeBrand" required>
@@ -2096,16 +2061,21 @@ window.openEditGarage = () => {
                             <div class="row">
                                 <div class="col-4 mb-3">
                                     <label class="form-label">ccm</label>
-                                    <input type="number" class="form-control" id="bikeCcm" placeholder="948">
+                                    <input type="number" class="form-control" id="bikeCcm">
                                 </div>
                                 <div class="col-4 mb-3">
                                     <label class="form-label">PS</label>
-                                    <input type="number" class="form-control" id="bikeHp" placeholder="125">
+                                    <input type="number" class="form-control" id="bikeHp">
                                 </div>
                                 <div class="col-4 mb-3">
                                     <label class="form-label">Jahr</label>
-                                    <input type="number" class="form-control" id="bikeYear" placeholder="2024">
+                                    <input type="number" class="form-control" id="bikeYear">
                                 </div>
+                            </div>
+                            <div class="mb-3 border-top pt-3">
+                                <label class="form-label fw-bold">Bilder hochladen (Max 2)</label>
+                                <input type="file" id="bikeImages" class="form-control" accept="image/*" multiple>
+                                <small class="text-muted">Nur wenn du neue Bilder hinzufügen willst.</small>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Speichern</button>
                         </form>
@@ -2115,55 +2085,102 @@ window.openEditGarage = () => {
         </div>`;
         document.body.insertAdjacentHTML('beforeend', html);
         modal = document.getElementById('garageModal');
+        document.getElementById('garageForm').addEventListener('submit', saveGarageBike);
     }
     
-    // Werte füllen falls vorhanden
-    if (currentUser && currentUser.garage) {
-        document.getElementById('bikeBrand').value = currentUser.garage.brand || "";
-        document.getElementById('bikeModel').value = currentUser.garage.model || "";
-        document.getElementById('bikeCcm').value = currentUser.garage.ccm || "";
-        document.getElementById('bikeHp').value = currentUser.garage.hp || "";
-        document.getElementById('bikeYear').value = currentUser.garage.year || "";
-    }
+    document.getElementById('garageForm').reset();
+    document.getElementById('bikeIndex').value = index;
+    const title = document.getElementById('garageModalTitle');
     
+    if (index >= 0 && currentUser.garage && currentUser.garage[index]) {
+        title.innerText = "🔧 Bike bearbeiten";
+        const bike = currentUser.garage[index];
+        document.getElementById('bikeBrand').value = bike.brand || "";
+        document.getElementById('bikeModel').value = bike.model || "";
+        document.getElementById('bikeCcm').value = bike.ccm || "";
+        document.getElementById('bikeHp').value = bike.hp || "";
+        document.getElementById('bikeYear').value = bike.year || "";
+    } else {
+        title.innerText = "🏍️ Neues Bike hinzufügen";
+    }
     new bootstrap.Modal(modal).show();
 };
 
-window.saveGarage = async (e) => {
+window.saveGarageBike = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
     
-    const garageData = {
-        brand: document.getElementById('bikeBrand').value,
-        model: document.getElementById('bikeModel').value,
-        ccm: document.getElementById('bikeCcm').value,
-        hp: document.getElementById('bikeHp').value,
-        year: document.getElementById('bikeYear').value
-    };
-    
-    const btn = e.target.querySelector('button');
-    btn.disabled = true; btn.innerText = "Speichere...";
+    const index = parseInt(document.getElementById('bikeIndex').value);
+    const fileInput = document.getElementById('bikeImages');
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.innerText = "Lade hoch...";
     
     try {
-        // Wir speichern das direkt im User-Dokument in Firestore
-        await setDoc(doc(db, "users", currentUser.uid), { 
-            garage: garageData 
-        }, { merge: true });
+        let currentGarage = (currentUser.garage && Array.isArray(currentUser.garage)) ? [...currentUser.garage] : [];
+        let imageUrls = [];
         
-        // Lokal updaten
-        currentUser.garage = garageData;
-        if(viewingUserProfile && viewingUserProfile.isMe) viewingUserProfile.garage = garageData;
+        // Wenn wir bearbeiten, behalten wir die alten Bilder vorerst
+        if (index >= 0 && currentGarage[index].images) {
+            imageUrls = currentGarage[index].images;
+        }
+
+        // Neue Bilder hochladen (Firebase Storage)
+        if (fileInput.files.length > 0) {
+            imageUrls = []; // Ersetzen der alten Bilder bei neuer Auswahl
+            const maxFiles = Math.min(fileInput.files.length, 2);
+            for (let i = 0; i < maxFiles; i++) {
+                const file = fileInput.files[i];
+                // Speicherort: garage_images / USER_ID / ZEITSTEMPEL_INDEX
+                const storageRef = ref(storage, `garage_images/${currentUser.uid}/${Date.now()}_${i}`);
+                await uploadBytes(storageRef, file);
+                const url = await getDownloadURL(storageRef);
+                imageUrls.push(url);
+            }
+        }
+
+        const newBike = {
+            brand: document.getElementById('bikeBrand').value,
+            model: document.getElementById('bikeModel').value,
+            ccm: document.getElementById('bikeCcm').value,
+            hp: document.getElementById('bikeHp').value,
+            year: document.getElementById('bikeYear').value,
+            images: imageUrls, 
+            id: (index >= 0) ? currentGarage[index].id : Date.now()
+        };
+
+        if (index >= 0) currentGarage[index] = newBike;
+        else currentGarage.push(newBike);
+
+        await setDoc(doc(db, "users", currentUser.uid), { garage: currentGarage }, { merge: true });
         
-        window.showToast("Garage aktualisiert! 🏍️");
+        currentUser.garage = currentGarage;
+        if(viewingUserProfile && viewingUserProfile.isMe) viewingUserProfile.garage = currentGarage;
+        
+        window.showToast("Garage gespeichert! 🏍️");
         bootstrap.Modal.getInstance(document.getElementById('garageModal')).hide();
-        switchProfileTab('garage'); // Ansicht aktualisieren
+        renderProfilePage(); // Header aktualisieren
+        switchProfileTab('garage'); // Liste aktualisieren
         
     } catch (err) {
         console.error(err);
-        window.showToast("Fehler beim Speichern.", true);
+        window.showToast("Fehler: " + err.message, true);
     } finally {
         btn.disabled = false; btn.innerText = "Speichern";
     }
+};
+
+window.deleteGarageBike = async (index) => {
+    if (!confirm("Bike wirklich löschen?")) return;
+    try {
+        let currentGarage = [...currentUser.garage];
+        currentGarage.splice(index, 1);
+        await setDoc(doc(db, "users", currentUser.uid), { garage: currentGarage }, { merge: true });
+        currentUser.garage = currentGarage;
+        if(viewingUserProfile && viewingUserProfile.isMe) viewingUserProfile.garage = currentGarage;
+        window.showToast("Bike gelöscht.");
+        renderProfilePage();
+        switchProfileTab('garage');
+    } catch(e) { window.showToast("Fehler beim Löschen.", true); }
 };
 
 /* ==========================================
