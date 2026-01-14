@@ -16,24 +16,25 @@ import {
     getFirestore, collection, addDoc, query, where, onSnapshot, orderBy, getDocs, limit, doc, getDoc, setDoc, updateDoc, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// AZURE STORAGE SDK (Lädt die Bibliothek direkt aus dem Internet)
+// AZURE STORAGE SDK
 import { BlobServiceClient } from "https://cdn.jsdelivr.net/npm/@azure/storage-blob@12.17.0/+esm";
 
 const API_URL = "https://riderpoint-backend.azurewebsites.net/api";
 
 // --- AZURE CONFIG ---
 const AZURE_STORAGE_ACCOUNT = "headbookstorage"; 
-const AZURE_CONTAINER = "profilbike"; // Dein neuer Container!
-// HIER DEINEN TOKEN EINFÜGEN (muss mit ?sv= beginnen):
-const AZURE_SAS_TOKEN = "sv=2024-11-04&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2030-01-14T20:34:23Z&st=2026-01-14T12:19:23Z&spr=https&sig=KQeREunO7b6RYhHBi3PszlaWpnd%2BuEZf5xizchrq0cQ%3D"; 
+const AZURE_CONTAINER = "profilbike"; 
+
+
+const AZURE_SAS_TOKEN = "?sv=2024-11-04&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2030-01-14T20:34:23Z&st=2026-01-14T12:19:23Z&spr=https&sig=KQeREunO7b6RYhHBi3PszlaWpnd%2BuEZf5xizchrq0cQ%3D"; 
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
+
 
 // STATE VARIABLES
-let allPostsCache = []; 
+let allPostsCache = [];
 let toursData = []; 
 let currentUser = null;
 let currentRole = "guest"; 
