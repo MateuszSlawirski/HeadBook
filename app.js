@@ -216,8 +216,9 @@ window.openMyProfile = () => {
 };
 
 /* ==========================================
-   SYNC USER (Fix: Bio laden & Admin Rechte setzen)
+   SYNC USER (Fix: Bio,Garage laden & Admin Rechte setzen)
    ========================================== */
+
 async function syncUserWithBackend(firebaseUser) {
     if (!firebaseUser) return;
 
@@ -234,10 +235,10 @@ async function syncUserWithBackend(firebaseUser) {
         });
 
         if (response.ok) {
-            // 1. Basis-Daten vom Azure Server
+            // 1. Basis-Daten vom Azure Server (SQL)
             const dbUser = await response.json();
 
-            // 2. WICHTIG: Zusätzliche Daten (Bio & Freunde) aus Firestore holen!
+            // 2. WICHTIG: Zusätzliche Daten aus Firestore holen!
             try {
                 const mySnap = await getDoc(doc(db, "users", firebaseUser.uid));
                 if (mySnap.exists()) {
@@ -248,39 +249,44 @@ async function syncUserWithBackend(firebaseUser) {
                         dbUser.friends = myData.friends;
                     }
                     
-                    // FIX 1: BIO ÜBERNEHMEN
-                    // Wenn in Firestore eine Bio steht, nutzen wir die!
+                    // Bio übernehmen
                     if (myData.bio) {
                         dbUser.bio = myData.bio;
                     }
                     
-                    // Bild übernehmen (falls Firestore neuer ist)
+                    // Bild übernehmen
                     if (myData.photoUrl) {
                         dbUser.photoUrl = myData.photoUrl;
                     }
+
+                    // --- FIX: GARAGE LADEN ---
+                    // Hier holen wir das Array aus der Datenbank
+                    if (myData.garage && Array.isArray(myData.garage)) {
+                        dbUser.garage = myData.garage;
+                    } else {
+                        dbUser.garage = []; // Leeres Array als Standard
+                    }
                 }
             } catch(e) { console.log("Konnte Firestore-Daten nicht laden", e); }
-
-            console.log("Fertiger User:", dbUser);
 
             // 3. Globalen User setzen
             if (currentUser) {
                 currentUser.role = dbUser.role || "user";
                 currentUser.friends = dbUser.friends || []; 
-                currentUser.bio = dbUser.bio || ""; // Bio sicherstellen
+                currentUser.bio = dbUser.bio || ""; 
                 currentUser.photoUrl = dbUser.photoUrl || currentUser.photoUrl;
+                currentUser.garage = dbUser.garage || []; // Garage speichern
             } else {
                 currentUser = dbUser;
+                // Falls dbUser keine Garage hat, initialisieren wir sie
+                if(!currentUser.garage) currentUser.garage = [];
             }
 
-            // FIX 2: ADMIN ROLLE AKTIVIEREN
-            // Wir müssen die globale Variable 'currentRole' updaten, sonst erscheinen die Buttons nicht!
+            // Admin Rolle setzen
             currentRole = currentUser.role || "guest"; 
 
             // UI Updates triggern
             if(window.location.hash === '#profile') renderProfilePage();
-            
-            // Falls wir auf Home sind, Feed neu laden (damit Mülleimer erscheinen)
             if(window.location.hash === '#home' || window.location.hash === '') loadFeed();
 
         } else {
