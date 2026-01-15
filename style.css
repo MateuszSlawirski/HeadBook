@@ -3,26 +3,38 @@
     --bg-card: #ffffff;
     --text-main: #050505; 
     --text-muted: #65676b;
-    --accent: #d32f2f; 
+    --accent: #d32f2f; /* Bleibt ROT für die Buttons */
     --accent-hover: #b71c1c; 
     --border-color: #ddd;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-body); 
-    color: var(--text-main);
+    
+    /* Bild einfügen + dunkler Schleier */
+    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), 
+                url('Hintergrund.png'); 
+
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed; 
+    background-repeat: no-repeat;
+    
+    background-color: #333; 
+    color: #f0f0f0; 
+    
     margin: 0; 
-    padding-top: 100px; /* Angepasst, falls Navbar flacher ist, sonst 120px lassen */
+    padding-top: 100px; 
 }
 
 a { text-decoration: none; }
 
-/* --- NAVBAR --- */
+/* --- NAVBAR (Hier sind die Anpassungen auf GOLD & Lesbarkeit) --- */
 .navbar { 
-    background-color: #fff; 
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    position: fixed; /* WICHTIG: Damit padding-top Sinn macht */
+    background-color: #151b24; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    border-bottom: 2px solid #d4af37; /* GEÄNDERT: Goldene Linie statt Rot */
+    position: fixed; 
     top: 0;
     left: 0;
     width: 100%;
@@ -38,24 +50,24 @@ a { text-decoration: none; }
     filter: drop-shadow(0px 3px 6px rgba(255, 255, 255, 0.3)); 
 }
 
-/* Navbar Links (Zusammengefasst) */
+/* Navbar Links */
 .nav-link {
-    color: #444;
+    color: #e0e0e0; /* GEÄNDERT: Helle Schrift für bessere Lesbarkeit auf Dunkel */
     font-size: 0.9rem;
     font-weight: 500;
     transition: all 0.3s ease;
 }
 
 .navbar .nav-link.active {
-    color: var(--accent); 
+    color: #d4af37; /* GEÄNDERT: Gold für aktiven Link */
     font-weight: 600; 
-    background-color: rgba(135, 132, 132, 0.1); 
+    background-color: rgba(212, 175, 55, 0.1); /* GEÄNDERT: Leichter Gold-Hintergrund */
     border-radius: 5px; 
     padding: 10px 15px; 
 }
 
 .nav-link:hover, .nav-link.active {
-    color: var(--accent);
+    color: #d4af37; /* GEÄNDERT: Gold beim Drüberfahren */
 }
 
 .nav-link svg {
@@ -81,7 +93,7 @@ a { text-decoration: none; }
 .custom-breadcrumb span { margin: 0 5px; color: #adb5bd; }
 .custom-breadcrumb .active { color: #212529; font-weight: bold; }
 
-/* --- FORUM TABELLE STYLE (BMW Look) --- */
+/* --- FORUM TABELLE STYLE --- */
 .forum-header-row {
     background-color: #f8f9fa;
     border-top: 2px solid #dc3545; 
@@ -118,64 +130,54 @@ a { text-decoration: none; }
 /* --- 2. LAYOUT & GRID --- */
 .container { max-width: 1000px; margin: 0 auto; padding: 0 15px; }
 
-/* ==========================================
-   LAYOUT OPTIMIERUNG
-   ========================================== */
-
-/* Das Gitter-Layout für die Startseite */
+/* LAYOUT OPTIMIERUNG */
 .content-grid {
     display: grid;
-    /* VORHER war es vielleicht 300px 1fr (oder ähnlich). 
-       JETZT: Sidebar fix 260px, der Rest (1fr) gehört dem Feed! */
     grid-template-columns: 260px 1fr; 
     gap: 24px;
     align-items: start;
-    max-width: 1200px; /* Maximale Gesamtbreite */
-    margin: 0 auto;    /* Zentriert alles */
+    max-width: 1200px; 
+    margin: 0 auto;    
 }
 
-/* Der Bereich zum Posten und Lesen */
 .feed {
     width: 100%;
-    min-width: 0; /* Verhindert Layout-Probleme bei breiten Bildern */
+    min-width: 0; 
 }
 
-/* Mobile Ansicht: Alles untereinander */
 @media (max-width: 768px) {
     .content-grid {
-        grid-template-columns: 1fr; /* Nur eine Spalte */
+        grid-template-columns: 1fr; 
     }
     .sidebar {
-        display: none; /* Optional: Sidebar am Handy ausblenden für mehr Platz */
+        display: none; 
     }
 }
 
-/* Moderne Emoji Leiste */
+/* Emoji Leiste */
 .emoji-toolbar {
     margin-left: 10px;
     padding-left: 10px;
-    border-left: 1px solid #eee; /* Kleine Trennlinie zum Medien-Button */
+    border-left: 1px solid #eee; 
 }
 
 .emoji-btn {
     background: transparent;
     border: none;
-    font-size: 1.4rem; /* Größer sieht moderner aus */
+    font-size: 1.4rem; 
     cursor: pointer;
     padding: 2px 6px;
     border-radius: 8px;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Sprung-Effekt */
-    opacity: 0.8; /* Nicht ganz so knallig, bis man drüber fährt */
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    opacity: 0.8; 
 }
 
-/* Hover-Effekt: Emoji wird größer und voll sichtbar */
 .emoji-btn:hover {
     background-color: #f0f2f5;
-    transform: scale(1.3); /* Ploppt auf */
+    transform: scale(1.3); 
     opacity: 1;
 }
 
-/* Klick-Effekt */
 .emoji-btn:active {
     transform: scale(0.95);
 }
@@ -243,7 +245,7 @@ a { text-decoration: none; }
 .filter-title { font-size: 0.85rem; text-transform: uppercase; color: #888; font-weight: 700; margin-bottom: 10px; }
 .filter-divider { margin: 15px 0; color: #eee; }
 
-/* --- PROFIL HEADER (Zusammengefasst) --- */
+/* --- PROFIL HEADER --- */
 .profile-header { 
     background: white; 
     box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
@@ -298,28 +300,23 @@ a { text-decoration: none; }
 
 /* --- SPLIT VIEW FÜR TOUREN (Desktop) --- */
 @media (min-width: 992px) {
-    /* Container wird zur Flexbox, items nebeneinander */
     .tours-layout {
-        flex-direction: row !important; /* Überschreibt das 'column' von oben */
+        flex-direction: row !important; 
         align-items: flex-start;
     }
 
-    /* Die Liste links bekommt 50% Platz und ist scrollbar */
     .tours-list {
         width: 50%;
         padding-right: 15px;
     }
 
-    /* Der Karten-Container rechts */
     .map-wrapper {
         width: 50%;
-        /* Sticky Magic: */
         position: sticky;
-        top: 110px; /* Abstand zur Navbar, damit sie nicht verdeckt wird */
-        height: calc(100vh - 130px); /* Füllt den Bildschirm minus Header */
+        top: 110px; 
+        height: calc(100vh - 130px); 
     }
 
-    /* Damit die Karte im Wrapper auch wirklich 100% Höhe hat */
     #map {
         height: 100% !important;
     }
@@ -327,7 +324,7 @@ a { text-decoration: none; }
 
 /* --- NEUES TOUR LAYOUT --- */
 #tours-tree-container {
-    scrollbar-width: thin; /* Firefox */
+    scrollbar-width: thin; 
     scrollbar-color: #ccc #f0f0f0;
 }
 
@@ -402,7 +399,7 @@ a { text-decoration: none; }
     padding: 10px;
     margin-top: 5px;
     border-radius: 8px;
-    display: none; /* Standardmäßig zu */
+    display: none; 
 }
 .comment-section.show { display: block; }
 
