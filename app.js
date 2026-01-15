@@ -187,6 +187,13 @@ async function navigateTo(pageId) {
         window.location.hash = pageId;
     }
 
+    // --- NEU: HINTERGRUND-LOGIK ---
+    if (pageId === 'home') {
+        document.body.classList.add('home-bg'); // Klasse hinzufügen auf Home
+    } else {
+        document.body.classList.remove('home-bg'); // Klasse entfernen auf allen anderen Seiten
+    }
+
     if (pageId === 'profile') {
         const container = document.getElementById('page-profile');
         if (!viewingUserProfile || (currentUser && viewingUserProfile.uid === currentUser.uid)) {
