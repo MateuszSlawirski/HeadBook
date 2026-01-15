@@ -37,7 +37,7 @@
 </head>
 <body>
     
-    <div class="version-tag">v2.5 - Final & Toasts</div>
+    
 
     <nav class="navbar navbar-expand-lg fixed-top py-2  shadow-sm">
         <div class="container">
@@ -88,41 +88,40 @@
     <div class="container-xl" style="margin-top: 100px;"> 
         
         <section id="page-home" class="page-section active">
-            <div class="content-grid">
-                <div class="sidebar">
-                    <div class="card mb-3">
-                        <div class="card-header bg-white fw-bold">Willkommen</div>
-                        <div class="card-body">
-                            <p class="small text-muted">Finde neue Touren, Freunde und Events in deiner Nähe.</p>
+    <div class="row justify-content-center">
+        
+        <div class="col-lg-8 col-md-8 col-12">
+            
+            <div class="feed">
+                <div class="card mb-4 shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="d-flex gap-3 mb-3">
+                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px; min-width:45px;">👤</div>
+                            <textarea id="postInputText" class="form-control border-0 bg-light" rows="2" placeholder="Was gibt's Neues auf der Straße?" style="resize: none;"></textarea>
                         </div>
-                    </div>
-                </div>
-                <div class="feed">
-                    <div class="card mb-4 shadow-sm border-0">
-                        <div class="card-body">
-                            <div class="d-flex gap-3 mb-3">
-                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px; min-width:45px;">👤</div>
-                                <textarea id="postInputText" class="form-control border-0 bg-light" rows="2" placeholder="Was gibt's Neues auf der Straße?" style="resize: none;"></textarea>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                                <div class="d-flex align-items-center gap-2">
-                                    <input type="file" id="postInputFile" accept="image/*,video/*" class="d-none" onchange="document.getElementById('file-label').style.color = '#0d6efd'">
-                                    <label for="postInputFile" id="file-label" class="btn btn-light btn-sm text-muted" title="Bild/Video hinzufügen">📷 Medien</label>
-                                    <div class="emoji-toolbar d-flex gap-1 flex-wrap">
-                                        <button type="button" class="emoji-btn" onclick="insertPostEmoji('🏍️')">🏍️</button>
-                                        <button type="button" class="emoji-btn" onclick="insertPostEmoji('😎')">😎</button>
-                                        <button type="button" class="emoji-btn" onclick="insertPostEmoji('🔥')">🔥</button>
-                                        <button type="button" class="emoji-btn" onclick="insertPostEmoji('👍')">👍</button>
-                                    </div>
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="file" id="postInputFile" accept="image/*,video/*" class="d-none" onchange="document.getElementById('file-label').style.color = '#0d6efd'">
+                                <label for="postInputFile" id="file-label" class="btn btn-light btn-sm text-muted" title="Bild/Video hinzufügen">📷 Medien</label>
+                                
+                                <div class="emoji-toolbar d-flex gap-1 flex-wrap">
+                                    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🏍️')">🏍️</button>
+                                    <button type="button" class="emoji-btn" onclick="insertPostEmoji('😎')">😎</button>
+                                    <button type="button" class="emoji-btn" onclick="insertPostEmoji('🔥')">🔥</button>
+                                    <button type="button" class="emoji-btn" onclick="insertPostEmoji('👍')">👍</button>
                                 </div>
-                                <button onclick="window.createPost()" class="btn btn-primary px-4 rounded-pill fw-bold">Posten</button>
                             </div>
+                            <button onclick="window.createPost()" class="btn btn-primary px-4 rounded-pill fw-bold">Posten</button>
                         </div>
                     </div>
-                    <div id="feed-posts"></div>
                 </div>
+
+                <div id="feed-posts"></div>
             </div>
-        </section>
+
+        </div>
+    </div>
+</section>
 
         <section id="page-tours" class="page-section">
             <div class="row g-0" style="height: calc(100vh - 100px);">
