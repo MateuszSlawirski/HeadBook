@@ -90,26 +90,35 @@ async function uploadToAzure(file) {
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     
-    // 1. NAVIGATION: Glocke einfügen (Ohne schwarzen Punkt)
-    const navProfile = document.getElementById('nav-profile')?.parentElement;
-    if (navProfile && !document.getElementById('nav-notifications')) {
-        const li = document.createElement('li');
-        li.className = 'nav-item mx-3';
-        li.style.listStyle = 'none'; // Entfernt den schwarzen Punkt
-        li.innerHTML = `
-            <a class="nav-link d-flex flex-column align-items-center auth-required position-relative" 
+    // 1. NAVIGATION: Glocke einfügen (Rechts beim Profil)
+    const profileLink = document.getElementById('nav-profile');
+    
+    // Prüfen, ob der Profil-Link existiert und die Glocke noch nicht da ist
+    if (profileLink && !document.getElementById('nav-notifications')) {
+        
+        // Wir erstellen einen DIV-Container statt LI, da wir nicht mehr in der Liste sind
+        const bellContainer = document.createElement('div');
+        bellContainer.className = 'd-flex align-items-center mx-3'; // Abstand halten
+        
+        bellContainer.innerHTML = `
+            <a class="nav-link d-flex flex-column align-items-center position-relative" 
                id="nav-notifications" 
                onclick="navigateTo('notifications'); hideNotificationBadge();" 
-               style="cursor:pointer">
+               style="cursor:pointer;">
                 
-                🔔 
-                <span id="nav-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none">
+                <span>🔔</span> 
+                
+                <span style="font-size: 0.9rem;"/span>
+
+                <span id="nav-badge" 
+                      class="position-absolute bg-danger border border-light rounded-circle d-none"
+                      style="width: 10px; height: 10px; top: 5px; right: 5px;">
                     <span class="visually-hidden">Neu</span>
                 </span>
-                
-                <span class="d-none d-lg-block" style="font-size:0.8rem">Benachrichtigung</span>
             </a>`;
-        navProfile.parentElement.insertBefore(li, navProfile);
+            
+        // Wir fügen die Glocke direkt VOR dem Profil-Link ein
+        profileLink.parentElement.insertBefore(bellContainer, profileLink); 
     }
     
     // Notification Page Section
