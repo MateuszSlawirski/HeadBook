@@ -28,7 +28,7 @@ body.home-bg {
     background-image: url('Hintergrund.png');
     
     /* Positioniert das Bild oben mittig, etwas unter der Navbar (ca. 80px Abstand von oben) */
-    background-position: center 80px; 
+    background-position: center 20px; 
     
     /* Bild wiederholt sich nicht */
     background-repeat: no-repeat;
@@ -40,7 +40,7 @@ body.home-bg {
        "contain" würde es ganz anzeigen, 
        aber wir nehmen z.B. 90% Breite oder max 600px, damit es nicht riesig ist. 
        Probier mal 80% auto oder eine feste Breite wie 600px auto. */
-    background-size: 800px auto; 
+    background-size: cover; 
 }
 
 /* Anpassung für Handys, damit das Logo dort nicht zu winzig ist */
